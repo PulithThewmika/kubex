@@ -162,6 +162,27 @@ async def test_callback_mismatched_nonce_cookie_is_401(client):
 
 
 @pytest.mark.asyncio
+async def test_callback_non_ascii_nonce_cookie_is_401_not_500(client):
+    """secrets.compare_digest raises TypeError on non-ASCII str arguments —
+    nonce_cookie is a client-controlled cookie value, so this must be
+    handled as a clean 401, not crash into an unhandled 500. httpx's own
+    client refuses to send a non-ASCII value via its str-based cookie/
+    header APIs, so the raw Cookie header is sent as pre-encoded bytes to
+    actually exercise this at the wire level, the way a non-conforming
+    client could."""
+    state = _make_state()
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        request = Request(
+            "GET",
+            f"http://test/auth/github/callback?code=abc&state={state}",
+            headers=[(b"cookie", "oauth_nonce=café-not-ascii".encode("utf-8"))],
+        )
+        resp = await ac.send(request)
+    assert resp.status_code == 401
+    assert "nonce" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
 async def test_callback_token_exchange_failure_is_401(client):
     state = _make_state()
     fake_client = AsyncMock()
@@ -313,6 +334,50 @@ async def test_callback_happy_path_uses_first_org_as_default(client, mock_sessio
     cookie_value = resp.headers["set-cookie"].split("session=", 1)[1].split(";", 1)[0]
     claims = jwt.decode(cookie_value, JWT_SECRET, algorithms=["HS256"])
     assert claims["org_id"] == "org-100"
+
+
+@pytest.mark.asyncio
+async def test_callback_upserts_orgs_in_deterministic_order_but_keeps_original_default(client, mock_session):
+    """Orgs must be upserted/locked in a fixed order (sorted by
+    github_org_id) regardless of the order GitHub's API happens to list
+    them in — two concurrent logins sharing 2+ orgs but seeing them in
+    different orders could otherwise lock rows in opposite order and
+    deadlock. The *default* org still follows whatever GitHub listed
+    first, independent of that sort."""
+    state = _make_state()
+    # GitHub lists the higher-id org first — sorting must not change which
+    # org becomes default, only the order upserts/locks happen in.
+    orgs = [{"id": 200, "login": "widgets"}, {"id": 100, "login": "acme"}]
+    fake_client = _github_http_client(orgs=orgs)
+
+    user_result = MagicMock()
+    user_result.scalar_one.return_value = "u-1"
+    mock_session.execute = AsyncMock(return_value=user_result)
+
+    upsert_order: list[int] = []
+
+    async def _fake_upsert_organization(session, *, github_org_id, login):
+        upsert_order.append(github_org_id)
+        return f"org-{github_org_id}"
+
+    with (
+        patch("app.routers.auth._get_client", return_value=fake_client),
+        patch("app.routers.auth._upsert_organization", AsyncMock(side_effect=_fake_upsert_organization)),
+        patch("app.routers.auth._upsert_membership", AsyncMock(return_value="member")),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+            resp = await ac.get(
+                f"/auth/github/callback?code=good-code&state={state}",
+                cookies={"oauth_nonce": TEST_NONCE},
+                follow_redirects=False,
+            )
+
+    assert resp.status_code == 302
+    assert upsert_order == [100, 200]  # sorted ascending, not GitHub's listed order
+
+    cookie_value = resp.headers["set-cookie"].split("session=", 1)[1].split(";", 1)[0]
+    claims = jwt.decode(cookie_value, JWT_SECRET, algorithms=["HS256"])
+    assert claims["org_id"] == "org-200"  # GitHub's first-listed org, despite the sort
 
 
 @pytest.mark.asyncio
