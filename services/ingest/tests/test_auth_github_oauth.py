@@ -39,6 +39,9 @@ async def test_login_redirects_to_github_authorize(client):
         resp = await ac.get("/auth/github", follow_redirects=False)
 
     assert resp.status_code in (302, 307)
+    # A cached 302 here would replay a stale state/nonce on the next visit
+    # to this URL — browsers do cache redirects without this header.
+    assert resp.headers["cache-control"] == "no-store"
     location = urlparse(resp.headers["location"])
     assert location.netloc == "github.com"
     assert location.path == "/login/oauth/authorize"
@@ -169,6 +172,7 @@ async def test_callback_happy_path_no_orgs_sets_session_cookie(client, mock_sess
 
     assert resp.status_code == 302
     assert resp.headers["location"] == "/dashboard"
+    assert resp.headers["cache-control"] == "no-store"
     mock_personal_org.assert_awaited_once_with(mock_session, "octocat")
     mock_membership.assert_awaited_once_with(
         mock_session, "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"

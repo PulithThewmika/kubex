@@ -77,7 +77,13 @@ async def github_login(request: Request, redirect: str | None = Query(default=No
             "state": state,
         }
     )
-    return RedirectResponse(url=f"{GITHUB_AUTHORIZE_URL}?{params}")
+    # Cache-Control: no-store — a cached 302 here would replay a stale
+    # state (and thus a stale redirect target/nonce) on the next visit,
+    # bypassing the fresh state generated above.
+    return RedirectResponse(
+        url=f"{GITHUB_AUTHORIZE_URL}?{params}",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 async def _upsert_github_org(session: AsyncSession, org: dict) -> int:
@@ -229,7 +235,14 @@ async def github_callback(
         algorithm="HS256",
     )
 
-    response = RedirectResponse(url=redirect_target, status_code=302)
+    # Cache-Control: no-store — the callback URL embeds a one-time code
+    # and this response sets the session cookie; a cached redirect here
+    # could get replayed with a stale/consumed code on the next visit.
+    response = RedirectResponse(
+        url=redirect_target,
+        status_code=302,
+        headers={"Cache-Control": "no-store"},
+    )
     response.set_cookie(
         key="session",
         value=session_token,
