@@ -13,6 +13,9 @@ ALERTMANAGER_WEBHOOK_TOKEN = os.environ.get("ALERTMANAGER_WEBHOOK_TOKEN", "")
 GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
 GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
 JWT_SECRET = os.environ.get("JWT_SECRET", "")
+# Where the OAuth callback sends the browser after login — the React
+# shell's own origin, not this API's (it has no UI routes of its own).
+SHELL_URL = os.environ.get("SHELL_URL", "http://localhost:5173")
 
 
 def validate_auth_tokens() -> None:
