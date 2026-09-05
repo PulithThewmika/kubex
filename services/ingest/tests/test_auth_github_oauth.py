@@ -1,6 +1,6 @@
 """Tests for the GitHub OAuth login flow (#538/#549).
 
-Mock-based tests exercise the router's HTTP-facing behavior (state
+Mock-based tests exercise the router's HTTP-facing behavior (state/nonce
 validation, token-exchange error handling, cookie attributes) with the
 DB and GitHub API stubbed out. TestUpsertLogic below runs the actual
 upsert helpers against a real PostgreSQL instance (V012 schema applied)
@@ -19,13 +19,15 @@ import jwt
 import pytest
 from httpx import ASGITransport, AsyncClient, Request, Response
 
-from app.auth import JWT_SECRET
+from app.auth import JWT_SECRET, SHELL_URL
 from app.routers import auth as auth_router
 
+TEST_NONCE = "test-nonce"
 
-def _make_state(redirect: str = "/app", *, exp_delta: timedelta = timedelta(minutes=10)) -> str:
+
+def _make_state(redirect: str = "/", *, nonce: str = TEST_NONCE, exp_delta: timedelta = timedelta(minutes=10)) -> str:
     return jwt.encode(
-        {"nonce": "test-nonce", "redirect": redirect, "exp": datetime.now(timezone.utc) + exp_delta},
+        {"nonce": nonce, "redirect": redirect, "exp": datetime.now(timezone.utc) + exp_delta},
         JWT_SECRET,
         algorithm="HS256",
     )
@@ -50,7 +52,17 @@ async def test_login_redirects_to_github_authorize(client):
     assert "state" in qs
     # state is a signed JWT carrying the default redirect target
     claims = jwt.decode(qs["state"][0], JWT_SECRET, algorithms=["HS256"])
-    assert claims["redirect"] == "/app"
+    assert claims["redirect"] == "/"
+
+    set_cookie = resp.headers["set-cookie"]
+    assert "oauth_nonce=" in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "Secure" in set_cookie
+    # Lax, not Strict — this cookie must still be sent back on the
+    # top-level GET navigation GitHub redirects the browser through.
+    assert "samesite=lax" in set_cookie.lower()
+    nonce_cookie_value = set_cookie.split("oauth_nonce=", 1)[1].split(";", 1)[0]
+    assert claims["nonce"] == nonce_cookie_value
 
 
 @pytest.mark.asyncio
@@ -74,7 +86,7 @@ async def test_login_rejects_absolute_url_redirect(client):
     location = urlparse(resp.headers["location"])
     qs = parse_qs(location.query)
     claims = jwt.decode(qs["state"][0], JWT_SECRET, algorithms=["HS256"])
-    assert claims["redirect"] == "/app"
+    assert claims["redirect"] == "/"
 
 
 @pytest.mark.asyncio
@@ -85,7 +97,21 @@ async def test_login_rejects_protocol_relative_redirect(client):
     location = urlparse(resp.headers["location"])
     qs = parse_qs(location.query)
     claims = jwt.decode(qs["state"][0], JWT_SECRET, algorithms=["HS256"])
-    assert claims["redirect"] == "/app"
+    assert claims["redirect"] == "/"
+
+
+@pytest.mark.asyncio
+async def test_login_rejects_backslash_redirect(client):
+    """Browsers' URL parser normalizes a leading backslash to a forward
+    slash, so "/\\evil.com" is interpreted the same as "//evil.com" — a
+    plain "//" prefix check alone misses this bypass."""
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get("/auth/github?redirect=/%5Cevil.example.com", follow_redirects=False)
+
+    location = urlparse(resp.headers["location"])
+    qs = parse_qs(location.query)
+    claims = jwt.decode(qs["state"][0], JWT_SECRET, algorithms=["HS256"])
+    assert claims["redirect"] == "/"
 
 
 # ── GET /auth/github/callback ───────────────────────────────────────────
@@ -109,32 +135,89 @@ async def test_callback_invalid_state_is_401(client):
 async def test_callback_expired_state_is_401(client):
     expired_state = _make_state(exp_delta=timedelta(minutes=-1))
     async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
-        resp = await ac.get(f"/auth/github/callback?code=abc&state={expired_state}")
+        resp = await ac.get(f"/auth/github/callback?code=abc&state={expired_state}", cookies={"oauth_nonce": TEST_NONCE})
     assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_callback_missing_nonce_cookie_is_401(client):
+    """No nonce cookie at all — e.g. a third party replaying a captured
+    callback URL without ever having visited /auth/github themselves."""
+    state = _make_state()
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get(f"/auth/github/callback?code=abc&state={state}")
+    assert resp.status_code == 401
+    assert "nonce" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_callback_mismatched_nonce_cookie_is_401(client):
+    """This is the login-CSRF case: a validly-signed state minted for one
+    browser session must not be honored from a different one."""
+    state = _make_state(nonce="nonce-from-a-different-browser")
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get(f"/auth/github/callback?code=abc&state={state}", cookies={"oauth_nonce": TEST_NONCE})
+    assert resp.status_code == 401
+    assert "nonce" in resp.json()["detail"].lower()
 
 
 @pytest.mark.asyncio
 async def test_callback_token_exchange_failure_is_401(client):
     state = _make_state()
     fake_client = AsyncMock()
-    fake_client.__aenter__.return_value = fake_client
-    fake_client.__aexit__.return_value = False
     fake_client.post.return_value = Response(
         200, json={"error": "bad_verification_code"}, request=Request("POST", "https://github.com/login/oauth/access_token")
     )
 
-    with patch("app.routers.auth.httpx.AsyncClient", return_value=fake_client):
+    with patch("app.routers.auth._get_client", return_value=fake_client):
         async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
-            resp = await ac.get(f"/auth/github/callback?code=bad-code&state={state}")
+            resp = await ac.get(
+                f"/auth/github/callback?code=bad-code&state={state}", cookies={"oauth_nonce": TEST_NONCE}
+            )
 
     assert resp.status_code == 401
     assert "token exchange" in resp.json()["detail"].lower()
 
 
-def _github_http_client(*, orgs: list[dict]) -> AsyncMock:
+@pytest.mark.asyncio
+async def test_callback_token_exchange_5xx_is_502(client):
+    state = _make_state()
     fake_client = AsyncMock()
-    fake_client.__aenter__.return_value = fake_client
-    fake_client.__aexit__.return_value = False
+    fake_client.post.return_value = Response(
+        503, text="upstream unavailable", request=Request("POST", "https://github.com/login/oauth/access_token")
+    )
+
+    with patch("app.routers.auth._get_client", return_value=fake_client):
+        async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+            resp = await ac.get(
+                f"/auth/github/callback?code=bad-code&state={state}", cookies={"oauth_nonce": TEST_NONCE}
+            )
+
+    assert resp.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_callback_profile_fetch_5xx_is_502(client):
+    state = _make_state()
+    fake_client = AsyncMock()
+    fake_client.post.return_value = Response(
+        200, json={"access_token": "gho_faketoken"}, request=Request("POST", "https://github.com/login/oauth/access_token")
+    )
+    fake_client.get.return_value = Response(
+        500, text="server error", request=Request("GET", "https://api.github.com/user")
+    )
+
+    with patch("app.routers.auth._get_client", return_value=fake_client):
+        async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+            resp = await ac.get(
+                f"/auth/github/callback?code=good-code&state={state}", cookies={"oauth_nonce": TEST_NONCE}
+            )
+
+    assert resp.status_code == 502
+
+
+def _github_http_client(*, orgs: list[dict], orgs_status: int = 200, emails_status: int = 200) -> AsyncMock:
+    fake_client = AsyncMock()
     fake_client.post.return_value = Response(
         200, json={"access_token": "gho_faketoken"}, request=Request("POST", "https://github.com/login/oauth/access_token")
     )
@@ -144,8 +227,12 @@ def _github_http_client(*, orgs: list[dict]) -> AsyncMock:
         if url.endswith("/user"):
             return Response(200, json={"id": 42, "login": "octocat", "avatar_url": "https://x/a.png"}, request=req)
         if url.endswith("/user/emails"):
+            if emails_status != 200:
+                return Response(emails_status, text="rate limited", request=req)
             return Response(200, json=[{"email": "octocat@example.com", "primary": True}], request=req)
         if url.endswith("/user/orgs"):
+            if orgs_status != 200:
+                return Response(orgs_status, text="rate limited", request=req)
             return Response(200, json=orgs, request=req)
         raise AssertionError(f"unexpected GET {url}")
 
@@ -163,17 +250,21 @@ async def test_callback_happy_path_no_orgs_sets_session_cookie(client, mock_sess
     mock_session.execute = AsyncMock(return_value=user_result)
 
     with (
-        patch("app.routers.auth.httpx.AsyncClient", return_value=fake_client),
-        patch("app.routers.auth._upsert_personal_org", AsyncMock(return_value="22222222-2222-2222-2222-222222222222")) as mock_personal_org,
+        patch("app.routers.auth._get_client", return_value=fake_client),
+        patch("app.routers.auth._upsert_organization", AsyncMock(return_value="22222222-2222-2222-2222-222222222222")) as mock_org,
         patch("app.routers.auth._upsert_membership", AsyncMock(return_value="owner")) as mock_membership,
     ):
         async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
-            resp = await ac.get(f"/auth/github/callback?code=good-code&state={state}", follow_redirects=False)
+            resp = await ac.get(
+                f"/auth/github/callback?code=good-code&state={state}",
+                cookies={"oauth_nonce": TEST_NONCE},
+                follow_redirects=False,
+            )
 
     assert resp.status_code == 302
-    assert resp.headers["location"] == "/dashboard"
+    assert resp.headers["location"] == f"{SHELL_URL}/dashboard"
     assert resp.headers["cache-control"] == "no-store"
-    mock_personal_org.assert_awaited_once_with(mock_session, "octocat")
+    mock_org.assert_awaited_once_with(mock_session, github_org_id=None, login="octocat")
     mock_membership.assert_awaited_once_with(
         mock_session, "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"
     )
@@ -183,7 +274,7 @@ async def test_callback_happy_path_no_orgs_sets_session_cookie(client, mock_sess
     assert "session=" in set_cookie
     assert "HttpOnly" in set_cookie
     assert "Secure" in set_cookie
-    assert "SameSite=strict" in set_cookie.lower().replace("samesite", "SameSite")
+    assert "samesite=strict" in set_cookie.lower()
 
     cookie_value = set_cookie.split("session=", 1)[1].split(";", 1)[0]
     claims = jwt.decode(cookie_value, JWT_SECRET, algorithms=["HS256"])
@@ -202,20 +293,84 @@ async def test_callback_happy_path_uses_first_org_as_default(client, mock_sessio
     mock_session.execute = AsyncMock(return_value=user_result)
 
     with (
-        patch("app.routers.auth.httpx.AsyncClient", return_value=fake_client),
-        patch("app.routers.auth._upsert_github_org", AsyncMock(side_effect=["org-100", "org-200"])) as mock_org,
+        patch("app.routers.auth._get_client", return_value=fake_client),
+        patch("app.routers.auth._upsert_organization", AsyncMock(side_effect=["org-100", "org-200"])) as mock_org,
         patch("app.routers.auth._upsert_membership", AsyncMock(return_value="member")) as mock_membership,
     ):
         async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
-            resp = await ac.get(f"/auth/github/callback?code=good-code&state={state}", follow_redirects=False)
+            resp = await ac.get(
+                f"/auth/github/callback?code=good-code&state={state}",
+                cookies={"oauth_nonce": TEST_NONCE},
+                follow_redirects=False,
+            )
 
     assert resp.status_code == 302
     assert mock_org.await_count == 2
+    mock_org.assert_any_await(mock_session, github_org_id=100, login="acme")
+    mock_org.assert_any_await(mock_session, github_org_id=200, login="widgets")
     assert mock_membership.await_count == 2
 
     cookie_value = resp.headers["set-cookie"].split("session=", 1)[1].split(";", 1)[0]
     claims = jwt.decode(cookie_value, JWT_SECRET, algorithms=["HS256"])
     assert claims["org_id"] == "org-100"
+
+
+@pytest.mark.asyncio
+async def test_callback_orgs_fetch_failure_falls_back_to_personal_org(client, mock_session, caplog):
+    """A rate-limited/failed /user/orgs must not be silently indistinguishable
+    from "this account has no orgs" — it still degrades gracefully (personal
+    org), but it must be logged so the discrepancy is traceable."""
+    state = _make_state()
+    fake_client = _github_http_client(orgs=[], orgs_status=403)
+
+    user_result = MagicMock()
+    user_result.scalar_one.return_value = "u-1"
+    mock_session.execute = AsyncMock(return_value=user_result)
+
+    with (
+        patch("app.routers.auth._get_client", return_value=fake_client),
+        patch("app.routers.auth._upsert_organization", AsyncMock(return_value="org-personal")) as mock_org,
+        patch("app.routers.auth._upsert_membership", AsyncMock(return_value="owner")),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+            with caplog.at_level("WARNING", logger="kubex.auth.github"):
+                resp = await ac.get(
+                    f"/auth/github/callback?code=good-code&state={state}",
+                    cookies={"oauth_nonce": TEST_NONCE},
+                    follow_redirects=False,
+                )
+
+    assert resp.status_code == 302
+    mock_org.assert_awaited_once_with(mock_session, github_org_id=None, login="octocat")
+    assert any("orgs fetch returned HTTP 403" in message for message in caplog.messages)
+
+
+@pytest.mark.asyncio
+async def test_callback_emails_fetch_failure_logs_and_continues(client, mock_session, caplog):
+    """A failed /user/emails must not crash the login — it just means no
+    primary email is known — but the failure should still be traceable."""
+    state = _make_state()
+    fake_client = _github_http_client(orgs=[], emails_status=403)
+
+    user_result = MagicMock()
+    user_result.scalar_one.return_value = "u-1"
+    mock_session.execute = AsyncMock(return_value=user_result)
+
+    with (
+        patch("app.routers.auth._get_client", return_value=fake_client),
+        patch("app.routers.auth._upsert_organization", AsyncMock(return_value="org-personal")),
+        patch("app.routers.auth._upsert_membership", AsyncMock(return_value="owner")),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+            with caplog.at_level("WARNING", logger="kubex.auth.github"):
+                resp = await ac.get(
+                    f"/auth/github/callback?code=good-code&state={state}",
+                    cookies={"oauth_nonce": TEST_NONCE},
+                    follow_redirects=False,
+                )
+
+    assert resp.status_code == 302
+    assert any("email fetch returned HTTP 403" in message for message in caplog.messages)
 
 
 # ── Real-Postgres tests for the upsert/role-assignment logic ────────────
@@ -296,7 +451,7 @@ async def pg_session(pg_url):
 class TestUpsertLogic:
     @pytest.mark.asyncio
     async def test_personal_org_created_with_login_as_slug(self, pg_session):
-        org_id = await auth_router._upsert_personal_org(pg_session, "octocat")
+        org_id = await auth_router._upsert_organization(pg_session, github_org_id=None, login="octocat")
         await pg_session.commit()
 
         from sqlalchemy import select
@@ -308,15 +463,15 @@ class TestUpsertLogic:
 
     @pytest.mark.asyncio
     async def test_personal_org_upsert_is_idempotent(self, pg_session):
-        org_id_1 = await auth_router._upsert_personal_org(pg_session, "octocat")
-        org_id_2 = await auth_router._upsert_personal_org(pg_session, "octocat")
+        org_id_1 = await auth_router._upsert_organization(pg_session, github_org_id=None, login="octocat")
+        org_id_2 = await auth_router._upsert_organization(pg_session, github_org_id=None, login="octocat")
         await pg_session.commit()
         assert org_id_1 == org_id_2
 
     @pytest.mark.asyncio
     async def test_github_org_upsert_keyed_on_github_org_id(self, pg_session):
-        org_id_1 = await auth_router._upsert_github_org(pg_session, {"id": 555, "login": "acme"})
-        org_id_2 = await auth_router._upsert_github_org(pg_session, {"id": 555, "login": "acme-renamed"})
+        org_id_1 = await auth_router._upsert_organization(pg_session, github_org_id=555, login="acme")
+        org_id_2 = await auth_router._upsert_organization(pg_session, github_org_id=555, login="acme-renamed")
         await pg_session.commit()
 
         assert org_id_1 == org_id_2
@@ -330,7 +485,7 @@ class TestUpsertLogic:
         from sqlalchemy.dialects.postgresql import insert as pg_insert
         from app.models.user import User
 
-        org_id = await auth_router._upsert_github_org(pg_session, {"id": 777, "login": "acme"})
+        org_id = await auth_router._upsert_organization(pg_session, github_org_id=777, login="acme")
 
         user1 = (await pg_session.execute(
             pg_insert(User).values(github_id=1, login="alice").returning(User.id)
@@ -347,13 +502,13 @@ class TestUpsertLogic:
         assert role2 == "member"
 
     @pytest.mark.asyncio
-    async def test_relogin_does_not_change_existing_role(self, pg_session):
+    async def test_relogin_returns_and_keeps_existing_role(self, pg_session):
         from sqlalchemy.dialects.postgresql import insert as pg_insert
         from sqlalchemy import select
         from app.models.user import User
         from app.models.org_membership import OrgMembership
 
-        org_id = await auth_router._upsert_github_org(pg_session, {"id": 888, "login": "acme"})
+        org_id = await auth_router._upsert_organization(pg_session, github_org_id=888, login="acme")
         user_id = (await pg_session.execute(
             pg_insert(User).values(github_id=3, login="carol").returning(User.id)
         )).scalar_one()
@@ -361,12 +516,12 @@ class TestUpsertLogic:
         first_role = await auth_router._upsert_membership(pg_session, user_id, org_id)
         assert first_role == "owner"
 
-        # A second login recomputes 'role' as if this were a brand-new
-        # member (existing_count would be 1, i.e. "member") — the
-        # ON CONFLICT DO NOTHING must ensure that never overwrites the
-        # already-persisted 'owner' row.
-        await auth_router._upsert_membership(pg_session, user_id, org_id)
+        # A second login must both report and persist the *actual* stored
+        # role ('owner'), not whatever a fresh COUNT-based guess would say
+        # for a "new" member ('member').
+        second_role = await auth_router._upsert_membership(pg_session, user_id, org_id)
         await pg_session.commit()
+        assert second_role == "owner"
 
         stored_role = (await pg_session.execute(
             select(OrgMembership.role).where(
