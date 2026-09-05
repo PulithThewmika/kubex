@@ -143,7 +143,14 @@ async def _upsert_organization(session: AsyncSession, *, github_org_id: int | No
     stmt = stmt.on_conflict_do_update(
         index_elements=index_elements,
         index_where=index_where,
-        set_={"name": stmt.excluded.name},
+        # slug is refreshed here too (not just name) so a renamed GitHub
+        # org's row doesn't keep pointing at its old handle — a stale
+        # slug could otherwise collide with a *different* org later
+        # reusing that freed-up handle (slug is UNIQUE and this upsert's
+        # conflict target is github_org_id, not slug, so that collision
+        # wouldn't be caught by ON CONFLICT). For the personal-org path
+        # (conflict target is already slug) this is a harmless no-op.
+        set_={"name": stmt.excluded.name, "slug": stmt.excluded.slug},
     )
     stmt = stmt.returning(Organization.id)
     return (await session.execute(stmt)).scalar_one()

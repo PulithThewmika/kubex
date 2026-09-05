@@ -479,6 +479,11 @@ class TestUpsertLogic:
         from app.models.organization import Organization
         row = (await pg_session.execute(select(Organization).where(Organization.id == org_id_1))).scalar_one()
         assert row.name == "acme-renamed"
+        # slug must be refreshed too, not just name — otherwise the old
+        # handle stays claimed by this row and collides if a different
+        # org later reuses it (slug is UNIQUE; the conflict target here
+        # is github_org_id, so ON CONFLICT alone wouldn't catch that).
+        assert row.slug == "acme-renamed"
 
     @pytest.mark.asyncio
     async def test_first_member_becomes_owner_second_becomes_member(self, pg_session):
