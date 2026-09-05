@@ -9,6 +9,9 @@ os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/
 os.environ.setdefault("GITHUB_WEBHOOK_SECRET", "test-secret")
 os.environ.setdefault("ARGOCD_WEBHOOK_TOKEN", "test-token")
 os.environ.setdefault("ALERTMANAGER_WEBHOOK_TOKEN", "test-am-token")
+os.environ.setdefault("GITHUB_CLIENT_ID", "test-client-id")
+os.environ.setdefault("GITHUB_CLIENT_SECRET", "test-client-secret")
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret-at-least-32-bytes-long")
 
 from app.main import app  # noqa: E402
 from app.db import get_session  # noqa: E402
