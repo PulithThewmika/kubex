@@ -196,8 +196,14 @@ async def github_callback(
     try:
         claims = jwt.decode(state, JWT_SECRET, algorithms=["HS256"])
     except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid or expired OAuth state")
-    if not nonce_cookie or not secrets.compare_digest(nonce_cookie, claims.get("nonce", "")):
+        raise HTTPException(status_code=401, detail="Invalid or expired OAuth state") from None
+    # Compared as UTF-8 bytes, not str: secrets.compare_digest rejects
+    # non-ASCII str arguments with a TypeError, and nonce_cookie is a
+    # client-controlled cookie value — an attacker-supplied non-ASCII
+    # cookie would otherwise crash this into an unhandled 500.
+    if not nonce_cookie or not secrets.compare_digest(
+        nonce_cookie.encode(), claims.get("nonce", "").encode()
+    ):
         # Without this check, an attacker could complete their own OAuth
         # login, capture the resulting valid state+code, and trick a
         # victim's browser into visiting this callback — logging the
@@ -223,7 +229,7 @@ async def github_callback(
         token_resp.raise_for_status()
     except httpx.HTTPStatusError:
         logger.warning("GitHub token exchange returned HTTP %d", token_resp.status_code)
-        raise HTTPException(status_code=502, detail="GitHub token exchange failed")
+        raise HTTPException(status_code=502, detail="GitHub token exchange failed") from None
     token_data = token_resp.json()
     access_token = token_data.get("access_token")
     if not access_token:
@@ -242,7 +248,7 @@ async def github_callback(
         profile_resp.raise_for_status()
     except httpx.HTTPStatusError:
         logger.warning("GitHub profile fetch returned HTTP %d", profile_resp.status_code)
-        raise HTTPException(status_code=502, detail="GitHub profile fetch failed")
+        raise HTTPException(status_code=502, detail="GitHub profile fetch failed") from None
     profile = profile_resp.json()
 
     primary_email = None
@@ -287,10 +293,19 @@ async def github_callback(
 
     default_org_id: uuid.UUID | None = None
     if orgs:
-        for i, org in enumerate(orgs):
+        # Locking order matters, not just presence: _upsert_membership
+        # takes a row lock per org, and two concurrent logins by users who
+        # share 2+ orgs — with GitHub returning those orgs in a different
+        # order for each user, which it's free to do — could lock them in
+        # opposite order and deadlock. Sorting by github_org_id fixes a
+        # single global lock order for every transaction. The *default*
+        # org still follows GitHub's own first-listed org, independent of
+        # this sort.
+        first_org_github_id = orgs[0]["id"]
+        for org in sorted(orgs, key=lambda o: o["id"]):
             org_id = await _upsert_organization(session, github_org_id=org["id"], login=org["login"])
             await _upsert_membership(session, user_id, org_id)
-            if i == 0:
+            if org["id"] == first_org_github_id:
                 default_org_id = org_id
     else:
         default_org_id = await _upsert_organization(session, github_org_id=None, login=profile["login"])
