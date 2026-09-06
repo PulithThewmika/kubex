@@ -1,15 +1,29 @@
 import logging
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("kubex.api")
 
-from ..auth import verify_alertmanager_token
+from ..auth import verify_alertmanager_token, verify_api_key
 from ..auth_middleware import UserContext, get_current_user
+from ..correlation.engine import (
+    TERMINAL_STATUSES,
+    apply_terminal_guarded_status,
+    extract_image_tag,
+    find_matching_deployment,
+    resolve_service,
+    terminal_guarded_upsert_set,
+    utcnow,
+)
 from ..db import get_session
+from ..models.deployment import Deployment
+from ..models.pipeline_event import PipelineEvent
+from ..schemas.deployment_notify import DeploymentNotifyRequest, DeploymentNotifyResponse
 from ..schemas.responses import (
     ServiceWithStatusResponse,
     LatestDeployInfo,
@@ -27,6 +41,7 @@ from ..schemas.responses import (
     CompareResponse,
     CompareMetric,
 )
+from .webhooks_github_app import DEPLOYMENT_STATE_MAP
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -644,3 +659,90 @@ async def alerts_inbound(
 
     await session.commit()
     return {"status": "ok", "resolved": resolved_count}
+
+
+@router.post("/deployments/notify", response_model=DeploymentNotifyResponse)
+async def notify_deployment(
+    body: DeploymentNotifyRequest,
+    session: AsyncSession = Depends(get_session),
+    org_id: uuid.UUID = Depends(verify_api_key),
+):
+    """Generic deploy notification for customers with no GitHub Actions or
+    ArgoCD integration (E21-T3). Auth via org API key (verify_api_key)
+    identifies the org directly, so this resolves/auto-registers the
+    service by name rather than by repo/argocd_app. Idempotent on
+    (commit_sha, service_id) — same terminal-state guard as the GitHub
+    App's deployment_status handler (webhooks_github_app.py)."""
+    await session.execute(
+        PipelineEvent.__table__.insert().values(
+            org_id=org_id, source="generic", event_type="deploy_notify", payload=body.model_dump(),
+        )
+    )
+
+    # DEPLOYMENT_STATE_MAP covers every value DeploymentNotifyRequest's
+    # Literal["pending", "in_progress", "success", "failure", "error"]
+    # allows, so this is a plain lookup, not a fallible one.
+    new_status = DEPLOYMENT_STATE_MAP[body.status]
+
+    service_id, org_id = await resolve_service(session, org_id=org_id, name=body.service)
+    image_tag = body.image_tag or extract_image_tag(body.commit_sha)
+    existing, correlation_method = await find_matching_deployment(
+        session, service_id, commit_sha=body.commit_sha, image_tag=image_tag,
+    )
+
+    if existing:
+        applied, persisted_status = await apply_terminal_guarded_status(session, existing.id, new_status)
+        if not applied:
+            logger.info(
+                "Ignoring stale deploy notification '%s' for already-%s deployment_id=%d",
+                new_status, persisted_status, existing.id,
+            )
+            await session.commit()
+            return DeploymentNotifyResponse(
+                status="ignored", deployment_id=existing.id,
+                deployment_status=persisted_status, correlation=correlation_method,
+            )
+
+        existing.image_tag = image_tag
+        await session.commit()
+        logger.info(
+            "Deploy notification %s (correlated via %s): service_id=%d deployment_id=%d sha=%s",
+            persisted_status, correlation_method, service_id, existing.id, body.commit_sha,
+        )
+        return DeploymentNotifyResponse(
+            status="ok", deployment_id=existing.id,
+            deployment_status=persisted_status, correlation=correlation_method,
+        )
+
+    # No prior CI/CD event correlated this commit — orphan case, same
+    # ON CONFLICT-upsert pattern as webhooks_argocd.py/webhooks_github_app.py.
+    # index_where must match V021's partial index predicate exactly
+    # (workflow_run_id IS NULL) — this path never sets workflow_run_id.
+    stmt = pg_insert(Deployment).values(
+        org_id=org_id,
+        service_id=service_id,
+        commit_sha=body.commit_sha,
+        image_tag=image_tag,
+        status=new_status,
+        started_at=utcnow(),
+        finished_at=utcnow() if new_status in TERMINAL_STATUSES else None,
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["commit_sha", "service_id"],
+        index_where=Deployment.commit_sha.is_not(None) & Deployment.workflow_run_id.is_(None),
+        set_=terminal_guarded_upsert_set(new_status, extra={"image_tag": stmt.excluded.image_tag}),
+    ).returning(Deployment.id, Deployment.status)
+    # The terminal-state guard above can mean the row that actually landed
+    # keeps its pre-existing status rather than new_status (a concurrent
+    # first-time delivery raced this one and got there first) — report
+    # what was actually persisted, not what this request asked for.
+    deployment_id, persisted_status = (await session.execute(stmt)).one()
+    await session.commit()
+    logger.info(
+        "Orphan deployment created/upserted (%s) via notify: service_id=%d sha=%s",
+        persisted_status, service_id, body.commit_sha,
+    )
+    return DeploymentNotifyResponse(
+        status="ok", deployment_id=deployment_id,
+        deployment_status=persisted_status, correlation="orphan",
+    )
