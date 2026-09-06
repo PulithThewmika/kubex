@@ -510,7 +510,7 @@ async def compare_deployments(
     a: int = Query(..., description="First deployment ID"),
     b: int = Query(..., description="Second deployment ID"),
     session: AsyncSession = Depends(get_session),
-    _user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(get_current_user),
 ):
     """Compare two deployments side-by-side with live PromQL metrics."""
     from ..promql import fetch_metrics_at, OBSERVATION_WINDOW
@@ -521,9 +521,9 @@ async def compare_deployments(
                    s.name AS service_name, s.namespace
             FROM deployments d
             JOIN services s ON s.id = d.service_id
-            WHERE d.id IN (:a, :b)
+            WHERE d.id IN (:a, :b) AND d.org_id = :org_id
         """),
-        {"a": a, "b": b},
+        {"a": a, "b": b, "org_id": user.org_id},
     )
     rows = {row.id: row for row in result.fetchall()}
 
