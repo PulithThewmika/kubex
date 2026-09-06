@@ -50,26 +50,27 @@ def pg_url():
         except Exception:
             pytest.skip("Docker not available — skipping integration tests")
 
-    import psycopg2
+    try:
+        import psycopg2
 
-    sync_url = raw_url.replace("+psycopg2", "")
-    conn = psycopg2.connect(sync_url)
-    conn.autocommit = True
-    cur = conn.cursor()
+        sync_url = raw_url.replace("+psycopg2", "")
+        conn = psycopg2.connect(sync_url)
+        conn.autocommit = True
+        cur = conn.cursor()
 
-    migrations_dir = os.path.join(os.path.dirname(__file__), "..", "migrations")
-    sql_files = sorted(f for f in os.listdir(migrations_dir) if f.startswith("V") and f.endswith(".sql"))
-    for fname in sql_files:
-        with open(os.path.join(migrations_dir, fname)) as f:
-            cur.execute(f.read())
+        migrations_dir = os.path.join(os.path.dirname(__file__), "..", "migrations")
+        sql_files = sorted(f for f in os.listdir(migrations_dir) if f.startswith("V") and f.endswith(".sql"))
+        for fname in sql_files:
+            with open(os.path.join(migrations_dir, fname)) as f:
+                cur.execute(f.read())
 
-    cur.close()
-    conn.close()
+        cur.close()
+        conn.close()
 
-    yield sync_url.replace("postgresql://", "postgresql+asyncpg://")
-
-    if container:
-        container.stop()
+        yield sync_url.replace("postgresql://", "postgresql+asyncpg://")
+    finally:
+        if container:
+            container.stop()
 
 
 @pytest.fixture
