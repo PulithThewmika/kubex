@@ -27,4 +27,4 @@ class Installation(Base):
     status: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default="now()")
 
-    organization: Mapped[Organization] = relationship()
+    organization: Mapped[Organization] = relationship(back_populates="installations")
