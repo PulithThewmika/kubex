@@ -23,11 +23,13 @@ ArgoCD Notifications ──────▶ │  Ingest Service │──▶ Post
 
 **Two runtime zones:**
 - **Kind cluster** (`kubex`): sample app (frontend → orders → payments), Prometheus stack, Loki + Fluent-Bit, ArgoCD, Alertmanager — all in-cluster.
-- **docker-compose** (central platform): PostgreSQL 16, ingest service, Grafana, detection agent. Runs outside the cluster for fast iteration.
+- **docker-compose** (central platform): PostgreSQL 16, ingest service, detection agent, MCP server, Grafana. Runs outside the cluster for fast iteration.
 
 **PostgreSQL is the integration contract** — every producer (ingest, agent) writes to it; every consumer (MCP server, Grafana, REST API) reads from it.
 
-## Planned Repository Layout
+**It is a multi-tenant SaaS** (EPIC-019/020/021). Every data row carries `org_id`; users log in with GitHub OAuth and get a session JWT; a GitHub App installation binds a GitHub org to a KubeX org and provisions webhooks automatically. See decision 9 below — org scoping is the rule that leaks data across tenants if forgotten.
+
+## Repository Layout
 
 The sample app (frontend/orders/payments + its K8s manifests and CI) lives
 in a separate repo, [PulithThewmika/deploylens-sample-app](https://github.com/PulithThewmika/deploylens-sample-app)
@@ -36,28 +38,44 @@ in a separate repo, [PulithThewmika/deploylens-sample-app](https://github.com/Pu
 ```
 deploy/
   kind-config.yaml            # Kind cluster with extraPortMappings (30080→8080)
-  docker-compose.yml          # postgres, ingest, grafana (+ agent later)
+  docker-compose.yml          # postgres, ingest, agent, mcp-server, grafana
   helm-values/                # kube-prometheus-stack, loki, fluent-bit values
+  helm/kubex-agent/           # Helm chart packaging the detection agent (E15)
+  k8s/                        # standalone manifests (blast-radius RBAC)
   argocd/                     # ArgoCD app CRDs + notifications config
+  alertmanager/               # Alertmanager config + Slack secret
   grafana/
     datasources/datasources.yml
     dashboards/               # provisioned dashboard JSON + provider.yml
+  scripts/                    # create-grafana-sa.sh, create-blast-radius-sa.sh
 services/
-  ingest/                     # FastAPI: webhooks, REST API, chat proxy
+  ingest/                     # FastAPI: webhooks, REST API, auth, chat proxy
     app/main.py
-    app/routers/              # webhooks_github, webhooks_argocd, api, chat
-    app/models/               # SQLAlchemy 2.x models
+    app/routers/              # auth, webhooks_github, webhooks_github_app,
+                              #   webhooks_argocd, api, chat, grafana, settings
+    app/models/               # SQLAlchemy 2.x models (incl. organization, user,
+                              #   org_membership, api_key, installation)
     app/schemas/              # Pydantic v2 response schemas
-    app/correlation/engine.py # THE novel core — correlation logic
-    app/auth.py               # HMAC + bearer token verification
-    migrations/               # versioned SQL (V001, V002, ...)
+    app/correlation/engine.py # THE novel core — correlation logic + resolve_org_id
+    app/auth.py               # HMAC, bearer token, API-key + JWT helpers
+    app/auth_middleware.py    # get_current_user / get_optional_user → UserContext
+    app/safety_score.py       # PRE-deploy risk score (rule-based, doc 05)
+    app/chat_engine.py        # chat orchestration; chat_prompt.py = system prompt
+    app/mcp_client.py         # ingest → MCP server (bearer + X-Org-Id)
+    app/promql.py             # PromQL used by the safety score
+    migrations/               # versioned SQL (V001 … V020)
   agent/                      # Detection agent (no HTTP API, pure batch loop)
     agent/run.py              # APScheduler 60s loop
-    agent/health_score.py     # scoring formula (doc 05 — exact)
+    agent/health_score.py     # POST-deploy scoring formula (doc 05 — exact)
     agent/promql.py           # PromQL query builders
     agent/alerting.py         # Alertmanager client
-  mcp-server/                 # MCP server (M3)
-web/                          # React unified shell (M3)
+    agent/dora.py             # DORA reads (calls the SQL functions)
+    agent/blast_radius.py     # dependency discovery via k8s_client.py (E14-T3)
+    agent/reconciliation.py   # catches deployments the webhooks missed
+  mcp-server/                 # MCP server (TypeScript, stdio + Streamable HTTP)
+web/                          # React shell (Vite): pages/, components/, contexts/
+scripts/e2e_smoke_test.py     # full push-to-alert smoke test (make e2e)
+secrets/                      # gitignored — GitHub App .pem lives here
 Makefile
 .env                          # NEVER commit — all credentials live here
 .env.example                  # committed, redacted
@@ -73,6 +91,7 @@ Makefile
 | Logs | Loki (single-binary, auth off) + Fluent-Bit DaemonSet |
 | CD | ArgoCD + Notifications controller (webhook delivery to ingest) |
 | Scheduling | APScheduler (dev) / K8s CronJob (prod) for the agent |
+| Auth | GitHub OAuth login → session JWT (PyJWT, httpOnly cookie); bcrypt-hashed org API keys; GitHub App (JWT + installation tokens) for webhook provisioning |
 | Frontend | React shell (Vite, dev origin `http://localhost:5173`) |
 | Dashboards | Grafana, provisioned via YAML, `GF_SECURITY_ALLOW_EMBEDDING=true` |
 | AI interface | MCP server exposing deployment/metrics/logs tools |
@@ -93,18 +112,28 @@ Makefile
    - Guard rail: if request volume < 0.1 rps in both windows, skip error/latency penalties and note it in `details` JSONB
    - Windows: `BASELINE_WINDOW=30m`, `OBSERVATION_WINDOW=15m` (env-configurable)
 
-5. **Deployment lifecycle states**: `pending → building → built → syncing → deployed`, with failure branches `build_failed` and `sync_failed`. GitHub webhook drives building/built; ArgoCD webhook drives syncing/deployed.
+   **Don't confuse it with the safety score.** There are two scores: the *post*-deploy **health score** above (`services/agent/agent/health_score.py`, "did this deployment make things worse?") and the *pre*-deploy **safety score** (`services/ingest/app/safety_score.py`, rule-based risk, computed on `workflow_run` "requested"): +25 service CFR(30d) > 15%, +20 files_changed > 30, +15 Friday/weekend, +10 outside 08:00–18:00, +15 cluster CPU > 75% or mem > 80%, +15 last deploy degraded/failed. Both are specified in doc 05.
 
-6. **DORA metrics are SQL views** (`dora_deploy_frequency`, `dora_lead_time`, `dora_change_failure_rate`, `dora_mttr`) — single authoritative place, read by API, MCP, and Grafana. No duplicated logic in Python.
+5. **Deployment lifecycle states**: `pending → building → built → syncing → deployed → assessed`, with failure branches `build_failed` and `sync_failed`. GitHub webhook drives building/built; ArgoCD webhook drives syncing/deployed; the detection agent sets `assessed` once health scoring completes (V009).
 
-7. **Auto-registration** — unknown services arriving via webhook get a row in `services` automatically (resolved via `repo` for GitHub, `argocd_app` for ArgoCD).
+6. **DORA logic lives in SQL, org-parameterized** (V017). The authoritative form is four functions `dora_deploy_frequency(p_org_id)`, `dora_lead_time(p_org_id)`, `dora_change_failure_rate(p_org_id)`, `dora_mttr(p_org_id)` — a real UUID scopes to that org, `NULL` means platform-wide. Same-named **views** are kept as thin `NULL`-org wrappers purely so the two Grafana dashboards keep working unmodified (Grafana has no org concept). API, MCP, and agent must call the *functions* with a real `org_id`. No duplicated logic in Python.
+
+7. **Auto-registration is org-scoped** — unknown services arriving via webhook get a `services` row automatically (resolved via `repo` for GitHub, `argocd_app` for ArgoCD), always within the caller's org. V018 made `services.name/repo/argocd_app` uniqueness per-org, so two orgs sharing a repo is schema-legal: `resolve_org_id()` **fails closed** (raises) on cross-org ambiguity rather than guessing an org. Never "fix" that by picking the lowest service id.
 
 8. **Orphan events** — an ArgoCD event arriving before its CI event creates a deployment with `status='syncing'`; the GitHub event later merges into it via correlation.
 
+9. **Multi-tenancy: every row carries `org_id`, every read filters on it** (EPIC-020). `services`, `deployments`, `alerts`, `pipeline_events` all have a NOT NULL `org_id` (V014; its stopgap column DEFAULT was removed in V016, so **every insert path must resolve `org_id` explicitly**). REST endpoints take `user: UserContext = Depends(get_current_user)` and put `org_id = :org_id` in the WHERE clause; the MCP server requires an `X-Org-Id` header and injects the same filter. `org_id` FKs deliberately omit `ON DELETE CASCADE` on those four tables — deleting an org must be an explicit application decision, not a silent history wipe. A new query without an org filter is a cross-tenant data leak, not a style nit.
+
+10. **GitHub App is the tenant onboarding path** (EPIC-021). An installation binds a GitHub org to a KubeX org (`installations` table, V019/V020, keyed by `github_installation_id`) and provisions webhooks automatically, replacing manual per-repo `GITHUB_WEBHOOK_SECRET` setup. `webhooks_github_app.py` handles `installation`, `installation_repositories`, `workflow_run`, and `deployment_status` (the last for non-ArgoCD deploys). The legacy `webhooks_github.py` path stays for the sample app.
+
 ## Security Baseline
 
-- GitHub webhooks: HMAC verification via `X-Hub-Signature-256` against `GITHUB_WEBHOOK_SECRET`; 401 on mismatch.
-- ArgoCD webhooks: shared bearer token (`ARGOCD_WEBHOOK_TOKEN`); 401 on mismatch.
+- GitHub webhooks: HMAC via `X-Hub-Signature-256` against `GITHUB_WEBHOOK_SECRET` (legacy per-repo path) or `GITHUB_APP_WEBHOOK_SECRET` (GitHub App path); 401 on mismatch.
+- ArgoCD webhooks: shared bearer token (`ARGOCD_WEBHOOK_TOKEN`); 401 on mismatch. Alertmanager inbound: `ALERTMANAGER_WEBHOOK_TOKEN`.
+- **User sessions**: GitHub OAuth (`/auth/github` → `/auth/github/callback`) issues a JWT in an httpOnly `session` cookie, validated by `auth_middleware.get_current_user` → `UserContext(user_id, org_id)`. The OAuth `state` is itself a short-lived signed JWT **and** its nonce is mirrored into a short-lived `SameSite=Lax` cookie — the cookie binding is what stops login-CSRF, so don't drop it when touching that flow.
+- **Org API keys**: created at `/settings` (E19-T4), shown in full exactly once, stored only as bcrypt hashes; `auth.verify_api_key` walks all hashes (bcrypt isn't indexable).
+- **ingest → MCP server**: bearer `MCP_INTERNAL_TOKEN` on the HTTP transport, then `X-Org-Id`. The token is what makes the header trustworthy — without it any container on the compose network could forge an org id.
+- GitHub App private key: `.pem` under the gitignored `secrets/` dir, path in `GITHUB_APP_PRIVATE_KEY_PATH`. Never commit it.
 - All credentials in `.env` (gitignored). `.env.example` is the committed template.
 - Grafana: anonymous access disabled; PostgreSQL datasource uses `grafana_ro` (SELECT-only).
 - CORS on ingest: allow React shell origin only.
@@ -114,10 +143,12 @@ Makefile
 The authoritative, up-to-date list lives in `.env.example` — copy it to `.env` and fill in real values. Summary:
 
 ```
+POSTGRES_PASSWORD=       # compose Postgres password
 DATABASE_URL=            # postgresql+asyncpg://... for services
-GITHUB_WEBHOOK_SECRET=   # HMAC secret, set in GitHub repo settings too
+GITHUB_WEBHOOK_SECRET=   # HMAC secret for the legacy per-repo webhook
 ARGOCD_WEBHOOK_TOKEN=    # shared bearer token for ArgoCD notifications
 ALERTMANAGER_WEBHOOK_TOKEN=  # shared bearer token for Alertmanager -> /api/alerts/inbound
+GITHUB_API_TOKEN=        # optional read-only PAT; safety score's files_changed factor (0 pts if unset)
 PROM_URL=                # Prometheus API (port-forward localhost:9090 in dev)
 LOKI_URL=                # Loki API (port-forward localhost:3100 in dev)
 ALERTMANAGER_URL=        # Alertmanager API (localhost:9093 in dev)
@@ -130,21 +161,37 @@ GRAFANA_URL=             # Grafana origin the ingest panel proxy talks to (E11-T
 GRAFANA_SERVICE_ACCOUNT_TOKEN=  # Viewer-only token, generated by deploy/scripts/create-grafana-sa.sh — don't set by hand
 ANTHROPIC_API_KEY=       # chat proxy's Anthropic Messages API key (E11-T1) — never exposed to the browser
 MCP_SERVER_URL=          # MCP server Streamable HTTP endpoint (E11-T1)
+MCP_INTERNAL_TOKEN=      # bearer token authenticating ingest -> MCP server (E20-T3)
+K8S_API_SERVER=          # blast-radius discovery (E14-T3); with K8S_TOKEN + K8S_CA_CERT_B64
+K8S_TOKEN=               # read-only SA token — deploy/scripts/create-blast-radius-sa.sh generates these
+K8S_CA_CERT_B64=
+BLAST_RADIUS_INTERVAL_SECONDS=300
+GITHUB_CLIENT_ID=        # GitHub OAuth App for user login (E19-T2); callback /auth/github/callback
+GITHUB_CLIENT_SECRET=
+JWT_SECRET=              # signs the session cookie AND the OAuth state JWT
+SHELL_URL=               # React shell origin the OAuth callback redirects back to
+GITHUB_APP_ID=           # GitHub App for automatic webhook provisioning (EPIC-021)
+GITHUB_APP_PRIVATE_KEY_PATH=  # e.g. secrets/github-app.pem — gitignored, never commit
+GITHUB_APP_WEBHOOK_SECRET=    # HMAC secret for GitHub App deliveries
 SAMPLE_APP_REPO=         # optional: path to a deploylens-sample-app checkout, for scripts/e2e_smoke_test.py (default: ../deploylens-sample-app)
 ```
 
 Sample-app chaos flags (per-service env in K8s manifests): `ERROR_RATE` (0–1 float), `LATENCY_MS` (int). Defaults 0/0 = healthy. These create deterministic "bad deploys" for demos. `make e2e` requires a sibling checkout of [deploylens-sample-app](https://github.com/PulithThewmika/deploylens-sample-app) (see `SAMPLE_APP_REPO` above) since it edits and pushes that repo's manifests directly.
 
-## Dev Workflow Commands (Makefile targets — build these as you go)
+## Dev Workflow Commands (Makefile targets)
 
 ```
 make cluster-up / cluster-down   # Kind cluster lifecycle
+make cluster-status              # cluster info + node list
 make up / down                   # docker-compose lifecycle
+make migrate                     # run SQL migrations against local Postgres
 make forwards / forwards-stop    # port-forwards: Prometheus 9090, Loki 3100, Alertmanager 9093 (PIDs in .pids)
 make argocd-forward              # ArgoCD UI at localhost:8443
 make logs                        # docker-compose log tail
 make db-shell                    # psql into kubex DB
-make tunnel                      # ngrok/cloudflared for GitHub webhook delivery
+make tunnel                      # ngrok tunnel on :8000 for GitHub webhook delivery
+make webhook-update              # patch the GitHub webhook with the current ngrok URL
+make e2e                         # full push-to-alert smoke test (scripts/e2e_smoke_test.py)
 ```
 
 Local ports: Grafana 3000, ingest 8000, React shell 5173, Prometheus 9090, Loki 3100, Alertmanager 9093, ArgoCD 8443.
@@ -174,7 +221,7 @@ Status option IDs: Backlog `82eedf92` · Todo `f75ad846` · In Progress `47fc9ee
 
 ### Sub-issue-level workflow (tasks with `[E<N>-T<M>-S<K>]` sub-issues)
 
-Most M3 tasks are pre-decomposed into numbered sub-issues (`gh issue view <task#>` shows the `sub-issues` field). Work through them in order:
+Most tasks from M3 onward (including every SaaS epic) are pre-decomposed into numbered sub-issues (`gh issue view <task#>` shows the `sub-issues` field). Work through them in order:
 
 1. Move the task (and epic, if not already In Progress) to **In Progress**; branch from `dev` as `feat/E<N>-T<M>-<slug>`.
 2. Implement one sub-issue at a time, committing per sub-issue with the commit SHA referenced when closing it (`gh issue close <sub#> --comment "Done in <sha>: ..."`). When sub-issues are genuinely inseparable (e.g. one function can't be split into a partially-working increment), bundle them into one commit and say so explicitly in both the commit message and each sub-issue's closing comment — don't force artificial partial commits.
@@ -191,14 +238,23 @@ Most M3 tasks are pre-decomposed into numbered sub-issues (`gh issue view <task#
 | **M1 — Foundation Ready** (due 2026-07-29) | Webhook → deployment row → Grafana shows metrics | E1 infra, E2 schema, E3 ingest/webhooks, E4 sample app, E5 Grafana base |
 | **M2 — Mid Review** | Health scoring + DORA + alerts end-to-end | E6 detection agent, E7 DORA, E8 alerting, E9 REST API |
 | **M3 — Interface Layer** | — | E10 MCP server, E11 shell backend, E12 React shell, E13 dashboard suite |
-| **M4 — Final Delivery** | — | E14 stretch, E15 Helm packaging, E16 testing, E17 docs/demo |
+| **M4 — Final Delivery** (due 2026-09-08) | — | E14 stretch, E15 Helm packaging, E16 testing, E17 docs/demo, **plus the SaaS epics below** |
 
-Issue numbering: epics are `[EPIC-00N]`, tasks are `[EN-TM]`. Issues #1–28 are M1. Task bodies contain acceptance criteria and subtask checklists — treat them as the spec; tick subtasks off in the issue as they complete.
+M1–M3 are complete. Everything still open sits under **M4**, and most of it is the SaaS transition rather than the original academic scope:
 
-**M1 execution order** (dependency-driven, two parallel tracks):
-- Track A (cluster): E1-T1 Kind → E1-T2 Prometheus → E1-T3 Loki → E1-T4 ArgoCD → E4-T2 manifests
-- Track B (platform): E1-T5 compose → E2-T1 schema → E2-T2 constraints → E2-T3 image_tag → E2-T5 models → E3-T1 scaffold → E3-T2/T3 webhooks → E3-T4 correlation
-- Wiring last: E3-T5/T6 webhook delivery, E4-T3 CI pipeline, E5-T1/T2 Grafana, then P1s (E1-T6 Makefile, E2-T4 DORA views, E4-T4 loadgen)
+| Epic | What it is | State |
+|---|---|---|
+| EPIC-018 | Sample app extracted to [deploylens-sample-app](https://github.com/PulithThewmika/deploylens-sample-app) | done |
+| EPIC-019 | Auth: GitHub OAuth login, session JWT, org API keys | done |
+| EPIC-020 | Multi-tenancy: `org_id` everywhere, org-scoped API/MCP/DORA | done |
+| EPIC-021 | GitHub App & automatic webhook provisioning | **open** (#611) |
+| EPIC-022 | Cluster Agent & Remote Connectivity | **open** (#643) |
+| EPIC-023 | Tiered Integration & Edge Cases | **open** (#691) |
+| EPIC-024 | Frontend SaaS Upgrade | **open** (#725) |
+| EPIC-025 | Rename DeployLens → KubeX | done |
+| EPIC-017 | Documentation & Demo | **open** (#86) |
+
+Issue numbering: epics are `[EPIC-0NN]`, tasks are `[EN-TM]`, sub-issues `[EN-TM-SK]`. Task bodies contain acceptance criteria and subtask checklists — treat them as the spec; tick subtasks off in the issue as they complete.
 
 ## Conventions
 
@@ -227,3 +283,5 @@ The shared principle: pick the cheapest tool that gets full-quality output, not 
 - The GitHub Actions tag-bump commit means `workflow_run.head_sha` (original commit) ≠ ArgoCD revision (bump commit). This is expected — it's why the image_tag fallback exists.
 - Prometheus `rate()` returns nothing without steady traffic — the load generator (E4-T4) must be running before health scoring can be tested.
 - Grafana provisioned datasources/dashboards only load on container start — restart the Grafana container after editing provisioning YAML.
+- Grafana dashboards are deliberately **platform-wide, not per-tenant** — they query the `dora_*` views (NULL org). Don't "fix" that by hand; it needs an org_id template variable first.
+- `psql`/manual SQL inserts into `services`/`deployments`/`alerts`/`pipeline_events` need an explicit `org_id` since V016 dropped the column DEFAULT — a bare INSERT now fails with a NOT NULL violation.
