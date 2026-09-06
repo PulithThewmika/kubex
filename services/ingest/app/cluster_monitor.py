@@ -17,7 +17,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from .models.cluster import Cluster
 
@@ -40,7 +40,7 @@ async def mark_stale_clusters_disconnected(session: AsyncSession) -> int:
     return result.rowcount
 
 
-async def run_disconnect_sweep_loop(async_session_factory) -> None:
+async def run_disconnect_sweep_loop(async_session_factory: async_sessionmaker[AsyncSession]) -> None:
     # ponytail: plain polling loop, no APScheduler dep in this service —
     # fine at this project's scale; upgrade if a second periodic ingest
     # job appears and shared scheduling machinery earns its keep.
