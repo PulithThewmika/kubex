@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import bcrypt
 import pytest
@@ -37,6 +37,7 @@ def _fake_cluster(token: str) -> Cluster:
 
 
 @pytest.mark.asyncio
+@patch("app.routers.install.INGEST_PUBLIC_URL", "https://ingest.example.com")
 async def test_install_manifest_returns_valid_kubernetes_yaml(client: FastAPI, mock_session: AsyncMock) -> None:
     token = "kbx_" + "a" * 40
     cluster = _fake_cluster(token)
@@ -88,6 +89,7 @@ async def test_install_manifest_returns_valid_kubernetes_yaml(client: FastAPI, m
 
 
 @pytest.mark.asyncio
+@patch("app.routers.install.INGEST_PUBLIC_URL", "https://ingest.example.com")
 async def test_install_manifest_404_for_unknown_token(client: FastAPI, mock_session: AsyncMock) -> None:
     mock_session.execute = AsyncMock(
         return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[]))))
@@ -100,6 +102,22 @@ async def test_install_manifest_404_for_unknown_token(client: FastAPI, mock_sess
 
 
 @pytest.mark.asyncio
+@patch("app.routers.install.INGEST_PUBLIC_URL", "http://localhost:8000")
+async def test_install_manifest_500_when_ingest_public_url_is_loopback(
+    client: FastAPI, mock_session: AsyncMock
+) -> None:
+    """A manifest embedding a loopback DEPLOYLENS_ENDPOINT would deploy an
+    agent that can never reach this service — reject before even looking up
+    the token, per CodeRabbit's PR #800 finding."""
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get("/install/kbx_anything.yaml")
+
+    assert resp.status_code == 500
+    mock_session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@patch("app.routers.install.INGEST_PUBLIC_URL", "https://ingest.example.com")
 async def test_install_manifest_404_for_grace_period_old_token(client: FastAPI, mock_session: AsyncMock) -> None:
     """A token that only matches token_hash_old (post-rotation grace window,
     E22-T1-S10) must be rejected here — baking it into a generated manifest

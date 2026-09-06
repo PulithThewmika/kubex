@@ -11,6 +11,8 @@ work. The response never distinguishes "bad token" from "unknown cluster"
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
+
 import yaml
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
@@ -18,6 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import INGEST_PUBLIC_URL, find_cluster_by_token
 from ..db import get_session
+
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 router = APIRouter(tags=["install"])
 
@@ -110,6 +114,16 @@ def build_install_manifest(token: str, endpoint: str) -> str:
 
 @router.get("/install/{token}.yaml", response_class=PlainTextResponse)
 async def install_manifest(token: str, session: AsyncSession = Depends(get_session)) -> PlainTextResponse:
+    # A loopback INGEST_PUBLIC_URL (unset, or left at its localhost default)
+    # would deploy an agent that phones home to itself instead of this
+    # service — fail loudly rather than hand out a manifest that can never
+    # connect.
+    if urlparse(INGEST_PUBLIC_URL).hostname in _LOOPBACK_HOSTS:
+        raise HTTPException(
+            status_code=500,
+            detail="INGEST_PUBLIC_URL is not configured to an externally reachable address",
+        )
+
     # allow_grace=False: a token accepted only via the post-rotation grace
     # window would go stale ~10 minutes after this manifest is applied,
     # with no indication of that in the generated Secret. Reject it here
