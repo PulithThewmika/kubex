@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import asyncio
 import secrets
+import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,14 +24,28 @@ from ..auth import verify_cluster_token
 from ..auth_middleware import UserContext, get_current_user
 from ..db import get_session
 from ..models.cluster import Cluster
+from ..models.cluster_query import ClusterQuery
 from ..schemas.cluster import (
     ClusterCreateRequest,
     ClusterCreateResponse,
     ClusterHeartbeatRequest,
     ClusterHeartbeatResponse,
+    ClusterQueryResponse,
     ClusterResponse,
     ClusterVerifyResponse,
 )
+
+
+def _require_own_cluster(path_cluster_id: str, cluster: Cluster) -> None:
+    """Cluster tokens authenticate a cluster, not a specific path id — reject
+    a request whose token belongs to a different cluster than the one named
+    in the URL rather than silently acting on the token's own cluster."""
+    try:
+        parsed = uuid.UUID(path_cluster_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid cluster id") from None
+    if parsed != cluster.id:
+        raise HTTPException(status_code=403, detail="Token does not match this cluster")
 
 router = APIRouter(prefix="/api/clusters", tags=["clusters"])
 
@@ -107,3 +122,19 @@ async def cluster_heartbeat(
     await session.commit()
 
     return ClusterHeartbeatResponse(status=cluster.status, last_heartbeat=now)
+
+
+@router.get("/{cluster_id}/queries", response_model=list[ClusterQueryResponse])
+async def list_pending_queries(
+    cluster_id: str,
+    cluster: Cluster = Depends(verify_cluster_token),
+    session: AsyncSession = Depends(get_session),
+) -> list[ClusterQueryResponse]:
+    _require_own_cluster(cluster_id, cluster)
+
+    result = await session.execute(
+        select(ClusterQuery)
+        .where(ClusterQuery.cluster_id == cluster.id, ClusterQuery.status == "pending")
+        .order_by(ClusterQuery.requested_at)
+    )
+    return [ClusterQueryResponse(id=str(q.id), promql=q.promql) for q in result.scalars().all()]
