@@ -12,6 +12,7 @@ from .base import Base
 
 if TYPE_CHECKING:
     from .alert import Alert
+    from .cluster import Cluster
     from .deployment import Deployment
 
 
@@ -35,7 +36,11 @@ class Service(Base):
     argocd_app: Mapped[str | None] = mapped_column(Text)
     namespace: Mapped[str] = mapped_column(String, nullable=False, server_default="default")
     prom_components: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    cluster_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("clusters.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default="now()")
 
     deployments: Mapped[list[Deployment]] = relationship(back_populates="service")
     alerts: Mapped[list[Alert]] = relationship(back_populates="service")
+    cluster: Mapped[Cluster | None] = relationship(back_populates="services")
