@@ -103,6 +103,27 @@ RETURNS TABLE (
       AND (p_org_id IS NULL OR s.org_id = p_org_id);
 $$ LANGUAGE sql STABLE;
 
+-- PostgreSQL grants EXECUTE on new functions to PUBLIC by default. Revoke
+-- that so no future role gets function access for free, then grant it back
+-- explicitly to grafana_ro — required despite Grafana only ever going
+-- through the NULL-parameterized views below: unlike table/view access, a
+-- view does NOT run the functions it calls with the view owner's
+-- privileges, so grafana_ro still needs its own EXECUTE grant or the views
+-- themselves break (verified live: SELECT on the view failed with
+-- "permission denied for function" once EXECUTE was revoked from PUBLIC
+-- without this grant). This doesn't reduce grafana_ro's actual reach —
+-- it already has GRANT SELECT on every table (V001/V013), so it can query
+-- any org's raw rows directly regardless of what these functions allow.
+REVOKE EXECUTE ON FUNCTION dora_deploy_frequency(uuid)     FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION dora_lead_time(uuid)            FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION dora_change_failure_rate(uuid)  FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION dora_mttr(uuid)                 FROM PUBLIC;
+
+GRANT EXECUTE ON FUNCTION dora_deploy_frequency(uuid)     TO grafana_ro;
+GRANT EXECUTE ON FUNCTION dora_lead_time(uuid)            TO grafana_ro;
+GRANT EXECUTE ON FUNCTION dora_change_failure_rate(uuid)  TO grafana_ro;
+GRANT EXECUTE ON FUNCTION dora_mttr(uuid)                 TO grafana_ro;
+
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM schema_versions WHERE version = 'V017') THEN
