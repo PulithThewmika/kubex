@@ -41,4 +41,6 @@ class Cluster(Base):
 
     organization: Mapped[Organization] = relationship(back_populates="clusters")
     services: Mapped[list[Service]] = relationship(back_populates="cluster")
-    queries: Mapped[list[ClusterQuery]] = relationship(back_populates="cluster")
+    queries: Mapped[list[ClusterQuery]] = relationship(
+        back_populates="cluster", cascade="all, delete", passive_deletes=True
+    )

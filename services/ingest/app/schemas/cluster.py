@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ClusterCreateRequest(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=253)
 
 
 class ClusterCreateResponse(BaseModel):
@@ -36,6 +36,7 @@ class ClusterVerifyResponse(BaseModel):
 
 class ClusterHeartbeatRequest(BaseModel):
     agent_version: str | None = None
+    argocd_version: str | None = None
     argocd_status: str | None = None
     prometheus_status: str | None = None
 
