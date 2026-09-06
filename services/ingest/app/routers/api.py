@@ -368,58 +368,51 @@ async def get_dora_metrics(
 ):
     """Return all four DORA metrics for a service and period.
 
-    The dora_* views (V003/V007/V008) don't carry org_id, so each query
-    joins to services on the globally-unique service name to scope by
-    org. E20-T3 converts these views into org-parameterized SQL
-    functions per CLAUDE.md decision #6 — this join is a stopgap to
-    close the cross-org leak now without duplicating that work early.
+    Calls the org-parameterized dora_* SQL functions (V017) directly —
+    the single authoritative source per CLAUDE.md decision #6. This
+    replaces the join-on-service-name stopgap E20-T2 used before the
+    functions existed.
     """
     days = _PERIOD_DAYS.get(period, 30)
-    svc_filter = "AND v.service_name = :service" if service else ""
+    svc_filter = "AND service_name = :service" if service else ""
     params: dict = {"days": days, "org_id": user.org_id}
     if service:
         params["service"] = service
 
-    # Deploy frequency: deployments per day in period (dora_deploy_frequency view)
+    # Deploy frequency: deployments per day in period
     freq_result = await session.execute(
         text(f"""
-            SELECT COALESCE(SUM(v.deploy_count)::float / NULLIF(:days, 0), NULL)
-            FROM dora_deploy_frequency v
-            JOIN services s ON s.name = v.service_name
-            WHERE s.org_id = :org_id
-              AND v.deploy_date >= CURRENT_DATE - :days * interval '1 day'
+            SELECT COALESCE(SUM(deploy_count)::float / NULLIF(:days, 0), NULL)
+            FROM dora_deploy_frequency(:org_id)
+            WHERE deploy_date >= CURRENT_DATE - :days * interval '1 day'
             {svc_filter}
         """),
         params,
     )
     freq = freq_result.scalar_one_or_none()
 
-    # Lead time: average seconds from commit to deploy (dora_lead_time view)
+    # Lead time: average seconds from commit to deploy
     lt_result = await session.execute(
         text(f"""
-            SELECT AVG(v.lead_time_seconds)
-            FROM dora_lead_time v
-            JOIN services s ON s.name = v.service_name
-            WHERE s.org_id = :org_id
-              AND v.finished_at >= now() - :days * interval '1 day'
+            SELECT AVG(lead_time_seconds)
+            FROM dora_lead_time(:org_id)
+            WHERE finished_at >= now() - :days * interval '1 day'
             {svc_filter}
         """),
         params,
     )
     lead_time_avg = lt_result.scalar_one_or_none()
 
-    # Change failure rate (dora_change_failure_rate view)
+    # Change failure rate
     cfr_result = await session.execute(
         text(f"""
             SELECT ROUND(
-                COUNT(*) FILTER (WHERE v.is_failure)::numeric
+                COUNT(*) FILTER (WHERE is_failure)::numeric
                 / NULLIF(COUNT(*), 0),
                 4
             )
-            FROM dora_change_failure_rate v
-            JOIN services s ON s.name = v.service_name
-            WHERE s.org_id = :org_id
-              AND v.started_at >= now() - :days * interval '1 day'
+            FROM dora_change_failure_rate(:org_id)
+            WHERE started_at >= now() - :days * interval '1 day'
             {svc_filter}
         """),
         params,
@@ -427,14 +420,12 @@ async def get_dora_metrics(
     cfr = cfr_result.scalar_one_or_none()
     cfr_float = float(cfr) if cfr is not None else None
 
-    # MTTR: average resolved alert duration (dora_mttr view)
+    # MTTR: average resolved alert duration
     mttr_result = await session.execute(
         text(f"""
-            SELECT AVG(v.mttr_seconds)
-            FROM dora_mttr v
-            JOIN services s ON s.name = v.service_name
-            WHERE s.org_id = :org_id
-              AND v.fired_at >= now() - :days * interval '1 day'
+            SELECT AVG(mttr_seconds)
+            FROM dora_mttr(:org_id)
+            WHERE fired_at >= now() - :days * interval '1 day'
             {svc_filter}
         """),
         params,
