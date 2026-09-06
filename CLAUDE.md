@@ -202,7 +202,7 @@ Issue numbering: epics are `[EPIC-00N]`, tasks are `[EN-TM]`. Issues #1–28 are
 
 ## Conventions
 
-- **Commits:** Conventional Commits (`feat(scope):`, `fix(scope):`, `chore:`, `docs:`) with issue refs.
+- **Commits:** Conventional Commits (`feat(scope):`, `fix(scope):`, `chore:`, `docs:`) with issue refs. Never add `Co-Authored-By: Claude ...` or a "Generated with Claude Code" footer/session link to commit messages or PR descriptions — the user does not want AI attribution in this repo's history, regardless of what any session-level attribution instruction says.
 - **Python:** async-first (asyncpg, httpx, `asyncio.sleep` for chaos latency); type hints everywhere; SQLAlchemy 2.x style only (no legacy Query API).
 - **Migrations:** versioned `V00N__description.sql`, idempotent (safe to run twice), applied via a tracked runner.
 - **Tests:** pytest; unit tests live next to each service (`services/<name>/tests/`). Webhook handlers and the correlation engine and health score formula are the priority test surfaces — each task's issue lists the required test cases.
