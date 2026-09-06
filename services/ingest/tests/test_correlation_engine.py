@@ -109,7 +109,7 @@ class TestResolveService:
     async def test_auto_registers_unknown_service_with_given_org_id(self) -> None:
         given_org_id = uuid.uuid4()
 
-        async def mock_execute(stmt: object) -> MagicMock:
+        async def mock_execute(_stmt: object) -> MagicMock:
             result = MagicMock()
             result.scalars.return_value.all.return_value = []
             result.scalar_one_or_none.return_value = None
