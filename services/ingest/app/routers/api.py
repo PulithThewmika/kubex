@@ -32,7 +32,7 @@ router = APIRouter(prefix="/api", tags=["api"])
 
 
 @router.get("/services", response_model=list[ServiceWithStatusResponse])
-async def list_services(session: AsyncSession = Depends(get_session), _user: UserContext = Depends(get_current_user)):
+async def list_services(session: AsyncSession = Depends(get_session), user: UserContext = Depends(get_current_user)):
     """List all services with latest deployment, health, and active alert count."""
     result = await session.execute(
         text("""
@@ -68,8 +68,10 @@ async def list_services(session: AsyncSession = Depends(get_session), _user: Use
                 FROM alerts
                 WHERE service_id = s.id AND resolved_at IS NULL
             ) ac ON true
+            WHERE s.org_id = :org_id
             ORDER BY s.name
-        """)
+        """),
+        {"org_id": user.org_id},
     )
     rows = result.fetchall()
 
@@ -111,11 +113,11 @@ async def list_deployments(
     status: str | None = Query(None, description="Filter by deployment status"),
     limit: int = Query(10, ge=1, le=50, description="Max results (default 10, max 50)"),
     session: AsyncSession = Depends(get_session),
-    _user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(get_current_user),
 ):
     """List deployments with optional service/status filters."""
-    conditions = []
-    params: dict = {"limit": limit}
+    conditions = ["d.org_id = :org_id"]
+    params: dict = {"limit": limit, "org_id": user.org_id}
 
     if service:
         conditions.append("s.name = :service")
@@ -125,9 +127,7 @@ async def list_deployments(
         conditions.append("d.status = :status")
         params["status"] = status
 
-    where_clause = ""
-    if conditions:
-        where_clause = "WHERE " + " AND ".join(conditions)
+    where_clause = "WHERE " + " AND ".join(conditions)
 
     result = await session.execute(
         text(f"""
@@ -237,7 +237,7 @@ def _build_health_evidence(row) -> list[HealthEvidenceItem]:
 async def get_deployment_detail(
     deploy_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(get_current_user),
 ):
     """Get full deployment detail with timeline and health evidence."""
     result = await session.execute(
@@ -258,9 +258,9 @@ async def get_deployment_detail(
             FROM deployments d
             JOIN services s ON s.id = d.service_id
             LEFT JOIN health_assessments ha ON ha.deployment_id = d.id
-            WHERE d.id = :deploy_id
+            WHERE d.id = :deploy_id AND d.org_id = :org_id
         """),
-        {"deploy_id": deploy_id},
+        {"deploy_id": deploy_id, "org_id": user.org_id},
     )
     row = result.fetchone()
     if row is None:
@@ -320,7 +320,7 @@ async def get_deployment_detail(
 async def get_deployment_health(
     deploy_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(get_current_user),
 ):
     """Get health assessment for a deployment with evidence array."""
     result = await session.execute(
@@ -332,9 +332,9 @@ async def get_deployment_health(
                    ha.restarts_base, ha.restarts_post
             FROM deployments d
             LEFT JOIN health_assessments ha ON ha.deployment_id = d.id
-            WHERE d.id = :deploy_id
+            WHERE d.id = :deploy_id AND d.org_id = :org_id
         """),
-        {"deploy_id": deploy_id},
+        {"deploy_id": deploy_id, "org_id": user.org_id},
     )
     row = result.fetchone()
     if row is None:
@@ -364,21 +364,30 @@ async def get_dora_metrics(
     service: str | None = Query(None, description="Service name (omit for platform-wide)"),
     period: str = Query("30d", description="Period: 7d, 30d, or 90d"),
     session: AsyncSession = Depends(get_session),
-    _user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(get_current_user),
 ):
-    """Return all four DORA metrics for a service and period."""
+    """Return all four DORA metrics for a service and period.
+
+    The dora_* views (V003/V007/V008) don't carry org_id, so each query
+    joins to services on the globally-unique service name to scope by
+    org. E20-T3 converts these views into org-parameterized SQL
+    functions per CLAUDE.md decision #6 — this join is a stopgap to
+    close the cross-org leak now without duplicating that work early.
+    """
     days = _PERIOD_DAYS.get(period, 30)
-    svc_filter = "AND service_name = :service" if service else ""
-    params: dict = {"days": days}
+    svc_filter = "AND v.service_name = :service" if service else ""
+    params: dict = {"days": days, "org_id": user.org_id}
     if service:
         params["service"] = service
 
     # Deploy frequency: deployments per day in period (dora_deploy_frequency view)
     freq_result = await session.execute(
         text(f"""
-            SELECT COALESCE(SUM(deploy_count)::float / NULLIF(:days, 0), NULL)
-            FROM dora_deploy_frequency
-            WHERE deploy_date >= CURRENT_DATE - :days * interval '1 day'
+            SELECT COALESCE(SUM(v.deploy_count)::float / NULLIF(:days, 0), NULL)
+            FROM dora_deploy_frequency v
+            JOIN services s ON s.name = v.service_name
+            WHERE s.org_id = :org_id
+              AND v.deploy_date >= CURRENT_DATE - :days * interval '1 day'
             {svc_filter}
         """),
         params,
@@ -388,9 +397,11 @@ async def get_dora_metrics(
     # Lead time: average seconds from commit to deploy (dora_lead_time view)
     lt_result = await session.execute(
         text(f"""
-            SELECT AVG(lead_time_seconds)
-            FROM dora_lead_time
-            WHERE finished_at >= now() - :days * interval '1 day'
+            SELECT AVG(v.lead_time_seconds)
+            FROM dora_lead_time v
+            JOIN services s ON s.name = v.service_name
+            WHERE s.org_id = :org_id
+              AND v.finished_at >= now() - :days * interval '1 day'
             {svc_filter}
         """),
         params,
@@ -401,12 +412,14 @@ async def get_dora_metrics(
     cfr_result = await session.execute(
         text(f"""
             SELECT ROUND(
-                COUNT(*) FILTER (WHERE is_failure)::numeric
+                COUNT(*) FILTER (WHERE v.is_failure)::numeric
                 / NULLIF(COUNT(*), 0),
                 4
             )
-            FROM dora_change_failure_rate
-            WHERE started_at >= now() - :days * interval '1 day'
+            FROM dora_change_failure_rate v
+            JOIN services s ON s.name = v.service_name
+            WHERE s.org_id = :org_id
+              AND v.started_at >= now() - :days * interval '1 day'
             {svc_filter}
         """),
         params,
@@ -417,9 +430,11 @@ async def get_dora_metrics(
     # MTTR: average resolved alert duration (dora_mttr view)
     mttr_result = await session.execute(
         text(f"""
-            SELECT AVG(mttr_seconds)
-            FROM dora_mttr
-            WHERE fired_at >= now() - :days * interval '1 day'
+            SELECT AVG(v.mttr_seconds)
+            FROM dora_mttr v
+            JOIN services s ON s.name = v.service_name
+            WHERE s.org_id = :org_id
+              AND v.fired_at >= now() - :days * interval '1 day'
             {svc_filter}
         """),
         params,
@@ -441,11 +456,11 @@ async def list_alerts(
     active: bool | None = Query(None, description="Filter active alerts (resolved_at IS NULL)"),
     service: str | None = Query(None, description="Filter by service name"),
     session: AsyncSession = Depends(get_session),
-    _user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(get_current_user),
 ):
     """List alerts with optional active/service filters."""
-    conditions = []
-    params: dict = {}
+    conditions = ["a.org_id = :org_id"]
+    params: dict = {"org_id": user.org_id}
 
     if active is True:
         conditions.append("a.resolved_at IS NULL")
@@ -456,9 +471,7 @@ async def list_alerts(
         conditions.append("s.name = :service")
         params["service"] = service
 
-    where_clause = ""
-    if conditions:
-        where_clause = "WHERE " + " AND ".join(conditions)
+    where_clause = "WHERE " + " AND ".join(conditions)
 
     result = await session.execute(
         text(f"""
@@ -495,7 +508,7 @@ async def compare_deployments(
     a: int = Query(..., description="First deployment ID"),
     b: int = Query(..., description="Second deployment ID"),
     session: AsyncSession = Depends(get_session),
-    _user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(get_current_user),
 ):
     """Compare two deployments side-by-side with live PromQL metrics."""
     from ..promql import fetch_metrics_at, OBSERVATION_WINDOW
@@ -506,9 +519,9 @@ async def compare_deployments(
                    s.name AS service_name, s.namespace
             FROM deployments d
             JOIN services s ON s.id = d.service_id
-            WHERE d.id IN (:a, :b)
+            WHERE d.id IN (:a, :b) AND d.org_id = :org_id
         """),
-        {"a": a, "b": b},
+        {"a": a, "b": b, "org_id": user.org_id},
     )
     rows = {row.id: row for row in result.fetchall()}
 

@@ -1,6 +1,19 @@
 -- V009: Add 'assessed' to deployments status constraint
 -- The detection agent sets status='assessed' after health scoring completes.
 -- Idempotent — safe to run multiple times.
+--
+-- Uses DROP VIEW + CREATE VIEW for dora_change_failure_rate, not CREATE OR
+-- REPLACE VIEW: this file was written before V008's row-level rewrite of
+-- that view landed and was never rebased onto it, so CREATE OR REPLACE
+-- here tries to go from V008's (service_name, started_at, is_failure)
+-- shape back to this file's original (service_name, total_deploys,
+-- failed_deploys, failure_rate) shape — a column rename/drop that
+-- Postgres rejects. V015 restores the row-level shape afterward (this
+-- file's actual goal, counting 'degraded' verdicts as failures, was
+-- already present in V008's version — V009 never needed to touch this
+-- view's shape at all). Found while building the E20-T2 cross-org
+-- isolation test (#600), the first thing to apply the full migration
+-- history end-to-end.
 
 DO $$
 BEGIN
@@ -23,7 +36,8 @@ BEGIN
 
     -- Update DORA change failure rate view to count 'degraded' verdicts
     -- per issue #37 acceptance criteria: CFR = (degraded + failed + build_failed + sync_failed) / total
-    CREATE OR REPLACE VIEW dora_change_failure_rate AS
+    DROP VIEW IF EXISTS dora_change_failure_rate;
+    CREATE VIEW dora_change_failure_rate AS
     SELECT
         s.name                              AS service_name,
         COUNT(*)                            AS total_deploys,

@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api", tags=["chat"])
 
 
 @router.post("/chat")
-async def chat_proxy(payload: ChatRequest, _user: UserContext = Depends(get_current_user)):
+async def chat_proxy(payload: ChatRequest, user: UserContext = Depends(get_current_user)):
     # Pre-flight checks so real connectivity failures return a proper
     # HTTP status instead of a 200 that immediately fails mid-stream.
     # Once StreamingResponse starts, headers are committed — failures
@@ -23,12 +23,12 @@ async def chat_proxy(payload: ChatRequest, _user: UserContext = Depends(get_curr
         raise HTTPException(status_code=502, detail="LLM service unavailable")
 
     try:
-        tools = await list_anthropic_tools()
+        tools = await list_anthropic_tools(user.org_id)
     except Exception:
         logger.exception("MCP server unreachable during chat pre-flight")
         raise HTTPException(status_code=503, detail="MCP server unavailable")
 
     return StreamingResponse(
-        run_chat_turn(payload.messages, tools),
+        run_chat_turn(payload.messages, tools, user.org_id),
         media_type="text/event-stream",
     )
