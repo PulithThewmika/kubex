@@ -52,7 +52,7 @@ async def _find_unassessed_deployments(session):
     """
     result = await session.execute(
         text("""
-            SELECT d.id, d.service_id, d.finished_at, d.commit_sha,
+            SELECT d.id, d.service_id, d.org_id, d.finished_at, d.commit_sha,
                    s.name AS service_name, s.namespace,
                    s.prom_components
             FROM deployments d
@@ -75,6 +75,7 @@ async def _process_deployment(session, row) -> None:
     """Score a single deployment: fetch metrics, compute score, write results, alert if needed."""
     deploy_id = row.id
     service_id = row.service_id
+    org_id = row.org_id
     service_name = row.service_name
     namespace = row.namespace
     components = row.prom_components if row.prom_components is not None else [service_name]
@@ -150,6 +151,7 @@ async def _process_deployment(session, row) -> None:
                     alert_session,
                     service_name, service_id, deploy_id,
                     score, verdict, details,
+                    org_id,
                 )
                 await alert_session.commit()
         except Exception:

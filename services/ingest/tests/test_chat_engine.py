@@ -1,6 +1,7 @@
 """Tests for the chat engine's SSE framing and tool-use loop."""
 
 import os
+import uuid
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,6 +11,8 @@ os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
 
 from app.chat_engine import run_chat_turn  # noqa: E402
 from app.schemas.chat import ChatMessage  # noqa: E402
+
+TEST_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
 
 
 def _text_block(text):
@@ -82,7 +85,7 @@ async def test_run_chat_turn_streams_text_only():
         frames = [
             frame
             async for frame in run_chat_turn(
-                [ChatMessage(role="user", content="hi")], tools=[]
+                [ChatMessage(role="user", content="hi")], tools=[], org_id=TEST_ORG_ID
             )
         ]
 
@@ -112,9 +115,11 @@ async def test_run_chat_turn_includes_tool_call_results():
         content=[MagicMock(text='{"deployments": []}')],
         is_error=False,
     )
+    received_org_ids = []
 
     @asynccontextmanager
-    async def fake_mcp_session():
+    async def fake_mcp_session(org_id):
+        received_org_ids.append(org_id)
         yield mock_mcp_session
 
     with (
@@ -124,7 +129,7 @@ async def test_run_chat_turn_includes_tool_call_results():
         frames = [
             frame
             async for frame in run_chat_turn(
-                [ChatMessage(role="user", content="list deploys")], tools=[]
+                [ChatMessage(role="user", content="list deploys")], tools=[], org_id=TEST_ORG_ID
             )
         ]
 
@@ -133,6 +138,7 @@ async def test_run_chat_turn_includes_tool_call_results():
     assert '"tool": "list_deployments"' in tool_call_frame
     assert '"result": "{\\"deployments\\": []}"' in tool_call_frame
     assert frames[-1] == 'event: text\ndata: {"text": "done"}\n\n'
+    assert received_org_ids == [TEST_ORG_ID]
     mock_mcp_session.call_tool.assert_awaited_once_with(
         "list_deployments", {"service": "orders"}
     )
@@ -168,7 +174,7 @@ async def test_run_chat_turn_runs_parallel_tool_calls_concurrently():
     mock_mcp_session.call_tool.side_effect = slow_call_tool
 
     @asynccontextmanager
-    async def fake_mcp_session():
+    async def fake_mcp_session(org_id):
         yield mock_mcp_session
 
     with (
@@ -179,7 +185,7 @@ async def test_run_chat_turn_runs_parallel_tool_calls_concurrently():
         frames = [
             frame
             async for frame in run_chat_turn(
-                [ChatMessage(role="user", content="give me an overview")], tools=[]
+                [ChatMessage(role="user", content="give me an overview")], tools=[], org_id=TEST_ORG_ID
             )
         ]
         elapsed = time.monotonic() - start
@@ -207,7 +213,7 @@ async def test_run_chat_turn_stops_after_max_iterations():
     )
 
     @asynccontextmanager
-    async def fake_mcp_session():
+    async def fake_mcp_session(org_id):
         yield mock_mcp_session
 
     with (
@@ -217,7 +223,7 @@ async def test_run_chat_turn_stops_after_max_iterations():
         frames = [
             frame
             async for frame in run_chat_turn(
-                [ChatMessage(role="user", content="loop forever")], tools=[]
+                [ChatMessage(role="user", content="loop forever")], tools=[], org_id=TEST_ORG_ID
             )
         ]
 
