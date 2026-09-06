@@ -14,8 +14,15 @@ endpoint: ""
 
 image:
   repository: ghcr.io/puliththewmika/kubex-cluster-agent
+  # ponytail: :latest contradicts CLAUDE.md's "images tagged with short
+  # SHA, never latest" convention — same tradeoff install.py's AGENT_IMAGE
+  # already carries a ponytail note for (there's no per-install SHA to
+  # pin without a release-tracking mechanism this task doesn't build).
+  # pullPolicy: Always (below) is load-bearing for this default: it's what
+  # makes a re-scheduled pod actually re-pull the latest content instead of
+  # silently running whatever :latest happened to resolve to at last pull.
   tag: latest
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 # Local/dev only: lets the agent talk to a plain-http endpoint (e.g.
 # host.docker.internal during a Kind smoke test). A real install always
