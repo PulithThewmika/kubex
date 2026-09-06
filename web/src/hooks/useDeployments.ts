@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
+import { apiFetch } from '../lib/apiFetch'
 import type { Deployment } from '../types/deployment'
 
 async function fetchDeployments(service: string): Promise<Deployment[]> {
-  const res = await fetch(`/api/deployments?service=${encodeURIComponent(service)}&limit=10`)
+  const res = await apiFetch(`/api/deployments?service=${encodeURIComponent(service)}&limit=10`)
   if (!res.ok) {
     throw new Error(`Failed to fetch deployments: ${res.status}`)
   }
