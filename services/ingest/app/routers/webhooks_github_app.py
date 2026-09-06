@@ -134,6 +134,15 @@ async def _handle_installation_repositories(session: AsyncSession, action: str, 
         )
         return {"status": "ok", "repos_added": added}
 
+    if action == "removed":
+        removed = [r["full_name"] for r in payload.get("repositories_removed", []) if r.get("full_name")]
+        installation.repos = [r for r in installation.repos if r not in removed]
+        logger.info(
+            "Installation repos removed: github_installation_id=%s org_id=%s repos=%s",
+            github_installation_id, installation.org_id, removed,
+        )
+        return {"status": "ok", "repos_removed": removed}
+
     return {"status": "ignored", "reason": f"installation_repositories action '{action}' not handled"}
 
 
