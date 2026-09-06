@@ -44,7 +44,7 @@ describe("compareDeploys", () => {
       { metric: {}, value: [1700000000, "0.02"] },
     ]);
 
-    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 });
+    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.summary).toContain("Comparing orders deploys #1");
@@ -58,7 +58,7 @@ describe("compareDeploys", () => {
   it("returns an error when one deployment is not found", async () => {
     mockedQuery.mockResolvedValue([makeRow({ id: 1 })]);
 
-    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 999 });
+    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 999 }, null);
     const parsed = parseResult(result);
 
     expect(parsed).toEqual({
@@ -73,7 +73,7 @@ describe("compareDeploys", () => {
       makeRow({ id: 2, service_id: 2, service_name: "payments" }),
     ]);
 
-    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 });
+    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.error).toBe("Both deployments must belong to the same service");
@@ -87,7 +87,7 @@ describe("compareDeploys", () => {
       makeRow({ id: 2 }),
     ]);
 
-    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 });
+    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.error).toBe("Both deployments must have finished_at timestamps");
@@ -101,7 +101,7 @@ describe("compareDeploys", () => {
     ]);
     mockedInstantQuery.mockRejectedValue(new Error("connection refused"));
 
-    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 });
+    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.warning).toBe("Prometheus unreachable — metric values are null");

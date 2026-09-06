@@ -91,7 +91,12 @@ function computeChangePct(a: number | null, b: number | null): number | null {
 export async function compareDeploys(input: {
   deployment_id_a: number;
   deployment_id_b: number;
-}): Promise<{ content: { type: "text"; text: string }[] }> {
+}, orgId: string | null): Promise<{ content: { type: "text"; text: string }[] }> {
+  const orgFilter = orgId !== null ? "AND s.org_id = $3" : "";
+  const params: unknown[] = orgId !== null
+    ? [input.deployment_id_a, input.deployment_id_b, orgId]
+    : [input.deployment_id_a, input.deployment_id_b];
+
   const rows = await query<DeployRow>(
     `SELECT d.id, d.service_id, s.name AS service_name, s.namespace,
             d.status, d.finished_at, d.commit_sha, d.image_tag,
@@ -99,8 +104,8 @@ export async function compareDeploys(input: {
      FROM deployments d
      JOIN services s ON s.id = d.service_id
      LEFT JOIN health_assessments ha ON ha.deployment_id = d.id
-     WHERE d.id IN ($1, $2)`,
-    [input.deployment_id_a, input.deployment_id_b],
+     WHERE d.id IN ($1, $2) ${orgFilter}`,
+    params,
   );
 
   const byId = new Map(rows.map((r) => [r.id, r]));

@@ -20,7 +20,7 @@ describe("getBlastRadius", () => {
   it("returns an error when the service/component is not found", async () => {
     mockedQueryOne.mockResolvedValueOnce(null);
 
-    const result = await getBlastRadius({ service: "nonexistent" });
+    const result = await getBlastRadius({ service: "nonexistent" }, null);
     const parsed = parseResult(result);
 
     expect(parsed).toEqual({
@@ -49,7 +49,7 @@ describe("getBlastRadius", () => {
       },
     ]);
 
-    const result = await getBlastRadius({ service: "orders" });
+    const result = await getBlastRadius({ service: "orders" }, null);
     const parsed = parseResult(result);
 
     expect(parsed.queried_components).toEqual(["orders"]);
@@ -94,7 +94,7 @@ describe("getBlastRadius", () => {
       },
     ]);
 
-    const result = await getBlastRadius({ service: "sample-app" });
+    const result = await getBlastRadius({ service: "sample-app" }, null);
     const parsed = parseResult(result);
 
     expect(parsed.queried_components).toEqual(["frontend", "orders", "payments"]);
@@ -112,7 +112,7 @@ describe("getBlastRadius", () => {
     });
     mockedQuery.mockResolvedValueOnce([]);
 
-    const result = await getBlastRadius({ service: "payments" });
+    const result = await getBlastRadius({ service: "payments" }, null);
     const parsed = parseResult(result);
 
     expect(parsed.downstream).toEqual([]);
@@ -131,7 +131,7 @@ describe("getBlastRadius", () => {
     });
     mockedQuery.mockResolvedValueOnce([]);
 
-    const result = await getBlastRadius({ service: "orders" });
+    const result = await getBlastRadius({ service: "orders" }, null);
     const parsed = parseResult(result);
 
     expect(parsed.queried_components).toEqual(["orders-worker"]);

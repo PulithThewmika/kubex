@@ -34,7 +34,7 @@ describe("getSafetyScore", () => {
   it("returns the score, risk factor breakdown, and a summary on the happy path", async () => {
     mockedQueryOne.mockResolvedValue(makeRow());
 
-    const result = await getSafetyScore({ deployment_id: 5 });
+    const result = await getSafetyScore({ deployment_id: 5 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.summary).toBe("orders deployment #5 — pre-deploy safety score 40/100 (rule-based, not ML)");
@@ -46,7 +46,7 @@ describe("getSafetyScore", () => {
   it("returns an error when the deployment ID does not exist", async () => {
     mockedQueryOne.mockResolvedValue(null);
 
-    const result = await getSafetyScore({ deployment_id: 999 });
+    const result = await getSafetyScore({ deployment_id: 999 }, null);
     const parsed = parseResult(result);
 
     expect(parsed).toEqual({
@@ -60,7 +60,7 @@ describe("getSafetyScore", () => {
       makeRow({ score: null, risk_factors: null, computed_at: null, deploy_status: "deployed" }),
     );
 
-    const result = await getSafetyScore({ deployment_id: 5 });
+    const result = await getSafetyScore({ deployment_id: 5 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.safety).toBeNull();

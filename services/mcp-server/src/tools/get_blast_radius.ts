@@ -31,20 +31,22 @@ interface EdgeWithHealthRow {
 
 export async function getBlastRadius(input: {
   service: string;
-}): Promise<{ content: { type: "text"; text: string }[] }> {
+}, orgId: string | null): Promise<{ content: { type: "text"; text: string }[] }> {
   // matched_by_name makes the name-vs-component branch explicit instead of
   // re-deriving it by comparing strings — the query itself says which
   // column matched, deterministically (ORDER BY prefers an exact name
   // match over a prom_components hit, so a name/component string
   // collision across two different services rows can't flip which one
   // wins between calls).
+  const orgFilter = orgId !== null ? "AND org_id = $2" : "";
+  const matchParams: unknown[] = orgId !== null ? [input.service, orgId] : [input.service];
   const matched = await queryOne<MatchedServiceRow>(
     `SELECT id, name, prom_components, (name = $1) AS matched_by_name
      FROM services
-     WHERE name = $1 OR $1 = ANY(prom_components)
+     WHERE (name = $1 OR $1 = ANY(prom_components)) ${orgFilter}
      ORDER BY (name = $1) DESC
      LIMIT 1`,
-    [input.service],
+    matchParams,
   );
 
   if (!matched) {
@@ -85,6 +87,10 @@ export async function getBlastRadius(input: {
   // same "latest health_assessments row per service" pattern the Platform
   // Overview Grafana dashboard's Services panel uses) instead of N+1
   // round-trips, one per downstream edge.
+  const targetOrgFilter = orgId !== null ? "AND s2.org_id = $3" : "";
+  const edgeParams: unknown[] = orgId !== null
+    ? [matched.id, sourceComponents, orgId]
+    : [matched.id, sourceComponents];
   const rows = await query<EdgeWithHealthRow>(
     `SELECT sd.source_component, sd.target_component, sd.dep_type,
             s2.id AS target_service_id, s2.name AS target_service_name,
@@ -99,9 +105,9 @@ export async function getBlastRadius(input: {
        ORDER BY ha.assessed_at DESC
        LIMIT 1
      ) latest ON true
-     WHERE sd.source_id = $1 AND sd.source_component = ANY($2::text[])
+     WHERE sd.source_id = $1 AND sd.source_component = ANY($2::text[]) ${targetOrgFilter}
      ORDER BY sd.source_component, sd.target_component`,
-    [matched.id, sourceComponents],
+    edgeParams,
   );
 
   const downstream = rows.map((row) => ({

@@ -70,7 +70,7 @@ describe("generateIncidentReport", () => {
       },
     ]);
 
-    const result = await generateIncidentReport({ alert_id: 42 });
+    const result = await generateIncidentReport({ alert_id: 42 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.alert_id).toBe(42);
@@ -92,7 +92,7 @@ describe("generateIncidentReport", () => {
   it("returns an error when the alert ID does not exist", async () => {
     mockedQueryOne.mockResolvedValue(null);
 
-    const result = await generateIncidentReport({ alert_id: 999 });
+    const result = await generateIncidentReport({ alert_id: 999 }, null);
     const parsed = parseResult(result);
 
     expect(parsed).toEqual({
@@ -108,7 +108,7 @@ describe("generateIncidentReport", () => {
     mockedRangeQuery.mockResolvedValue([]);
     mockedLokiQueryRange.mockResolvedValue([]);
 
-    const result = await generateIncidentReport({ alert_id: 42 });
+    const result = await generateIncidentReport({ alert_id: 42 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.report).toContain("has not been health-assessed yet");
@@ -134,7 +134,7 @@ describe("generateIncidentReport", () => {
       return [];
     });
 
-    const result = await generateIncidentReport({ alert_id: 42 });
+    const result = await generateIncidentReport({ alert_id: 42 }, null);
     const parsed = parseResult(result);
     const report: string = parsed.report;
 
@@ -151,7 +151,7 @@ describe("generateIncidentReport", () => {
     mockedRangeQuery.mockRejectedValue(new Error("connection refused"));
     mockedLokiQueryRange.mockRejectedValue(new Error("connection refused"));
 
-    const result = await generateIncidentReport({ alert_id: 42 });
+    const result = await generateIncidentReport({ alert_id: 42 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.report).toContain("No metric data available");
