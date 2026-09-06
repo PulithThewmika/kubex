@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { apiFetch } from '../lib/apiFetch'
 
 type GrafanaPanelProps = {
   uid: string
@@ -31,7 +32,7 @@ export function GrafanaPanel({ uid, panelId, service, from = 'now-6h', to = 'now
     // us catch real backend failures the iframe itself can't detect.
     // (The route is GET-only — HEAD returns 405 — so this duplicates the
     // iframe's own request; acceptable for two lightweight panels a page.)
-    fetch(src)
+    apiFetch(src)
       .then((res) => {
         if (!cancelled && !res.ok) setStatus('error')
       })
