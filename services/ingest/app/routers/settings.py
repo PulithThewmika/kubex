@@ -8,10 +8,11 @@ since bcrypt hashes can't be looked up by index.
 from __future__ import annotations
 
 import secrets
+import uuid
 
 import bcrypt
-from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth_middleware import UserContext, get_current_user
@@ -58,3 +59,22 @@ async def list_api_keys(
         ApiKeyResponse(id=str(k.id), name=k.name, created_at=k.created_at, last_used=k.last_used)
         for k in result.scalars().all()
     ]
+
+
+@router.delete("/{key_id}", status_code=204)
+async def revoke_api_key(
+    key_id: str,
+    user: UserContext = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    try:
+        key_uuid = uuid.UUID(key_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid key id") from None
+
+    result = await session.execute(
+        delete(ApiKey).where(ApiKey.id == key_uuid, ApiKey.org_id == user.org_id)
+    )
+    await session.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="API key not found")
