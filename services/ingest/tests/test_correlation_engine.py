@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 from sqlalchemy.sql import Select
 
 from app.correlation.engine import (
+    apply_terminal_guarded_status,
     extract_image_tag,
     parse_iso_timestamp,
     resolve_service,
@@ -15,6 +16,29 @@ from app.correlation.engine import (
     get_default_org_id,
     find_matching_deployment,
 )
+
+
+class _FakeNestedTransaction:
+    """Minimal async-context-manager stand-in for SQLAlchemy's
+    AsyncSessionTransaction — begin_nested() itself is a plain sync call
+    that returns this, not a coroutine (see conftest.py's mock_session
+    fixture for the same pattern)."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+def _session_with_begin_nested() -> AsyncMock:
+    """A session AsyncMock whose begin_nested() behaves like the real
+    (sync-returning-async-context-manager) method — needed by any test
+    that exercises resolve_service's auto-registration path, which wraps
+    the insert in a savepoint to recover from a lost registration race."""
+    session = AsyncMock()
+    session.begin_nested = MagicMock(return_value=_FakeNestedTransaction())
+    return session
 
 
 # ── extract_image_tag ──────────────────────────────────────────────
@@ -132,7 +156,7 @@ class TestResolveService:
             result.scalar_one_or_none.return_value = None
             return result
 
-        session = AsyncMock()
+        session = _session_with_begin_nested()
         session.execute = mock_execute
         session.flush = AsyncMock()
         session.add = MagicMock()
@@ -143,6 +167,48 @@ class TestResolveService:
         assert org_id == given_org_id
         added_service = session.add.call_args_list[0][0][0]
         assert added_service.org_id == given_org_id
+
+    @pytest.mark.asyncio
+    async def test_recovers_from_lost_registration_race(self) -> None:
+        """/code-review high + CodeRabbit on PR #796: two concurrent
+        first-time requests for the same (org_id, name) can both pass the
+        initial lookup and race to insert — the loser must reuse the
+        winner's row (uq_services_org_name violation) instead of 500ing."""
+        from sqlalchemy.exc import IntegrityError
+
+        given_org_id = uuid.uuid4()
+        winner = MagicMock(id=99, org_id=given_org_id)
+
+        call_count = 0
+
+        async def mock_execute(_stmt: object) -> MagicMock:
+            nonlocal call_count
+            call_count += 1
+            result = MagicMock()
+            result.scalars.return_value.all.return_value = []
+            # First SELECT (pre-insert lookup): nothing yet. Second SELECT
+            # (post-IntegrityError recovery): the winner's row.
+            result.scalar_one_or_none.return_value = None
+            result.scalar_one.return_value = winner
+            return result
+
+        session = _session_with_begin_nested()
+        session.execute = mock_execute
+        session.flush = AsyncMock(side_effect=IntegrityError("insert", {}, Exception("unique violation")))
+        session.add = MagicMock()
+        session.expunge = MagicMock()
+
+        service_id, org_id = await resolve_service(session, org_id=given_org_id, name="orders")
+
+        assert service_id == 99
+        assert org_id == given_org_id
+        # CodeRabbit (2nd round, PR #796): rolling back to the savepoint on
+        # this IntegrityError already evicts `service` to the transient
+        # state — expunging it again would raise InvalidRequestError. This
+        # mock can't reproduce that real SQLAlchemy behavior (a MagicMock
+        # tolerates the call fine either way), so the assertion is the
+        # regression guard: expunge must never be called here at all.
+        session.expunge.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_links_repo_to_existing_service_by_name(self):
@@ -185,7 +251,7 @@ class TestResolveService:
             result.scalar_one_or_none.return_value = None
             return result
 
-        session = AsyncMock()
+        session = _session_with_begin_nested()
         session.execute = mock_execute
         session.flush = AsyncMock()
         session.add = MagicMock()
@@ -226,7 +292,7 @@ class TestResolveService:
             result.scalar_one_or_none.return_value = None
             return result
 
-        session = AsyncMock()
+        session = _session_with_begin_nested()
         session.execute = mock_execute
         session.flush = AsyncMock()
         session.add = MagicMock()
@@ -370,3 +436,62 @@ class TestFindMatchingDeployment:
         assert deployment is None
         assert method == "none"
         session.execute.assert_called_once()
+
+
+class TestApplyTerminalGuardedStatus:
+    """/code-review high + CodeRabbit on PR #796: this must be a
+    WHERE-guarded UPDATE, not an in-memory ORM mutation, or a stale
+    delivery can overwrite a status a concurrent transaction already
+    committed to terminal between the caller's correlating SELECT and
+    this call."""
+
+    @pytest.mark.asyncio
+    async def test_applies_when_not_terminal(self):
+        captured = []
+
+        async def mock_execute(stmt):
+            captured.append(stmt)
+            result = MagicMock()
+            result.scalar_one_or_none.return_value = "deployed"
+            return result
+
+        session = AsyncMock()
+        session.execute = mock_execute
+
+        applied, persisted = await apply_terminal_guarded_status(session, deployment_id=100, new_status="deployed")
+
+        assert applied is True
+        assert persisted == "deployed"
+        assert len(captured) == 1
+        stmt = captured[0]
+        assert stmt.is_update
+        where_sql = str(stmt.whereclause.compile(compile_kwargs={"literal_binds": True}))
+        assert "deployments.id = 100" in where_sql
+        assert "NOT IN" in where_sql.upper() or "NOT (deployments.status IN" in where_sql
+
+    @pytest.mark.asyncio
+    async def test_skips_and_reports_real_status_when_already_terminal(self):
+        """The UPDATE's WHERE excludes the row (simulating a concurrent
+        transaction having already committed it to terminal), so this
+        must fall back to a fresh SELECT rather than trust a stale
+        in-memory value."""
+        call_count = 0
+
+        async def mock_execute(stmt):
+            nonlocal call_count
+            call_count += 1
+            result = MagicMock()
+            if call_count == 1:
+                result.scalar_one_or_none.return_value = None  # UPDATE matched no row
+            else:
+                result.scalar_one.return_value = "sync_failed"  # fallback SELECT
+            return result
+
+        session = AsyncMock()
+        session.execute = mock_execute
+
+        applied, persisted = await apply_terminal_guarded_status(session, deployment_id=100, new_status="deployed")
+
+        assert applied is False
+        assert persisted == "sync_failed"
+        assert call_count == 2

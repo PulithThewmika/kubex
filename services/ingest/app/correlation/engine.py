@@ -3,7 +3,8 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import case, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.deployment import Deployment
@@ -12,9 +13,66 @@ from ..models.service import Service
 
 logger = logging.getLogger("kubex.correlation")
 
+# Once a deployment reaches one of these, no further event for it should
+# regress it back to an in-progress state or flip it to the other terminal
+# state — the event sources that report status here (GitHub Deployments
+# API, the generic notify endpoint) carry no ordering signal to tell which
+# delivery is actually the newer one.
+TERMINAL_STATUSES = ("deployed", "sync_failed")
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+async def apply_terminal_guarded_status(
+    session: AsyncSession, deployment_id: int, new_status: str,
+) -> tuple[bool, str]:
+    """Transition a deployment's status via a WHERE-guarded UPDATE ...
+    RETURNING, rather than mutating an already-loaded ORM object in
+    place. Mutating in place and committing would issue an unconditional
+    UPDATE that can overwrite a status a *concurrent* transaction already
+    committed to terminal between this request's correlating SELECT and
+    this call (/code-review high on PR #796 fixed the same class of race
+    for the ON CONFLICT path via SQL CASE; this closes it for the
+    existing-row path too). Returns (applied, persisted_status) — when
+    not applied, persisted_status is the real current value, re-queried,
+    for accurate logging/response reporting."""
+    values = {"status": new_status}
+    if new_status in TERMINAL_STATUSES:
+        values["finished_at"] = utcnow()
+    stmt = (
+        update(Deployment)
+        .where(Deployment.id == deployment_id, Deployment.status.not_in(TERMINAL_STATUSES))
+        .values(**values)
+        .returning(Deployment.status)
+    )
+    persisted = (await session.execute(stmt)).scalar_one_or_none()
+    if persisted is not None:
+        return True, persisted
+
+    result = await session.execute(select(Deployment.status).where(Deployment.id == deployment_id))
+    return False, result.scalar_one()
+
+
+def terminal_guarded_upsert_set(new_status: str, extra: dict | None = None) -> dict:
+    """The `set_` dict for an ON CONFLICT DO UPDATE that must not regress a
+    row already in a terminal state — same guard as
+    apply_terminal_guarded_status, expressed as SQL CASE so it holds even
+    under a race between two concurrent first-time deliveries."""
+    set_ = {
+        "status": case(
+            (Deployment.status.in_(TERMINAL_STATUSES), Deployment.status),
+            else_=new_status,
+        ),
+        "finished_at": case(
+            (Deployment.status.in_(TERMINAL_STATUSES), Deployment.finished_at),
+            else_=(utcnow() if new_status in TERMINAL_STATUSES else Deployment.finished_at),
+        ),
+    }
+    if extra:
+        set_.update(extra)
+    return set_
 
 
 def parse_iso_timestamp(ts: str | None) -> datetime | None:
@@ -137,6 +195,7 @@ async def resolve_service(
     org_id: uuid.UUID,
     repo: str | None = None,
     argocd_app: str | None = None,
+    name: str | None = None,
 ) -> tuple[int, uuid.UUID]:
     # org_id is the caller's already-resolved org for this event (today,
     # always resolve_org_id()'s result — the default org, since webhooks
@@ -185,7 +244,10 @@ async def resolve_service(
                 )
             return services[0].id, services[0].org_id
 
-    name = (
+    # `name` lets callers with no repo/argocd_app (e.g. the generic deploy
+    # notification endpoint, E21-T3) resolve/register a service directly by
+    # name instead of deriving one from a GitHub repo or ArgoCD app.
+    name = name or (
         repo.split("/")[-1] if repo
         else argocd_app if argocd_app
         else "unknown"
@@ -206,8 +268,34 @@ async def resolve_service(
         return existing.id, existing.org_id
 
     service = Service(name=name, repo=repo, argocd_app=argocd_app, org_id=org_id)
-    session.add(service)
-    await session.flush()
+    try:
+        async with session.begin_nested():
+            session.add(service)
+            await session.flush()
+    except IntegrityError:
+        # Lost a race with a concurrent request auto-registering the same
+        # (org_id, name)/(org_id, repo)/(org_id, argocd_app) between this
+        # function's lookup above and this flush — the other request's row
+        # already exists (uq_services_org_name/_repo/_argocd_app), so reuse
+        # it instead of erroring. Most likely to bite the generic notify
+        # endpoint (E21-T3), which can register a brand-new service name
+        # from a burst of concurrent first deliveries.
+        #
+        # No session.expunge(service) here: rolling back to the savepoint
+        # on this IntegrityError already evicts `service` back to the
+        # transient state (it never became persistent), so expunging it
+        # again would raise InvalidRequestError instead of letting this
+        # recovery path run (CodeRabbit, PR #796).
+        result = await session.execute(
+            select(Service).where(Service.name == name, Service.org_id == org_id)
+        )
+        existing = result.scalar_one()
+        logger.info(
+            "Lost service auto-registration race for '%s' (org_id=%s) — reusing id=%d",
+            name, org_id, existing.id,
+        )
+        return existing.id, existing.org_id
+
     logger.info(
         "Auto-registered service '%s' (id=%d, repo=%s, argocd_app=%s, org_id=%s)",
         name, service.id, repo, argocd_app, org_id,
