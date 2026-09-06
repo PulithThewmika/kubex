@@ -8,6 +8,7 @@ import pytest
 
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
 os.environ.setdefault("GITHUB_WEBHOOK_SECRET", "test-secret")
+os.environ.setdefault("GITHUB_APP_WEBHOOK_SECRET", "test-app-secret")
 os.environ.setdefault("ARGOCD_WEBHOOK_TOKEN", "test-token")
 os.environ.setdefault("ALERTMANAGER_WEBHOOK_TOKEN", "test-am-token")
 os.environ.setdefault("GITHUB_CLIENT_ID", "test-client-id")
@@ -116,4 +117,16 @@ def alertmanager_token():
 def sign_github_payload(github_secret):
     def _sign(payload: bytes) -> str:
         return _sign_payload(payload, github_secret)
+    return _sign
+
+
+@pytest.fixture
+def github_app_secret():
+    return os.environ["GITHUB_APP_WEBHOOK_SECRET"]
+
+
+@pytest.fixture
+def sign_github_app_payload(github_app_secret):
+    def _sign(payload: bytes) -> str:
+        return _sign_payload(payload, github_app_secret)
     return _sign
