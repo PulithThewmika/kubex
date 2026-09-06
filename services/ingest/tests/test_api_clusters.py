@@ -9,9 +9,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import bcrypt
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 
+from app.auth import verify_cluster_token
 from app.models.cluster import Cluster
 from tests.conftest import TEST_ORG_ID, TEST_USER_ID
 
@@ -117,4 +118,78 @@ async def test_list_clusters_requires_session(client: FastAPI) -> None:
 
     async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
         resp = await ac.get("/api/clusters")
+    assert resp.status_code == 401
+
+
+# ── S6: verify_cluster_token / POST /api/clusters/verify ────────────────
+
+
+def _session_with_clusters(clusters: list[Cluster]) -> AsyncMock:
+    session = AsyncMock()
+    session.execute = AsyncMock(
+        return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=clusters))))
+    )
+    return session
+
+
+@pytest.mark.asyncio
+async def test_verify_cluster_token_accepts_valid_token() -> None:
+    token = "kbx_" + "a" * 40
+    cluster = _fake_cluster(TEST_ORG_ID, token)
+    session = _session_with_clusters([cluster])
+
+    result = await verify_cluster_token(authorization=f"Bearer {token}", session=session)
+    assert result.id == cluster.id
+
+
+@pytest.mark.asyncio
+async def test_verify_cluster_token_rejects_wrong_token() -> None:
+    cluster = _fake_cluster(TEST_ORG_ID, "kbx_" + "a" * 40)
+    session = _session_with_clusters([cluster])
+
+    with pytest.raises(HTTPException) as exc_info:
+        await verify_cluster_token(authorization="Bearer kbx_wrong-token-value", session=session)
+    assert exc_info.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_verify_cluster_token_rejects_malformed_header() -> None:
+    session = _session_with_clusters([])
+
+    with pytest.raises(HTTPException) as exc_info:
+        await verify_cluster_token(authorization="not-a-bearer-header", session=session)
+    assert exc_info.value.status_code == 401
+
+    with pytest.raises(HTTPException) as exc_info:
+        await verify_cluster_token(authorization=None, session=session)
+    assert exc_info.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_verify_cluster_endpoint_returns_config(client: FastAPI, mock_session: AsyncMock) -> None:
+    token = "kbx_" + "a" * 40
+    cluster = _fake_cluster(TEST_ORG_ID, token, name="prod-cluster")
+    mock_session.execute = AsyncMock(
+        return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[cluster]))))
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.post("/api/clusters/verify", headers={"Authorization": f"Bearer {token}"})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == str(cluster.id)
+    assert data["name"] == "prod-cluster"
+    assert data["org_id"] == str(TEST_ORG_ID)
+
+
+@pytest.mark.asyncio
+async def test_verify_cluster_endpoint_rejects_invalid_token(client: FastAPI, mock_session: AsyncMock) -> None:
+    mock_session.execute = AsyncMock(
+        return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[]))))
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.post("/api/clusters/verify", headers={"Authorization": "Bearer kbx_nope"})
+
     assert resp.status_code == 401
