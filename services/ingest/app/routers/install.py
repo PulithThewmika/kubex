@@ -38,11 +38,15 @@ def _is_loopback(host: str | None) -> bool:
 
 router = APIRouter(tags=["install"])
 
-# ponytail: :latest contradicts CLAUDE.md's "images tagged with short SHA,
-# never latest" convention, but matches #660's literal acceptance criteria
-# and there's no agent CI pipeline yet (E22-T3) to pin a real SHA against.
-# Switch to a pinned tag once the agent has a build/publish workflow.
-AGENT_IMAGE = "ghcr.io/puliththewmika/deploylens-agent:latest"
+# ponytail: :latest still contradicts CLAUDE.md's "images tagged with short
+# SHA, never latest" convention. #681 (.github/workflows/agent.yml) now
+# builds and pushes ghcr.io/puliththewmika/kubex-cluster-agent on every
+# push to main/dev, tagged with both the short SHA and a branch-name
+# floating tag (main -> :latest) — this endpoint has no way to know which
+# SHA a given customer install should pin to, so it still hands out the
+# floating tag. Upgrade path: track the last-known-good SHA per KubeX
+# release and interpolate it here instead of :latest.
+AGENT_IMAGE = "ghcr.io/puliththewmika/kubex-cluster-agent:latest"
 AGENT_NAMESPACE = "kubex-agent"
 
 
