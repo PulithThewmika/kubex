@@ -20,7 +20,7 @@ export function Overview() {
           {isLoading
             ? Array.from({ length: 6 }, (_, i) => <ServiceCardSkeleton key={i} />)
             : services?.map((service) => (
-                <Link key={service.id} to={`/services/${service.name}`} className="block">
+                <Link key={service.id} to={`/app/services/${service.name}`} className="block">
                   <ServiceCard service={service} />
                 </Link>
               ))}

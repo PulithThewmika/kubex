@@ -40,7 +40,7 @@ from ..db import get_session
 from ..models.org_membership import OrgMembership
 from ..models.organization import Organization
 from ..models.user import User
-from ..schemas.auth import MeResponse, SwitchOrgRequest
+from ..schemas.auth import MembershipItem, MeResponse, SwitchOrgRequest
 
 logger = logging.getLogger("kubex.auth.github")
 
@@ -389,6 +389,26 @@ async def me(
         org_name=db_org.name if db_org else None,
         org_slug=db_org.slug if db_org else None,
     )
+
+
+@router.get("/memberships", response_model=list[MembershipItem])
+async def memberships(
+    user: UserContext = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[MembershipItem]:
+    """List every org the current user belongs to, for the frontend's
+    org switcher (E19-T5/S10) — MeResponse only carries the *active*
+    org, not the full membership set."""
+    result = await session.execute(
+        select(Organization.id, Organization.name, Organization.slug)
+        .join(OrgMembership, OrgMembership.org_id == Organization.id)
+        .where(OrgMembership.user_id == user.user_id)
+        .order_by(Organization.name)
+    )
+    return [
+        MembershipItem(org_id=str(org_id), org_name=name, org_slug=slug)
+        for org_id, name, slug in result.all()
+    ]
 
 
 @router.post("/switch-org")
