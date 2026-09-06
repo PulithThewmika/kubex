@@ -64,12 +64,55 @@ def build_install_manifest(token: str, endpoint: str) -> str:
         "rules": [
             # ponytail: configmaps access is cluster-wide rather than
             # scoped to the argocd namespace as the issue names — scoping
-            # it would need a namespaced Role+RoleBinding in addition to
-            # this ClusterRole, which #658's fixed resource list doesn't
-            # include. Tighten with a Role/RoleBinding pair if that gap
-            # matters before this ships to real clusters.
-            {"apiGroups": [""], "resources": ["configmaps"], "verbs": ["get", "list", "watch", "patch"]},
-            {"apiGroups": [""], "resources": ["services", "endpoints"], "verbs": ["get", "list"]},
+            # it needs a namespaced Role+RoleBinding the agent provisions
+            # itself once it discovers the ArgoCD namespace at runtime
+            # (the namespace isn't known yet when this manifest is
+            # generated, so it can't be baked in upfront). "watch" dropped
+            # (security review, E22-T3): the agent only ever get/patches
+            # this ConfigMap. "create" added (bug found in review,
+            # E22-T3): a fresh ArgoCD install may not ship
+            # argocd-notifications-cm yet, and PATCH 404s on a ConfigMap
+            # that doesn't exist. Flagged, not silently accepted: "create"
+            # is a genuine (if incremental) widening of an already-broad
+            # grant — it lets a compromised agent Pod create new
+            # ConfigMaps anywhere, not just modify existing ones. Track
+            # the namespaced Role/RoleBinding fix as its own follow-up
+            # task rather than attempting it here — it needs the agent to
+            # also safely create Roles/RoleBindings, which is its own
+            # privilege-escalation-adjacent design question.
+            {"apiGroups": [""], "resources": ["configmaps"], "verbs": ["get", "list", "create", "patch"]},
+            # "endpoints" dropped (security review, E22-T3): unused by any
+            # agent code path — Prometheus discovery only lists Services.
+            {"apiGroups": [""], "resources": ["services"], "verbs": ["get", "list"]},
+            # E22-T3's ArgoCD/Prometheus discovery (S3/S6) scans Deployments
+            # cluster-wide for argocd-server — missing from #660's original
+            # rule set, added here since the agent can't function without it.
+            {"apiGroups": ["apps"], "resources": ["deployments"], "verbs": ["get", "list"]},
+            # Scoped by resourceNames to exactly one Secret (not a blanket
+            # cluster-wide Secrets grant, which would be a far bigger blast
+            # radius than the ConfigMap token exposure this exists to fix):
+            # argocd.py patches the cluster's own bearer token into
+            # argocd-notifications-secret rather than the plaintext
+            # argocd-notifications-cm, per ArgoCD Notifications' documented
+            # $secret-key interpolation syntax.
+            # ponytail: no "create" verb here deliberately — K8s RBAC's
+            # resourceNames restriction has no effect on "create" (the
+            # object doesn't exist yet to name), so granting it would
+            # actually mean "create a Secret with ANY name", undoing the
+            # whole point of scoping this rule. If argocd-notifications-
+            # secret doesn't already exist, argocd.py reports patch_failed
+            # with a clear log message rather than silently getting a
+            # cluster-wide Secrets-create grant to work around it. Fix
+            # properly with a namespaced Role+RoleBinding once the
+            # namespace is known (same gap as the ConfigMap scoping note
+            # above), which supports "create" safely because it's already
+            # namespace-scoped.
+            {
+                "apiGroups": [""],
+                "resources": ["secrets"],
+                "resourceNames": ["argocd-notifications-secret"],
+                "verbs": ["get", "patch"],
+            },
         ],
     }
     cluster_role_binding = {
