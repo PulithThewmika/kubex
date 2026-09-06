@@ -46,6 +46,12 @@ BEGIN
         FROM services s
         WHERE d.service_id = s.id AND d.org_id IS NULL;
 
+    -- ── alerts ──────────────────────────────────────────────────────────────
+    ALTER TABLE alerts ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES organizations(id);
+    UPDATE alerts a SET org_id = s.org_id
+        FROM services s
+        WHERE a.service_id = s.id AND a.org_id IS NULL;
+
     INSERT INTO schema_versions (version, description)
     VALUES ('V014', 'Multi-tenancy: org_id on services, deployments, alerts, pipeline_events');
 END $$;
