@@ -1,8 +1,9 @@
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
+from ..auth_middleware import UserContext, get_current_user
 from ..chat_engine import ANTHROPIC_API_KEY, list_anthropic_tools, run_chat_turn
 from ..schemas.chat import ChatRequest
 
@@ -12,7 +13,7 @@ router = APIRouter(prefix="/api", tags=["chat"])
 
 
 @router.post("/chat")
-async def chat_proxy(payload: ChatRequest):
+async def chat_proxy(payload: ChatRequest, _user: UserContext = Depends(get_current_user)):
     # Pre-flight checks so real connectivity failures return a proper
     # HTTP status instead of a 200 that immediately fails mid-stream.
     # Once StreamingResponse starts, headers are committed — failures
