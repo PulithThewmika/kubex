@@ -15,10 +15,36 @@
 -- Idempotent — safe to run multiple times.
 
 DO $$
+DECLARE
+    dup_count INTEGER;
 BEGIN
     IF EXISTS (SELECT 1 FROM schema_versions WHERE version = 'V018') THEN
         RAISE NOTICE 'V018 already applied, skipping.';
         RETURN;
+    END IF;
+
+    -- repo/argocd_app were never constrained (see header), so pre-existing
+    -- accumulated data could already have same-org duplicates that would
+    -- otherwise fail the CREATE UNIQUE INDEX calls below with an opaque
+    -- unique-violation. Fail loudly with the actual offending rows instead.
+    SELECT count(*) INTO dup_count FROM (
+        SELECT org_id, repo FROM services WHERE repo IS NOT NULL
+        GROUP BY org_id, repo HAVING count(*) > 1
+    ) d;
+    IF dup_count > 0 THEN
+        RAISE EXCEPTION
+            'V018: % (org_id, repo) pair(s) already duplicated — resolve manually before migrating',
+            dup_count;
+    END IF;
+
+    SELECT count(*) INTO dup_count FROM (
+        SELECT org_id, argocd_app FROM services WHERE argocd_app IS NOT NULL
+        GROUP BY org_id, argocd_app HAVING count(*) > 1
+    ) d;
+    IF dup_count > 0 THEN
+        RAISE EXCEPTION
+            'V018: % (org_id, argocd_app) pair(s) already duplicated — resolve manually before migrating',
+            dup_count;
     END IF;
 
     ALTER TABLE services DROP CONSTRAINT IF EXISTS services_name_key;

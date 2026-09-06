@@ -94,6 +94,19 @@ async def resolve_org_id(
     # path from ever triggering resolve_service()'s auto-registration
     # side effect. Upgrade to a single combined lookup if webhook volume
     # ever makes the extra indexed SELECT per delivery matter.
+    #
+    # ponytail: this repo/argocd_app match is NOT scoped by org — safe only
+    # because repo (GitHub owner/repo) and argocd_app (one app name per
+    # cluster) are de-facto globally unique today, so two orgs' services
+    # tables were never expected to share a value. V018 (#792) made
+    # (org_id, repo)/(org_id, argocd_app) uniqueness org-scoped rather than
+    # global, which means that assumption is no longer schema-enforced — a
+    # same-repo row in two orgs is now schema-legal and would make this
+    # function return whichever org has the lower services.id, silently
+    # misattributing the event. Add an org-scoping signal here (or an
+    # app-level check preventing the same repo/argocd_app across orgs)
+    # before real multi-tenant onboarding — EPIC-021's per-installation
+    # org identification is the natural point to fix this.
     """
     if repo:
         result = await session.execute(
