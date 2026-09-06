@@ -48,13 +48,14 @@ export function UserMenu() {
             {user.org_name && <p className="truncate text-xs text-text-muted">{user.org_name}</p>}
           </div>
           <OrgSwitcher onSwitched={() => setOpen(false)} />
-          {/* ponytail: no settings page exists yet (out of scope for E19-T5); disabled placeholder until one ships */}
           <button
             type="button"
             role="menuitem"
-            disabled
-            title="Not available yet"
-            className="block w-full px-3 py-2 text-left text-sm text-text-muted opacity-50"
+            onClick={() => {
+              setOpen(false)
+              navigate('/app/settings')
+            }}
+            className="block w-full px-3 py-2 text-left text-sm text-text hover:bg-background"
           >
             Settings
           </button>

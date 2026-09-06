@@ -8,6 +8,7 @@ import { Overview } from './pages/Overview'
 import { ServiceDeepDive } from './pages/ServiceDeepDive'
 import { DeployDetail } from './pages/DeployDetail'
 import { Chat } from './pages/Chat'
+import { Settings } from './pages/Settings'
 
 const queryClient = new QueryClient()
 
@@ -40,6 +41,7 @@ function App() {
               <Route path="services/:name" element={<ServiceDeepDive />} />
               <Route path="deployments/:id" element={<DeployDetail />} />
               <Route path="chat" element={<Chat />} />
+              <Route path="settings" element={<Settings />} />
             </Route>
           </Routes>
         </BrowserRouter>
