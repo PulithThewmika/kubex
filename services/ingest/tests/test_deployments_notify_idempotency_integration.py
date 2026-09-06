@@ -42,7 +42,10 @@ def pg():
         try:
             container = PostgresContainer("postgres:16-alpine")
             container.start()
-            conn = psycopg2.connect(container.get_connection_url())
+            # get_connection_url() defaults to a "postgresql+psycopg2://"
+            # SQLAlchemy-style URL — psycopg2.connect() doesn't understand
+            # the +driver suffix, so request the plain driverless form.
+            conn = psycopg2.connect(container.get_connection_url(driver=None))
         except Exception:
             pytest.skip("Docker not available — skipping integration tests")
     else:
@@ -136,7 +139,7 @@ def test_on_conflict_upsert_produces_exactly_one_row(pg):
             """
             INSERT INTO deployments (service_id, commit_sha, status)
             VALUES (%s, %s, %s)
-            ON CONFLICT (commit_sha, service_id) WHERE commit_sha IS NOT NULL
+            ON CONFLICT (commit_sha, service_id) WHERE commit_sha IS NOT NULL AND workflow_run_id IS NULL
             DO UPDATE SET status = EXCLUDED.status
             """,
             (service_id, "def5678", status),

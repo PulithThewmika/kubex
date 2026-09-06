@@ -25,6 +25,24 @@ def test_generate_app_jwt_returns_none_when_unconfigured(monkeypatch):
     assert github_app_auth._generate_app_jwt() is None
 
 
+def test_generate_app_jwt_returns_none_on_unreadable_key_file(monkeypatch, tmp_path):
+    monkeypatch.setattr(github_app_auth, "GITHUB_APP_ID", "12345")
+    monkeypatch.setattr(github_app_auth, "GITHUB_APP_PRIVATE_KEY_PATH", str(tmp_path / "missing.pem"))
+    assert github_app_auth._generate_app_jwt() is None
+
+
+def test_generate_app_jwt_returns_none_on_non_utf8_key_file(monkeypatch, tmp_path):
+    """A key file that isn't valid text (CodeRabbit, PR #796) must fall
+    back to None, not raise UnicodeDecodeError past _read_private_key."""
+    key_path = tmp_path / "app.pem"
+    key_path.write_bytes(b"\xff\xfe\x00\x01not-valid-utf8")
+
+    monkeypatch.setattr(github_app_auth, "GITHUB_APP_ID", "12345")
+    monkeypatch.setattr(github_app_auth, "GITHUB_APP_PRIVATE_KEY_PATH", str(key_path))
+
+    assert github_app_auth._generate_app_jwt() is None
+
+
 def test_generate_app_jwt_signs_with_app_id_as_issuer(monkeypatch, tmp_path):
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import rsa

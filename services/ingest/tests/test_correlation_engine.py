@@ -202,7 +202,13 @@ class TestResolveService:
 
         assert service_id == 99
         assert org_id == given_org_id
-        session.expunge.assert_called_once()
+        # CodeRabbit (2nd round, PR #796): rolling back to the savepoint on
+        # this IntegrityError already evicts `service` to the transient
+        # state — expunging it again would raise InvalidRequestError. This
+        # mock can't reproduce that real SQLAlchemy behavior (a MagicMock
+        # tolerates the call fine either way), so the assertion is the
+        # regression guard: expunge must never be called here at all.
+        session.expunge.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_links_repo_to_existing_service_by_name(self):
