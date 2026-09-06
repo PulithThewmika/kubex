@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import verify_github_app_signature
+from ..correlation.engine import resolve_service
 from ..db import get_session
 from ..models.installation import Installation
 from ..models.organization import Organization
@@ -102,6 +103,37 @@ async def _handle_installation(session: AsyncSession, action: str, payload: dict
 
 
 async def _handle_installation_repositories(session: AsyncSession, action: str, payload: dict) -> dict:
+    github_installation_id = payload.get("installation", {}).get("id")
+
+    result = await session.execute(
+        select(Installation).where(Installation.github_installation_id == github_installation_id)
+    )
+    installation = result.scalar_one_or_none()
+
+    await _log_event(
+        session, installation.org_id if installation else None,
+        "github_app", "installation_repositories", payload,
+    )
+
+    if installation is None:
+        logger.warning(
+            "installation_repositories.%s for unknown installation (github_installation_id=%s)",
+            action, github_installation_id,
+        )
+        return {"status": "ignored", "reason": "unknown installation"}
+
+    if action == "added":
+        added = [r["full_name"] for r in payload.get("repositories_added", []) if r.get("full_name")]
+        for repo in added:
+            if repo not in installation.repos:
+                installation.repos.append(repo)
+            await resolve_service(session, org_id=installation.org_id, repo=repo)
+        logger.info(
+            "Installation repos added: github_installation_id=%s org_id=%s repos=%s",
+            github_installation_id, installation.org_id, added,
+        )
+        return {"status": "ok", "repos_added": added}
+
     return {"status": "ignored", "reason": f"installation_repositories action '{action}' not handled"}
 
 
