@@ -3,7 +3,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, Request
-from sqlalchemy import select, update
+from sqlalchemy import case, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +21,7 @@ from .webhooks_github import process_workflow_run
 # has no separate state for that once the build is done, so both map to
 # "syncing" (the same state ArgoCD's on-sync-running maps to). "inactive"
 # means a later deployment superseded this one — nothing to record.
-_DEPLOYMENT_STATE_MAP = {
+DEPLOYMENT_STATE_MAP = {
     "queued": "syncing",
     "pending": "syncing",
     "in_progress": "syncing",
@@ -213,7 +213,7 @@ async def _handle_deployment_status(session: AsyncSession, payload: dict) -> dic
         )
         return {"status": "ignored", "reason": "unknown installation"}
 
-    new_status = _DEPLOYMENT_STATE_MAP.get(state)
+    new_status = DEPLOYMENT_STATE_MAP.get(state)
     if new_status is None or not repo_full_name or not commit_sha:
         return {"status": "ignored", "reason": f"deployment_status state '{state}' not handled"}
 
@@ -249,13 +249,10 @@ async def _handle_deployment_status(session: AsyncSession, payload: dict) -> dic
         )
         return {"status": "ok", "deployment_status": new_status, "correlation": correlation_method}
 
-    # No unique index on commit_sha to upsert against (unlike ArgoCD's
-    # argocd_revision+service_id), so a redelivered deployment_status with
-    # no prior matching deployment can create a duplicate orphan row.
-    # ponytail: accepted duplicate-orphan risk on redelivery here; E21-T3's
-    # dedicated idempotent notify endpoint is where a real ON CONFLICT
-    # target belongs, upgrade this path if it proves to matter in practice.
-    deployment = Deployment(
+    # V021 added a real ON CONFLICT target (commit_sha, service_id), so a
+    # redelivered deployment_status with no prior matching deployment
+    # upserts instead of creating a duplicate orphan row.
+    stmt = pg_insert(Deployment).values(
         org_id=org_id,
         service_id=service_id,
         commit_sha=commit_sha,
@@ -264,7 +261,24 @@ async def _handle_deployment_status(session: AsyncSession, payload: dict) -> dic
         started_at=utcnow(),
         finished_at=utcnow() if new_status in ("deployed", "sync_failed") else None,
     )
-    session.add(deployment)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["commit_sha", "service_id"],
+        index_where=Deployment.commit_sha.is_not(None),
+        set_={
+            # Same terminal-state guard as the `existing` branch above —
+            # a race between two concurrent first-time deliveries must not
+            # let a stale one flip an already-terminal row.
+            "status": case(
+                (Deployment.status.in_(("deployed", "sync_failed")), Deployment.status),
+                else_=new_status,
+            ),
+            "finished_at": case(
+                (Deployment.status.in_(("deployed", "sync_failed")), Deployment.finished_at),
+                else_=(utcnow() if new_status in ("deployed", "sync_failed") else Deployment.finished_at),
+            ),
+        },
+    )
+    await session.execute(stmt)
     logger.info(
         "Orphan deployment created (%s): service_id=%d sha=%s repo=%s",
         new_status, service_id, commit_sha, repo_full_name,

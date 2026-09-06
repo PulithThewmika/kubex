@@ -137,6 +137,7 @@ async def resolve_service(
     org_id: uuid.UUID,
     repo: str | None = None,
     argocd_app: str | None = None,
+    name: str | None = None,
 ) -> tuple[int, uuid.UUID]:
     # org_id is the caller's already-resolved org for this event (today,
     # always resolve_org_id()'s result — the default org, since webhooks
@@ -185,7 +186,10 @@ async def resolve_service(
                 )
             return services[0].id, services[0].org_id
 
-    name = (
+    # `name` lets callers with no repo/argocd_app (e.g. the generic deploy
+    # notification endpoint, E21-T3) resolve/register a service directly by
+    # name instead of deriving one from a GitHub repo or ArgoCD app.
+    name = name or (
         repo.split("/")[-1] if repo
         else argocd_app if argocd_app
         else "unknown"

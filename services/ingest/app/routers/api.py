@@ -1,15 +1,21 @@
 import logging
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import text
+from sqlalchemy import case, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("kubex.api")
 
-from ..auth import verify_alertmanager_token
+from ..auth import verify_alertmanager_token, verify_api_key
 from ..auth_middleware import UserContext, get_current_user
+from ..correlation.engine import extract_image_tag, find_matching_deployment, resolve_service, utcnow
 from ..db import get_session
+from ..models.deployment import Deployment
+from ..models.pipeline_event import PipelineEvent
+from ..schemas.deployment_notify import DeploymentNotifyRequest, DeploymentNotifyResponse
 from ..schemas.responses import (
     ServiceWithStatusResponse,
     LatestDeployInfo,
@@ -27,6 +33,7 @@ from ..schemas.responses import (
     CompareResponse,
     CompareMetric,
 )
+from .webhooks_github_app import DEPLOYMENT_STATE_MAP
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -644,3 +651,96 @@ async def alerts_inbound(
 
     await session.commit()
     return {"status": "ok", "resolved": resolved_count}
+
+
+@router.post("/deployments/notify", response_model=DeploymentNotifyResponse)
+async def notify_deployment(
+    body: DeploymentNotifyRequest,
+    session: AsyncSession = Depends(get_session),
+    org_id: uuid.UUID = Depends(verify_api_key),
+):
+    """Generic deploy notification for customers with no GitHub Actions or
+    ArgoCD integration (E21-T3). Auth via org API key (verify_api_key)
+    identifies the org directly, so this resolves/auto-registers the
+    service by name rather than by repo/argocd_app. Idempotent on
+    (commit_sha, service_id) — same terminal-state guard as the GitHub
+    App's deployment_status handler (webhooks_github_app.py)."""
+    await session.execute(
+        PipelineEvent.__table__.insert().values(
+            org_id=org_id, source="generic", event_type="deploy_notify", payload=body.model_dump(),
+        )
+    )
+
+    new_status = DEPLOYMENT_STATE_MAP.get(body.status)
+    if new_status is None:
+        await session.commit()
+        return DeploymentNotifyResponse(status="ignored", correlation="none")
+
+    service_id, org_id = await resolve_service(session, org_id=org_id, name=body.service)
+    image_tag = body.image_tag or extract_image_tag(body.commit_sha)
+    existing, correlation_method = await find_matching_deployment(
+        session, service_id, commit_sha=body.commit_sha, image_tag=image_tag,
+    )
+
+    if existing:
+        if existing.status in ("deployed", "sync_failed"):
+            logger.info(
+                "Ignoring stale deploy notification '%s' for already-%s deployment_id=%d",
+                new_status, existing.status, existing.id,
+            )
+            await session.commit()
+            return DeploymentNotifyResponse(
+                status="ignored", deployment_id=existing.id,
+                deployment_status=existing.status, correlation=correlation_method,
+            )
+
+        existing.status = new_status
+        existing.image_tag = image_tag
+        if new_status in ("deployed", "sync_failed"):
+            existing.finished_at = utcnow()
+        await session.commit()
+        logger.info(
+            "Deploy notification %s (correlated via %s): service_id=%d deployment_id=%d sha=%s",
+            new_status, correlation_method, service_id, existing.id, body.commit_sha,
+        )
+        return DeploymentNotifyResponse(
+            status="ok", deployment_id=existing.id,
+            deployment_status=new_status, correlation=correlation_method,
+        )
+
+    # No prior CI/CD event correlated this commit — orphan case, same
+    # ON CONFLICT-upsert pattern as webhooks_argocd.py/webhooks_github_app.py.
+    stmt = pg_insert(Deployment).values(
+        org_id=org_id,
+        service_id=service_id,
+        commit_sha=body.commit_sha,
+        image_tag=image_tag,
+        status=new_status,
+        started_at=utcnow(),
+        finished_at=utcnow() if new_status in ("deployed", "sync_failed") else None,
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["commit_sha", "service_id"],
+        index_where=Deployment.commit_sha.is_not(None),
+        set_={
+            "status": case(
+                (Deployment.status.in_(("deployed", "sync_failed")), Deployment.status),
+                else_=new_status,
+            ),
+            "image_tag": stmt.excluded.image_tag,
+            "finished_at": case(
+                (Deployment.status.in_(("deployed", "sync_failed")), Deployment.finished_at),
+                else_=(utcnow() if new_status in ("deployed", "sync_failed") else Deployment.finished_at),
+            ),
+        },
+    ).returning(Deployment.id)
+    deployment_id = (await session.execute(stmt)).scalar_one()
+    await session.commit()
+    logger.info(
+        "Orphan deployment created (%s) via notify: service_id=%d sha=%s",
+        new_status, service_id, body.commit_sha,
+    )
+    return DeploymentNotifyResponse(
+        status="ok", deployment_id=deployment_id,
+        deployment_status=new_status, correlation="orphan",
+    )
