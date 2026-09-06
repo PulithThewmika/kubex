@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import ARRAY, BigInteger, DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -23,7 +24,9 @@ class Installation(Base):
     )
     github_installation_id: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True)
     account_login: Mapped[str] = mapped_column(Text, nullable=False)
-    repos: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, server_default="{}")
+    repos: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(ARRAY(Text)), nullable=False, server_default="{}"
+    )
     status: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default="now()")
 
