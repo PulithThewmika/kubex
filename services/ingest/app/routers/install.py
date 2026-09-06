@@ -21,6 +21,10 @@ from ..db import get_session
 
 router = APIRouter(tags=["install"])
 
+# ponytail: :latest contradicts CLAUDE.md's "images tagged with short SHA,
+# never latest" convention, but matches #660's literal acceptance criteria
+# and there's no agent CI pipeline yet (E22-T3) to pin a real SHA against.
+# Switch to a pinned tag once the agent has a build/publish workflow.
 AGENT_IMAGE = "ghcr.io/puliththewmika/deploylens-agent:latest"
 AGENT_NAMESPACE = "kubex-agent"
 
@@ -106,7 +110,11 @@ def build_install_manifest(token: str, endpoint: str) -> str:
 
 @router.get("/install/{token}.yaml", response_class=PlainTextResponse)
 async def install_manifest(token: str, session: AsyncSession = Depends(get_session)) -> PlainTextResponse:
-    cluster = await find_cluster_by_token(token.encode(), session)
+    # allow_grace=False: a token accepted only via the post-rotation grace
+    # window would go stale ~10 minutes after this manifest is applied,
+    # with no indication of that in the generated Secret. Reject it here
+    # and make the caller re-fetch with the current token instead.
+    cluster = await find_cluster_by_token(token.encode(), session, allow_grace=False)
     if cluster is None:
         raise HTTPException(status_code=404, detail="Not found")
 

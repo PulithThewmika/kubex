@@ -126,7 +126,7 @@ async def verify_api_key(
     raise HTTPException(status_code=401, detail="Invalid API key")
 
 
-async def find_cluster_by_token(token: bytes, session: AsyncSession) -> Cluster | None:
+async def find_cluster_by_token(token: bytes, session: AsyncSession, *, allow_grace: bool = True) -> Cluster | None:
     """Same O(n) bcrypt-walk as verify_api_key. Each cluster also gets a
     second check against token_hash_old while its rotation grace period
     (E22-T1-S10) hasn't expired, so an agent that hasn't picked up a
@@ -134,6 +134,9 @@ async def find_cluster_by_token(token: bytes, session: AsyncSession) -> Cluster 
 
     Shared by verify_cluster_token (bearer header) and the install-manifest
     endpoint (E22-T2, token in the URL path) so both paths stay in sync.
+    allow_grace=False skips the token_hash_old check — the install endpoint
+    uses this, since a grace-period token embedded in a generated manifest
+    would go stale within the 10-minute window rather than at request time.
     """
     result = await session.execute(select(Cluster))
     now = datetime.now(timezone.utc)
@@ -141,7 +144,8 @@ async def find_cluster_by_token(token: bytes, session: AsyncSession) -> Cluster 
         if await asyncio.to_thread(bcrypt.checkpw, token, cluster.token_hash.encode()):
             return cluster
         if (
-            cluster.token_hash_old
+            allow_grace
+            and cluster.token_hash_old
             and cluster.token_old_expires_at
             and cluster.token_old_expires_at > now
             and await asyncio.to_thread(bcrypt.checkpw, token, cluster.token_hash_old.encode())
