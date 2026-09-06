@@ -20,9 +20,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth_middleware import UserContext, get_current_user
 from ..db import get_session
 from ..models.api_key import ApiKey
+from ..models.installation import Installation
 from ..schemas.api_key import ApiKeyCreateRequest, ApiKeyCreateResponse, ApiKeyResponse
+from ..schemas.installation import InstallationResponse
 
 router = APIRouter(prefix="/api/settings/api-keys", tags=["settings"])
+installations_router = APIRouter(prefix="/api/settings/installations", tags=["settings"])
 
 TOKEN_PREFIX = "dl_"
 
@@ -86,3 +89,26 @@ async def revoke_api_key(
     await session.commit()
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="API key not found")
+
+
+@installations_router.get("", response_model=list[InstallationResponse])
+async def list_installations(
+    user: UserContext = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[InstallationResponse]:
+    result = await session.execute(
+        select(Installation)
+        .where(Installation.org_id == user.org_id)
+        .order_by(Installation.created_at.desc())
+    )
+    return [
+        InstallationResponse(
+            id=str(i.id),
+            github_installation_id=i.github_installation_id,
+            account_login=i.account_login,
+            repos=i.repos,
+            status=i.status,
+            created_at=i.created_at,
+        )
+        for i in result.scalars().all()
+    ]
