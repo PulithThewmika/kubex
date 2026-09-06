@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import os
+import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -15,6 +16,10 @@ os.environ.setdefault("JWT_SECRET", "test-jwt-secret-at-least-32-bytes-long")
 
 from app.main import app  # noqa: E402
 from app.db import get_session  # noqa: E402
+from app.auth_middleware import UserContext, get_current_user  # noqa: E402
+
+TEST_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+TEST_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
 
 
 @pytest.fixture(autouse=True)
@@ -63,7 +68,11 @@ def client(mock_session):
     async def override_get_session():
         yield mock_session
 
+    async def override_get_current_user() -> UserContext:
+        return UserContext(user_id=TEST_USER_ID, org_id=TEST_ORG_ID)
+
     app.dependency_overrides[get_session] = override_get_session
+    app.dependency_overrides[get_current_user] = override_get_current_user
     yield app
     app.dependency_overrides.clear()
 

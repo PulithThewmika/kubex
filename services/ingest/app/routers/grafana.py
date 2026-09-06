@@ -4,8 +4,10 @@ from collections.abc import AsyncIterator
 from urllib.parse import quote
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+
+from ..auth_middleware import UserContext, get_current_user
 
 logger = logging.getLogger("kubex.ingest.grafana")
 
@@ -32,7 +34,8 @@ async def grafana_proxy(
     from_: str = Query(default="now-6h", alias="from"),
     to: str = Query(default="now"),
     theme: str = Query(default="light"),
-):
+    _user: UserContext = Depends(get_current_user),
+) -> StreamingResponse:
     """Proxy an embedded Grafana panel (/d-solo/) for the React shell.
 
     The Grafana service account token is injected server-side and never
