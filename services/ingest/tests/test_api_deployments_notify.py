@@ -94,6 +94,15 @@ async def test_creates_orphan_deployment_and_logs_pipeline_event(api_key_client,
     assert deployment_inserts[0]._post_values_clause is not None
     assert deployment_inserts[0].compile(dialect=postgresql.dialect()).params["commit_sha"] == "abc1234567890"
 
+    # The ON CONFLICT arbiter must match V021's actual partial index
+    # predicate exactly (commit_sha IS NOT NULL AND workflow_run_id IS
+    # NULL) or Postgres won't recognize it as the same index — a rows
+    # created by webhooks_github.py's process_workflow_run (which always
+    # sets workflow_run_id) must never collide with this index.
+    where_sql = str(deployment_inserts[0]._post_values_clause.inferred_target_whereclause)
+    assert "commit_sha IS NOT NULL" in where_sql
+    assert "workflow_run_id IS NULL" in where_sql
+
 
 @pytest.mark.asyncio
 async def test_duplicate_commit_sha_updates_existing_row_not_a_new_one(api_key_client, mock_session):
@@ -157,4 +166,18 @@ async def test_terminal_state_not_regressed(api_key_client, mock_session):
 @pytest.mark.asyncio
 async def test_rejects_invalid_status_value(api_key_client):
     resp = await _post_notify(api_key_client, {**_notify_body(), "status": "not-a-real-status"})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_rejects_empty_service_name(api_key_client):
+    """An empty `service` must not silently fall through resolve_service's
+    name-derivation default and get merged into a shared 'unknown' service."""
+    resp = await _post_notify(api_key_client, {**_notify_body(), "service": ""})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_rejects_empty_commit_sha(api_key_client):
+    resp = await _post_notify(api_key_client, {**_notify_body(), "commit_sha": ""})
     assert resp.status_code == 422
