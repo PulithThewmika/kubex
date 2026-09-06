@@ -10,7 +10,14 @@
 -- with row-level views that expose date columns. Consumers aggregate and
 -- filter as needed. deploy_frequency already has deploy_date and is unchanged.
 --
--- Idempotent — safe to run multiple times (CREATE OR REPLACE VIEW).
+-- Idempotent — safe to run multiple times. Uses DROP VIEW + CREATE VIEW,
+-- not CREATE OR REPLACE VIEW, for these three: their column names/count
+-- change from the V003/V007 aggregated shape to this row-level shape, and
+-- Postgres rejects a CREATE OR REPLACE that renames or drops a view
+-- column ("cannot change name of view column ..."). This only matters
+-- when applying the full migration history to a fresh database (a bug
+-- found while building the E20-T2 cross-org isolation test) — anyone
+-- who already has V008 applied never re-runs this file.
 
 DO $$
 BEGIN
@@ -22,7 +29,8 @@ BEGIN
     -- ── Lead Time for Changes (row-level) ───────────────────────────────
     -- One row per deployment with commit_at and finished_at both set.
     -- Consumers: SELECT AVG(lead_time_seconds) ... WHERE finished_at >= ...
-    CREATE OR REPLACE VIEW dora_lead_time AS
+    DROP VIEW IF EXISTS dora_lead_time;
+    CREATE VIEW dora_lead_time AS
     SELECT
         s.name                              AS service_name,
         d.finished_at,
@@ -38,7 +46,8 @@ BEGIN
     -- One row per deployment indicating whether it was a failure.
     -- Consumers: SELECT COUNT(*) FILTER (WHERE is_failure)::numeric / COUNT(*)
     --            ... WHERE started_at >= ...
-    CREATE OR REPLACE VIEW dora_change_failure_rate AS
+    DROP VIEW IF EXISTS dora_change_failure_rate;
+    CREATE VIEW dora_change_failure_rate AS
     SELECT
         s.name                              AS service_name,
         d.started_at,
@@ -56,7 +65,8 @@ BEGIN
     -- ── Mean Time to Recovery (row-level) ───────────────────────────────
     -- One row per resolved alert with the recovery duration.
     -- Consumers: SELECT AVG(mttr_seconds) ... WHERE fired_at >= ...
-    CREATE OR REPLACE VIEW dora_mttr AS
+    DROP VIEW IF EXISTS dora_mttr;
+    CREATE VIEW dora_mttr AS
     SELECT
         s.name                              AS service_name,
         a.fired_at,
