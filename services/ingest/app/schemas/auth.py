@@ -13,3 +13,9 @@ class MeResponse(BaseModel):
     org_id: str
     org_name: str | None
     org_slug: str | None
+
+
+class MembershipItem(BaseModel):
+    org_id: str
+    org_name: str
+    org_slug: str

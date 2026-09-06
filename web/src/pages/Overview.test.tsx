@@ -9,10 +9,10 @@ function renderOverview() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={['/app']}>
         <Routes>
-          <Route path="/" element={<Overview />} />
-          <Route path="/services/:name" element={<div>Deep Dive Page</div>} />
+          <Route path="/app" element={<Overview />} />
+          <Route path="/app/services/:name" element={<div>Deep Dive Page</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,

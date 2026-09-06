@@ -1,6 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { RequireAuth } from './components/auth/RequireAuth'
 import { AppLayout } from './components/layout/AppLayout'
+import { AuthProvider } from './contexts/AuthContext'
+import { Login } from './pages/Login'
 import { Overview } from './pages/Overview'
 import { ServiceDeepDive } from './pages/ServiceDeepDive'
 import { DeployDetail } from './pages/DeployDetail'
@@ -19,17 +22,28 @@ function PlaceholderPage({ title }: { title: string }) {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route element={<AppLayout />}>
-            <Route path="/" element={<Overview />} />
-            <Route path="/services" element={<PlaceholderPage title="Services" />} />
-            <Route path="/services/:name" element={<ServiceDeepDive />} />
-            <Route path="/deployments/:id" element={<DeployDetail />} />
-            <Route path="/chat" element={<Chat />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Navigate to="/app" replace />} />
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/app"
+              element={
+                <RequireAuth>
+                  <AppLayout />
+                </RequireAuth>
+              }
+            >
+              <Route index element={<Overview />} />
+              <Route path="services" element={<PlaceholderPage title="Services" />} />
+              <Route path="services/:name" element={<ServiceDeepDive />} />
+              <Route path="deployments/:id" element={<DeployDetail />} />
+              <Route path="chat" element={<Chat />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
     </QueryClientProvider>
   )
 }

@@ -45,9 +45,9 @@ function ChatIcon({ className }: { className?: string }) {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/', label: 'Overview', icon: OverviewIcon },
-  { to: '/services', label: 'Services', icon: ServicesIcon },
-  { to: '/chat', label: 'Chat', icon: ChatIcon },
+  { to: '/app', label: 'Overview', icon: OverviewIcon },
+  { to: '/app/services', label: 'Services', icon: ServicesIcon },
+  { to: '/app/chat', label: 'Chat', icon: ChatIcon },
 ]
 
 export function Sidebar() {
@@ -58,7 +58,7 @@ export function Sidebar() {
           <NavLink
             key={to}
             to={to}
-            end={to === '/'}
+            end={to === '/app'}
             aria-label={label}
             className={({ isActive }) =>
               `flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
