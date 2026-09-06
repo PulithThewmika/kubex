@@ -115,9 +115,11 @@ async def test_run_chat_turn_includes_tool_call_results():
         content=[MagicMock(text='{"deployments": []}')],
         is_error=False,
     )
+    received_org_ids = []
 
     @asynccontextmanager
     async def fake_mcp_session(org_id):
+        received_org_ids.append(org_id)
         yield mock_mcp_session
 
     with (
@@ -136,6 +138,7 @@ async def test_run_chat_turn_includes_tool_call_results():
     assert '"tool": "list_deployments"' in tool_call_frame
     assert '"result": "{\\"deployments\\": []}"' in tool_call_frame
     assert frames[-1] == 'event: text\ndata: {"text": "done"}\n\n'
+    assert received_org_ids == [TEST_ORG_ID]
     mock_mcp_session.call_tool.assert_awaited_once_with(
         "list_deployments", {"service": "orders"}
     )

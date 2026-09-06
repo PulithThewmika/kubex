@@ -5,6 +5,8 @@ from unittest.mock import patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from .conftest import TEST_ORG_ID
+
 
 @pytest.mark.asyncio
 async def test_chat_returns_502_when_api_key_missing(client):
@@ -44,7 +46,10 @@ async def test_chat_returns_503_when_mcp_unreachable(client):
 
 @pytest.mark.asyncio
 async def test_chat_streams_sse_response(client):
+    received_org_ids = []
+
     async def fake_run_chat_turn(messages, tools, org_id):
+        received_org_ids.append(org_id)
         yield 'event: text\ndata: {"text": "hi"}\n\n'
 
     with (
@@ -64,3 +69,4 @@ async def test_chat_streams_sse_response(client):
     assert resp.text == 'event: text\ndata: {"text": "hi"}\n\n'
     assert "test-key" not in resp.text
     assert "ANTHROPIC_API_KEY" not in resp.headers
+    assert received_org_ids == [TEST_ORG_ID]
