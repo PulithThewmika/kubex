@@ -117,7 +117,9 @@ async def test_ensure_patched_writes_secret_when_token_rotated() -> None:
         patched = await argocd.ensure_patched("argocd")
 
     assert patched is True
-    mock_patch_secret.assert_awaited_once()
+    mock_patch_secret.assert_awaited_once_with(
+        "argocd", argocd.k8s.ARGOCD_NOTIFICATIONS_SECRET, argocd.desired_notifications_secret_data()
+    )
     mock_patch_cm.assert_not_called()
 
 

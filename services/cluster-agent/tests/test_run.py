@@ -67,7 +67,7 @@ async def test_heartbeat_loop_does_not_stack_interval_sleep_after_backoff() -> N
 async def test_query_relay_tick_skips_when_prometheus_not_discovered() -> None:
     run._state["prometheus_status"] = "not_found"
     with (
-        patch("cluster_agent.run.ingest_client.list_queries", AsyncMock(return_value=[{"id": "q1", "promql": "up"}])),
+        patch("cluster_agent.run.ingest_client.list_queries", AsyncMock(return_value=[{"id": "q1", "promql": 'up{service="frontend"}'}])),
         patch("cluster_agent.run.prometheus.query", AsyncMock()) as mock_query,
     ):
         await run._query_relay_tick("cluster-1")
@@ -80,7 +80,7 @@ async def test_query_relay_tick_executes_and_submits_pending_queries() -> None:
     run._state["prometheus_namespace"] = "monitoring"
     run._state["prometheus_service"] = "prometheus-operated"
     with (
-        patch("cluster_agent.run.ingest_client.list_queries", AsyncMock(return_value=[{"id": "q1", "promql": "up"}])),
+        patch("cluster_agent.run.ingest_client.list_queries", AsyncMock(return_value=[{"id": "q1", "promql": 'up{service="frontend"}'}])),
         patch("cluster_agent.run.prometheus.query", AsyncMock(return_value={"status": "success"})) as mock_query,
         patch("cluster_agent.run.ingest_client.submit_result", AsyncMock()) as mock_submit,
     ):
@@ -113,15 +113,15 @@ async def test_bootstrap_retries_on_connectivity_error_then_succeeds() -> None:
 
 @pytest.mark.asyncio
 async def test_bootstrap_does_not_retry_auth_error() -> None:
+    mock_verify = AsyncMock(side_effect=ingest_client.AuthError("bad token"))
     with (
-        patch(
-            "cluster_agent.run.bootstrap_module.verify_identity",
-            AsyncMock(side_effect=ingest_client.AuthError("bad token")),
-        ),
-        patch("cluster_agent.run._discover", AsyncMock()),
+        patch("cluster_agent.run.bootstrap_module.verify_identity", mock_verify),
+        patch("cluster_agent.run._discover", AsyncMock()) as mock_discover,
     ):
         with pytest.raises(ingest_client.AuthError):
             await run.bootstrap()
+    mock_verify.assert_awaited_once()  # not retried
+    mock_discover.assert_not_awaited()  # never reached past the failed verify
 
 
 @pytest.mark.asyncio
@@ -129,7 +129,7 @@ async def test_query_relay_tick_continues_after_one_query_fails() -> None:
     run._state["prometheus_status"] = "found"
     run._state["prometheus_namespace"] = "monitoring"
     run._state["prometheus_service"] = "prometheus-operated"
-    queries = [{"id": "bad", "promql": "!!!"}, {"id": "q2", "promql": "up"}]
+    queries = [{"id": "bad", "promql": "!!!"}, {"id": "q2", "promql": 'up{service="frontend"}'}]
     with (
         patch("cluster_agent.run.ingest_client.list_queries", AsyncMock(return_value=queries)),
         patch("cluster_agent.run.prometheus.query", AsyncMock(side_effect=[Exception("boom"), {"status": "success"}])),
