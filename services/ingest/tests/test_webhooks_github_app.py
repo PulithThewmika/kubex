@@ -170,7 +170,12 @@ async def test_deployment_status_does_not_regress_deployed_to_syncing(client, mo
         elif table == "services":
             result.scalars.return_value.all.return_value = [existing_service]
         elif table == "deployments":
-            result.scalar_one_or_none.return_value = existing_deployment
+            if getattr(stmt, "is_update", False):
+                result.scalar_one_or_none.return_value = None  # WHERE excluded the already-terminal row
+            elif stmt.column_descriptions[0]["name"] == "status":
+                result.scalar_one.return_value = existing_deployment.status  # fallback re-query
+            else:
+                result.scalar_one_or_none.return_value = existing_deployment  # correlation SELECT
         return result
 
     mock_session.execute = mock_execute
@@ -199,7 +204,12 @@ async def test_deployment_status_does_not_flip_between_terminal_states(client, m
         elif table == "services":
             result.scalars.return_value.all.return_value = [existing_service]
         elif table == "deployments":
-            result.scalar_one_or_none.return_value = existing_deployment
+            if getattr(stmt, "is_update", False):
+                result.scalar_one_or_none.return_value = None  # WHERE excluded the already-terminal row
+            elif stmt.column_descriptions[0]["name"] == "status":
+                result.scalar_one.return_value = existing_deployment.status  # fallback re-query
+            else:
+                result.scalar_one_or_none.return_value = existing_deployment  # correlation SELECT
         return result
 
     mock_session.execute = mock_execute
@@ -231,7 +241,12 @@ async def test_deployment_status_same_state_redelivery_preserves_finished_at(
         elif table == "services":
             result.scalars.return_value.all.return_value = [existing_service]
         elif table == "deployments":
-            result.scalar_one_or_none.return_value = existing_deployment
+            if getattr(stmt, "is_update", False):
+                result.scalar_one_or_none.return_value = None  # WHERE excluded the already-terminal row
+            elif stmt.column_descriptions[0]["name"] == "status":
+                result.scalar_one.return_value = existing_deployment.status  # fallback re-query
+            else:
+                result.scalar_one_or_none.return_value = existing_deployment  # correlation SELECT
         return result
 
     mock_session.execute = mock_execute
@@ -270,6 +285,47 @@ async def test_workflow_run_creates_deployment_under_resolved_org(client, mock_s
     data = resp.json()
     assert data["status"] == "ok"
     assert data["deployment_status"] == "building"
+
+
+@pytest.mark.asyncio
+async def test_deployment_status_orphan_upsert_index_excludes_workflow_run_rows(
+    client, mock_session, sign_github_app_payload,
+):
+    """The ON CONFLICT arbiter on the orphan-creation insert must match
+    V021's actual partial index predicate (commit_sha IS NOT NULL AND
+    workflow_run_id IS NULL) exactly, so it never collides with rows
+    process_workflow_run creates (which always set workflow_run_id) —
+    e.g. a manual GitHub Actions re-run of the same commit (/code-review
+    high on PR #796)."""
+    executed_statements = []
+
+    async def mock_execute(stmt):
+        executed_statements.append(stmt)
+        table = _table_of(stmt)
+        result = MagicMock()
+        if table == "installations":
+            result.scalar_one_or_none.return_value = TEST_ORG_ID
+        elif table == "services":
+            result.scalars.return_value.all.return_value = []
+        elif table == "deployments":
+            result.scalar_one_or_none.return_value = None
+        return result
+
+    mock_session.execute = mock_execute
+
+    resp = await _post_app_event(
+        client, _deployment_status_payload(state="success"), "deployment_status", sign_github_app_payload,
+    )
+    assert resp.status_code == 200
+
+    deployment_inserts = [
+        s for s in executed_statements
+        if _table_of(s) == "deployments" and getattr(s, "is_insert", False)
+    ]
+    assert len(deployment_inserts) == 1
+    where_sql = str(deployment_inserts[0]._post_values_clause.inferred_target_whereclause)
+    assert "commit_sha IS NOT NULL" in where_sql
+    assert "workflow_run_id IS NULL" in where_sql
 
 
 @pytest.mark.asyncio
