@@ -49,6 +49,15 @@ async def _find_unassessed_deployments(session):
 
     Criteria: status='deployed', observation window has elapsed,
     no existing health assessment.
+
+    Deliberately platform-wide, not looped per-org (E20-T3 #609): health
+    scoring is a pure function of one deployment's own metrics, so there is
+    nothing an org boundary would change about how a row gets scored — the
+    only place org matters is attribution once a verdict exists, and this
+    query already selects d.org_id so _process_deployment can carry it
+    straight into fire_alert. Splitting this into one query per org would
+    add N round-trips for zero isolation benefit, since nothing here reads
+    or writes cross-org state.
     """
     result = await session.execute(
         text("""

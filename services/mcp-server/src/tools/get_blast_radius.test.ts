@@ -20,7 +20,7 @@ describe("getBlastRadius", () => {
   it("returns an error when the service/component is not found", async () => {
     mockedQueryOne.mockResolvedValueOnce(null);
 
-    const result = await getBlastRadius({ service: "nonexistent" });
+    const result = await getBlastRadius({ service: "nonexistent" }, null);
     const parsed = parseResult(result);
 
     expect(parsed).toEqual({
@@ -49,7 +49,7 @@ describe("getBlastRadius", () => {
       },
     ]);
 
-    const result = await getBlastRadius({ service: "orders" });
+    const result = await getBlastRadius({ service: "orders" }, null);
     const parsed = parseResult(result);
 
     expect(parsed.queried_components).toEqual(["orders"]);
@@ -94,7 +94,7 @@ describe("getBlastRadius", () => {
       },
     ]);
 
-    const result = await getBlastRadius({ service: "sample-app" });
+    const result = await getBlastRadius({ service: "sample-app" }, null);
     const parsed = parseResult(result);
 
     expect(parsed.queried_components).toEqual(["frontend", "orders", "payments"]);
@@ -112,11 +112,31 @@ describe("getBlastRadius", () => {
     });
     mockedQuery.mockResolvedValueOnce([]);
 
-    const result = await getBlastRadius({ service: "payments" });
+    const result = await getBlastRadius({ service: "payments" }, null);
     const parsed = parseResult(result);
 
     expect(parsed.downstream).toEqual([]);
     expect(parsed.summary).toBe("payments has no discovered downstream dependencies");
+  });
+
+  it("scopes both the source-match and edge queries to the given org_id", async () => {
+    mockedQueryOne.mockResolvedValueOnce({
+      id: 31,
+      name: "sample-app",
+      prom_components: ["orders"],
+      matched_by_name: false,
+    });
+    mockedQuery.mockResolvedValueOnce([]);
+
+    await getBlastRadius({ service: "orders" }, "org-a");
+
+    const [matchSql, matchParams] = mockedQueryOne.mock.calls[0];
+    expect(matchSql).toContain("org_id = $2");
+    expect(matchParams).toEqual(["orders", "org-a"]);
+
+    const [edgeSql, edgeParams] = mockedQuery.mock.calls[0];
+    expect(edgeSql).toContain("s2.org_id = $3");
+    expect(edgeParams).toEqual([31, ["orders"], "org-a"]);
   });
 
   it("prefers an exact services.name match over a prom_components collision, deterministically", async () => {
@@ -131,7 +151,7 @@ describe("getBlastRadius", () => {
     });
     mockedQuery.mockResolvedValueOnce([]);
 
-    const result = await getBlastRadius({ service: "orders" });
+    const result = await getBlastRadius({ service: "orders" }, null);
     const parsed = parseResult(result);
 
     expect(parsed.queried_components).toEqual(["orders-worker"]);

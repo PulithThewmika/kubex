@@ -2,6 +2,7 @@ import { z } from "zod";
 import { query } from "../clients/postgres.js";
 import { instantQuery } from "../clients/prometheus.js";
 import { sanitizeLabel, buildPromQL } from "./query_metrics.js";
+import { orgFilter } from "./org-filter.js";
 
 export const compareDeploysSchema = {
   deployment_id_a: z.number().int().describe("First deployment ID"),
@@ -91,7 +92,9 @@ function computeChangePct(a: number | null, b: number | null): number | null {
 export async function compareDeploys(input: {
   deployment_id_a: number;
   deployment_id_b: number;
-}): Promise<{ content: { type: "text"; text: string }[] }> {
+}, orgId: string | null): Promise<{ content: { type: "text"; text: string }[] }> {
+  const org = orgFilter(orgId, 3, "s.org_id");
+
   const rows = await query<DeployRow>(
     `SELECT d.id, d.service_id, s.name AS service_name, s.namespace,
             d.status, d.finished_at, d.commit_sha, d.image_tag,
@@ -99,8 +102,8 @@ export async function compareDeploys(input: {
      FROM deployments d
      JOIN services s ON s.id = d.service_id
      LEFT JOIN health_assessments ha ON ha.deployment_id = d.id
-     WHERE d.id IN ($1, $2)`,
-    [input.deployment_id_a, input.deployment_id_b],
+     WHERE d.id IN ($1, $2) ${org.clause}`,
+    [input.deployment_id_a, input.deployment_id_b, ...org.params],
   );
 
   const byId = new Map(rows.map((r) => [r.id, r]));

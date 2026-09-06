@@ -197,7 +197,7 @@ describe("queryMetrics", () => {
       { metric: {}, values: [[1700000000, "0.02"], [1700000060, "0.04"]] },
     ]);
 
-    const result = await queryMetrics({ service: "orders", metric: "error_rate", from: "-1h" });
+    const result = await queryMetrics({ service: "orders", metric: "error_rate", from: "-1h" }, null);
     const parsed = parseResult(result);
 
     expect(parsed).toMatchObject({
@@ -212,11 +212,22 @@ describe("queryMetrics", () => {
     expect(typeof parsed.promql).toBe("string");
   });
 
+  it("scopes the service lookup to the given org_id", async () => {
+    mockedQueryOne.mockResolvedValue({ name: "orders", namespace: "kubex" });
+    mockedRangeQuery.mockResolvedValue([]);
+
+    await queryMetrics({ service: "orders", metric: "error_rate", from: "-1h" }, "org-a");
+
+    const [sql, params] = mockedQueryOne.mock.calls[0];
+    expect(sql).toContain("org_id = $2");
+    expect(params).toEqual(["orders", "org-a"]);
+  });
+
   it("returns an error object (not a thrown exception) when Prometheus is unreachable", async () => {
     mockedQueryOne.mockResolvedValue({ name: "orders", namespace: "kubex" });
     mockedRangeQuery.mockRejectedValue(new Error("connect ECONNREFUSED"));
 
-    const result = await queryMetrics({ service: "orders", metric: "error_rate", from: "-1h" });
+    const result = await queryMetrics({ service: "orders", metric: "error_rate", from: "-1h" }, null);
     const parsed = parseResult(result);
 
     expect(parsed.error).toContain("Prometheus query failed");
@@ -227,7 +238,7 @@ describe("queryMetrics", () => {
   it("returns an error object when the service does not exist", async () => {
     mockedQueryOne.mockResolvedValue(null);
 
-    const result = await queryMetrics({ service: "nonexistent", metric: "error_rate", from: "-1h" });
+    const result = await queryMetrics({ service: "nonexistent", metric: "error_rate", from: "-1h" }, null);
     const parsed = parseResult(result);
 
     expect(parsed).toEqual({

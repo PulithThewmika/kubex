@@ -44,7 +44,7 @@ describe("getDeployment", () => {
   it("returns full deployment info with service, timeline, health, and a summary", async () => {
     mockedQueryOne.mockResolvedValue(makeRow());
 
-    const result = await getDeployment({ deployment_id: 5 });
+    const result = await getDeployment({ deployment_id: 5 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.summary).toBe(
@@ -64,7 +64,7 @@ describe("getDeployment", () => {
   it("returns an error when the deployment ID does not exist", async () => {
     mockedQueryOne.mockResolvedValue(null);
 
-    const result = await getDeployment({ deployment_id: 999 });
+    const result = await getDeployment({ deployment_id: 999 }, null);
     const parsed = parseResult(result);
 
     expect(parsed).toEqual({
@@ -73,12 +73,22 @@ describe("getDeployment", () => {
     });
   });
 
+  it("scopes the query to the given org_id", async () => {
+    mockedQueryOne.mockResolvedValue(makeRow());
+
+    await getDeployment({ deployment_id: 5 }, "org-a");
+
+    const [sql, params] = mockedQueryOne.mock.calls[0];
+    expect(sql).toContain("s.org_id = $2");
+    expect(params).toEqual([5, "org-a"]);
+  });
+
   it("shows null health_assessment and reflects status in the summary when not yet assessed", async () => {
     mockedQueryOne.mockResolvedValue(
       makeRow({ health_score: null, health_verdict: null, assessed_at: null, status: "syncing" }),
     );
 
-    const result = await getDeployment({ deployment_id: 5 });
+    const result = await getDeployment({ deployment_id: 5 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.health).toBeNull();
