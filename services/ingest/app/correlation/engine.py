@@ -95,34 +95,38 @@ async def resolve_org_id(
     # side effect. Upgrade to a single combined lookup if webhook volume
     # ever makes the extra indexed SELECT per delivery matter.
     #
-    # ponytail: this repo/argocd_app match is NOT scoped by org — safe only
-    # because repo (GitHub owner/repo) and argocd_app (one app name per
-    # cluster) are de-facto globally unique today, so two orgs' services
-    # tables were never expected to share a value. V018 (#792) made
-    # (org_id, repo)/(org_id, argocd_app) uniqueness org-scoped rather than
-    # global, which means that assumption is no longer schema-enforced — a
-    # same-repo row in two orgs is now schema-legal and would make this
-    # function return whichever org has the lower services.id, silently
-    # misattributing the event. Add an org-scoping signal here (or an
-    # app-level check preventing the same repo/argocd_app across orgs)
-    # before real multi-tenant onboarding — EPIC-021's per-installation
-    # org identification is the natural point to fix this.
+    # This repo/argocd_app match relies on repo (GitHub owner/repo) and
+    # argocd_app (one app name per cluster) being de-facto globally unique —
+    # true today, but V018 (#792) made (org_id, repo)/(org_id, argocd_app)
+    # uniqueness org-scoped rather than global, so two orgs sharing a repo
+    # is now schema-legal. Rather than silently picking whichever org has
+    # the lower services.id (misattributing the event), fail loudly on that
+    # ambiguity — same "refuse to guess" convention as V014's backfill
+    # guard.
+    # ponytail: full fix is trusting the caller's own org identity instead
+    # of inferring it from repo/argocd_app at all — the natural point for
+    # that is EPIC-021's per-installation org identification, not this
+    # read-only lookup.
     """
     if repo:
-        result = await session.execute(
-            select(Service.org_id).where(Service.repo == repo).order_by(Service.id).limit(1)
-        )
-        org_id = result.scalar_one_or_none()
-        if org_id is not None:
-            return org_id
+        result = await session.execute(select(Service.org_id).where(Service.repo == repo).distinct())
+        org_ids = result.scalars().all()
+        if len(org_ids) > 1:
+            raise RuntimeError(
+                f"repo '{repo}' is registered under multiple orgs ({org_ids}) — ambiguous, refusing to guess"
+            )
+        if org_ids:
+            return org_ids[0]
 
     if argocd_app:
-        result = await session.execute(
-            select(Service.org_id).where(Service.argocd_app == argocd_app).order_by(Service.id).limit(1)
-        )
-        org_id = result.scalar_one_or_none()
-        if org_id is not None:
-            return org_id
+        result = await session.execute(select(Service.org_id).where(Service.argocd_app == argocd_app).distinct())
+        org_ids = result.scalars().all()
+        if len(org_ids) > 1:
+            raise RuntimeError(
+                f"argocd_app '{argocd_app}' is registered under multiple orgs ({org_ids}) — ambiguous, refusing to guess"
+            )
+        if org_ids:
+            return org_ids[0]
 
     return await get_default_org_id(session)
 

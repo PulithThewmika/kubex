@@ -104,10 +104,10 @@ class TestResolveService:
         assert org_id == older.org_id
 
     @pytest.mark.asyncio
-    async def test_auto_registers_unknown_service_with_given_org_id(self):
+    async def test_auto_registers_unknown_service_with_given_org_id(self) -> None:
         given_org_id = uuid.uuid4()
 
-        async def mock_execute(stmt):
+        async def mock_execute(stmt: object) -> MagicMock:
             result = MagicMock()
             result.scalars.return_value.all.return_value = []
             result.scalar_one_or_none.return_value = None
@@ -150,7 +150,7 @@ class TestResolveService:
         assert existing.repo == "org/myapp"
 
     @pytest.mark.asyncio
-    async def test_name_fallback_does_not_cross_org(self):
+    async def test_name_fallback_does_not_cross_org(self) -> None:
         """Regression test for #792: two orgs deriving the same `name` from
         different repos must not collide — the name-fallback lookup has to
         be scoped to the caller's org_id, not global, or it would match
@@ -159,7 +159,7 @@ class TestResolveService:
         org_b = uuid.uuid4()
         captured_stmts = []
 
-        async def mock_execute(stmt):
+        async def mock_execute(stmt: object) -> MagicMock:
             captured_stmts.append(stmt)
             result = MagicMock()
             result.scalars.return_value.all.return_value = []
@@ -229,7 +229,7 @@ class TestResolveOrgId:
     async def test_returns_existing_services_org(self):
         org_id = uuid.uuid4()
         mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = org_id
+        mock_result.scalars.return_value.all.return_value = [org_id]
 
         session = AsyncMock()
         session.execute = AsyncMock(return_value=mock_result)
@@ -243,9 +243,10 @@ class TestResolveOrgId:
 
         async def mock_execute(stmt):
             result = MagicMock()
-            result.scalar_one_or_none.return_value = (
-                default_org_id if "organizations" in str(stmt) else None
-            )
+            if "organizations" in str(stmt):
+                result.scalar_one_or_none.return_value = default_org_id
+            else:
+                result.scalars.return_value.all.return_value = []
             return result
 
         session = AsyncMock()
@@ -253,6 +254,21 @@ class TestResolveOrgId:
 
         resolved = await resolve_org_id(session, repo="org/unknown-service")
         assert resolved == default_org_id
+
+    @pytest.mark.asyncio
+    async def test_raises_when_repo_ambiguous_across_orgs(self):
+        """Regression test for #792/#793 review: a repo registered under
+        more than one org (schema-legal since V018 scoped uniqueness
+        per-org) must fail loudly, not silently pick one org."""
+        org_a, org_b = uuid.uuid4(), uuid.uuid4()
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [org_a, org_b]
+
+        session = AsyncMock()
+        session.execute = AsyncMock(return_value=mock_result)
+
+        with pytest.raises(RuntimeError):
+            await resolve_org_id(session, repo="shared/repo")
 
     @pytest.mark.asyncio
     async def test_get_default_org_id_raises_when_no_orgs_exist(self):
