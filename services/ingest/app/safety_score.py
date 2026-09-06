@@ -21,6 +21,8 @@ import httpx
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .github_app_auth import get_installation_token
+from .models.installation import Installation
 from .models.service import Service
 from .promql import fetch_cluster_utilization
 
@@ -68,21 +70,42 @@ async def _query_last_verdict(session: AsyncSession, service_id: int) -> str | N
     return result.scalar_one_or_none()
 
 
-async def _fetch_files_changed(repo_full_name: str, commit_sha: str) -> int | None:
+async def _resolve_github_token(session: AsyncSession, org_id: uuid.UUID, repo_full_name: str) -> str | None:
+    """Prefer a per-installation token (EPIC-021) over the static
+    GITHUB_API_TOKEN, so orgs onboarded via the GitHub App don't need a
+    manually-configured PAT. Falls back to GITHUB_API_TOKEN for repos with
+    no App installation (or when the App isn't configured at all)."""
+    if repo_full_name:
+        result = await session.execute(
+            select(Installation.github_installation_id).where(
+                Installation.org_id == org_id,
+                Installation.status == "active",
+                Installation.repos.any(repo_full_name),
+            )
+        )
+        installation_id = result.scalar_one_or_none()
+        if installation_id is not None:
+            token = await get_installation_token(installation_id)
+            if token:
+                return token
+    return GITHUB_API_TOKEN or None
+
+
+async def _fetch_files_changed(repo_full_name: str, commit_sha: str, token: str | None) -> int | None:
     """Number of files changed in a commit, via GitHub's commit API.
 
-    Returns None (never raises) if no token is configured or the API call
+    Returns None (never raises) if no token is available or the API call
     fails — the files_changed factor simply contributes 0 in that case,
     same as any other unavailable signal.
     """
-    if not GITHUB_API_TOKEN or not repo_full_name or not commit_sha:
+    if not token or not repo_full_name or not commit_sha:
         return None
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(
                 f"{GITHUB_API_URL}/repos/{repo_full_name}/commits/{commit_sha}",
                 headers={
-                    "Authorization": f"Bearer {GITHUB_API_TOKEN}",
+                    "Authorization": f"Bearer {token}",
                     "Accept": "application/vnd.github+json",
                 },
             )
@@ -127,13 +150,17 @@ async def compute_safety_score(
     score += cfr_points
     factors["cfr_30d"] = {"value": cfr, "threshold": CFR_THRESHOLD, "points": cfr_points}
 
+    github_token = (
+        await _resolve_github_token(session, service.org_id, repo_full_name) if service else (GITHUB_API_TOKEN or None)
+    )
+
     # This is computed synchronously in the webhook request path (per spec:
     # "on workflow_run.requested"), not in the agent's async loop like health
     # scoring — so the two independent external calls (GitHub API, Prometheus)
     # run concurrently rather than serially, to stay well under GitHub's
     # webhook delivery timeout even if one of them is slow or unreachable.
     files_changed, cluster = await asyncio.gather(
-        _fetch_files_changed(repo_full_name, commit_sha),
+        _fetch_files_changed(repo_full_name, commit_sha, github_token),
         fetch_cluster_utilization(datetime.now()),
     )
     files_points = 20 if (files_changed is not None and files_changed > FILES_CHANGED_THRESHOLD) else 0
