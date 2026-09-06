@@ -121,6 +121,47 @@ async def test_list_clusters_requires_session(client: FastAPI) -> None:
     assert resp.status_code == 401
 
 
+# ── S7: POST /api/clusters/heartbeat ────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_updates_status_and_fields(client: FastAPI, mock_session: AsyncMock) -> None:
+    token = "kbx_" + "a" * 40
+    cluster = _fake_cluster(TEST_ORG_ID, token, status="pending")
+    mock_session.execute = AsyncMock(
+        return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[cluster]))))
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.post(
+            "/api/clusters/heartbeat",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"agent_version": "1.2.3", "argocd_status": "healthy", "prometheus_status": "up"},
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "connected"
+    assert data["last_heartbeat"] is not None
+    assert cluster.status == "connected"
+    assert cluster.agent_version == "1.2.3"
+    assert cluster.argocd_status == "healthy"
+    assert cluster.prometheus_status == "up"
+    assert cluster.last_heartbeat is not None
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_rejects_invalid_token(client: FastAPI, mock_session: AsyncMock) -> None:
+    mock_session.execute = AsyncMock(
+        return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[]))))
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.post("/api/clusters/heartbeat", headers={"Authorization": "Bearer kbx_nope"}, json={})
+
+    assert resp.status_code == 401
+
+
 # ── S6: verify_cluster_token / POST /api/clusters/verify ────────────────
 
 
