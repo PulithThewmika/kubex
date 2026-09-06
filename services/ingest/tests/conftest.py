@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import os
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import DEFAULT, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -53,10 +53,30 @@ class _FakeNestedTransaction:
         return False
 
 
+def _default_mock_execute(stmt, params=None):
+    """Route organizations lookups to TEST_ORG_ID; leave everything else to
+    the mock's normal return_value (returning DEFAULT keeps that in effect).
+
+    resolve_service/resolve_org_id fall back to a default-org query
+    (SELECT ... FROM organizations ...) whenever nothing else matches, so
+    that query must resolve to a real id or get_default_org_id raises.
+    Tests that set `mock_session.execute.return_value = ...` directly
+    (most API-route tests) are unaffected, since DEFAULT defers to it.
+    """
+    if "organizations" in str(stmt):
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = TEST_ORG_ID
+        return result
+    return DEFAULT
+
+
 @pytest.fixture
 def mock_session():
     session = AsyncMock()
-    session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
+    session.execute = AsyncMock(
+        side_effect=_default_mock_execute,
+        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)),
+    )
     session.commit = AsyncMock()
     session.flush = AsyncMock()
     session.begin_nested = MagicMock(return_value=_FakeNestedTransaction())
