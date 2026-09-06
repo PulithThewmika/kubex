@@ -205,6 +205,15 @@ async function main(): Promise<void> {
         // this server on behalf of a real authenticated user; a request with
         // no org context here is a bug in the caller, not a legitimate
         // platform-wide query (that's what the stdio path below is for).
+        //
+        // The header is trusted verbatim — there's no signature binding it
+        // to a session — which is safe only because this container has no
+        // published port in deploy/docker-compose.yml, so nothing but
+        // ingest (on the compose network) can reach it, and ingest only
+        // ever sets it from the JWT-verified user.org_id in chat_engine.py,
+        // never from client-supplied input. If this ever gets a published
+        // port or a new network-mate that isn't ingest, that assumption
+        // breaks and the header would need real authentication of its own.
         const orgIdHeader = req.headers["x-org-id"];
         const orgId = Array.isArray(orgIdHeader) ? orgIdHeader[0] : orgIdHeader;
         if (!orgId) {
