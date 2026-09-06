@@ -32,7 +32,7 @@ router = APIRouter(prefix="/api", tags=["api"])
 
 
 @router.get("/services", response_model=list[ServiceWithStatusResponse])
-async def list_services(session: AsyncSession = Depends(get_session), _user: UserContext = Depends(get_current_user)):
+async def list_services(session: AsyncSession = Depends(get_session), user: UserContext = Depends(get_current_user)):
     """List all services with latest deployment, health, and active alert count."""
     result = await session.execute(
         text("""
@@ -68,8 +68,10 @@ async def list_services(session: AsyncSession = Depends(get_session), _user: Use
                 FROM alerts
                 WHERE service_id = s.id AND resolved_at IS NULL
             ) ac ON true
+            WHERE s.org_id = :org_id
             ORDER BY s.name
-        """)
+        """),
+        {"org_id": user.org_id},
     )
     rows = result.fetchall()
 
