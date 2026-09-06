@@ -32,6 +32,31 @@ jobs:
       - name: Run tests
         run: pytest tests/ -v
 
+  test-cluster-agent:
+    name: Cluster Agent Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/cluster-agent
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/cluster-agent/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx
+
+      - name: Run tests
+        run: pytest tests/ -v
+
   test-mcp-server:
     name: MCP Server Tests
     runs-on: ubuntu-latest
