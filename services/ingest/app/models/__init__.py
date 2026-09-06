@@ -1,6 +1,8 @@
 from .alert import Alert
 from .api_key import ApiKey
 from .base import Base
+from .cluster import Cluster
+from .cluster_query import ClusterQuery
 from .deployment import Deployment
 from .health_assessment import HealthAssessment
 from .installation import Installation
@@ -16,6 +18,8 @@ __all__ = [
     "Alert",
     "ApiKey",
     "Base",
+    "Cluster",
+    "ClusterQuery",
     "Deployment",
     "HealthAssessment",
     "Installation",
