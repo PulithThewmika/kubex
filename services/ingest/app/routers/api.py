@@ -730,14 +730,18 @@ async def notify_deployment(
         index_elements=["commit_sha", "service_id"],
         index_where=Deployment.commit_sha.is_not(None) & Deployment.workflow_run_id.is_(None),
         set_=terminal_guarded_upsert_set(new_status, extra={"image_tag": stmt.excluded.image_tag}),
-    ).returning(Deployment.id)
-    deployment_id = (await session.execute(stmt)).scalar_one()
+    ).returning(Deployment.id, Deployment.status)
+    # The terminal-state guard above can mean the row that actually landed
+    # keeps its pre-existing status rather than new_status (a concurrent
+    # first-time delivery raced this one and got there first) — report
+    # what was actually persisted, not what this request asked for.
+    deployment_id, persisted_status = (await session.execute(stmt)).one()
     await session.commit()
     logger.info(
-        "Orphan deployment created (%s) via notify: service_id=%d sha=%s",
-        new_status, service_id, body.commit_sha,
+        "Orphan deployment created/upserted (%s) via notify: service_id=%d sha=%s",
+        persisted_status, service_id, body.commit_sha,
     )
     return DeploymentNotifyResponse(
         status="ok", deployment_id=deployment_id,
-        deployment_status=new_status, correlation="orphan",
+        deployment_status=persisted_status, correlation="orphan",
     )
