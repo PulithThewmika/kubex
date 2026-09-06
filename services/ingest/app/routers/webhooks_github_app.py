@@ -271,13 +271,17 @@ async def _handle_deployment_status(session: AsyncSession, payload: dict) -> dic
         index_elements=["commit_sha", "service_id"],
         index_where=Deployment.commit_sha.is_not(None) & Deployment.workflow_run_id.is_(None),
         set_=terminal_guarded_upsert_set(new_status),
-    )
-    await session.execute(stmt)
+    ).returning(Deployment.status)
+    # The terminal-state guard above can mean the row that actually landed
+    # keeps its pre-existing status rather than new_status (a concurrent
+    # first-time delivery raced this one and got there first) — report
+    # what was actually persisted.
+    persisted_status = (await session.execute(stmt)).scalar_one()
     logger.info(
-        "Orphan deployment created (%s): service_id=%d sha=%s repo=%s",
-        new_status, service_id, commit_sha, repo_full_name,
+        "Orphan deployment created/upserted (%s): service_id=%d sha=%s repo=%s",
+        persisted_status, service_id, commit_sha, repo_full_name,
     )
-    return {"status": "ok", "deployment_status": new_status, "correlation": "orphan"}
+    return {"status": "ok", "deployment_status": persisted_status, "correlation": "orphan"}
 
 
 @router.post("/github/app")

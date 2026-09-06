@@ -4,14 +4,18 @@ integration."""
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, StringConstraints
+
+# Strips surrounding whitespace before enforcing min_length, so " " isn't
+# accepted as a non-blank service name/commit sha.
+NonBlankStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 class DeploymentNotifyRequest(BaseModel):
-    service: str = Field(min_length=1)
-    commit_sha: str = Field(min_length=1)
+    service: NonBlankStr
+    commit_sha: NonBlankStr
     status: Literal["pending", "in_progress", "success", "failure", "error"]
     environment: str | None = None
     image_tag: str | None = None

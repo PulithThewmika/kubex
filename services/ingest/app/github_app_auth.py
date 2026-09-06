@@ -42,11 +42,16 @@ def _read_private_key() -> str | None:
 def _generate_app_jwt() -> str | None:
     """Sign a JWT identifying the GitHub App itself (not an installation).
 
-    Returns None if the App isn't configured — callers treat that as
-    "no App auth available" and fall back to whatever static token they
-    had before EPIC-021.
+    Returns None if the App isn't configured, the key file can't be read,
+    or it isn't a valid RS256 signing key — callers treat that as "no App
+    auth available" and fall back to whatever static token they had
+    before EPIC-021.
     """
-    private_key = _read_private_key()
+    try:
+        private_key = _read_private_key()
+    except OSError as e:
+        logger.warning("Failed to read GITHUB_APP_PRIVATE_KEY_PATH=%s: %s", GITHUB_APP_PRIVATE_KEY_PATH, e)
+        return None
     if not private_key or not GITHUB_APP_ID:
         return None
     now = int(time.time())
@@ -55,7 +60,11 @@ def _generate_app_jwt() -> str | None:
         "exp": now + 600,  # GitHub caps this JWT's lifetime at 10 minutes
         "iss": GITHUB_APP_ID,
     }
-    return jwt.encode(payload, private_key, algorithm="RS256")
+    try:
+        return jwt.encode(payload, private_key, algorithm="RS256")
+    except (jwt.PyJWTError, ValueError, TypeError) as e:
+        logger.warning("Failed to sign GitHub App JWT (malformed private key?): %s", e)
+        return None
 
 
 async def get_installation_token(github_installation_id: int) -> str | None:

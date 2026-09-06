@@ -17,6 +17,29 @@ from app.correlation.engine import (
 )
 
 
+class _FakeNestedTransaction:
+    """Minimal async-context-manager stand-in for SQLAlchemy's
+    AsyncSessionTransaction — begin_nested() itself is a plain sync call
+    that returns this, not a coroutine (see conftest.py's mock_session
+    fixture for the same pattern)."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+def _session_with_begin_nested() -> AsyncMock:
+    """A session AsyncMock whose begin_nested() behaves like the real
+    (sync-returning-async-context-manager) method — needed by any test
+    that exercises resolve_service's auto-registration path, which wraps
+    the insert in a savepoint to recover from a lost registration race."""
+    session = AsyncMock()
+    session.begin_nested = MagicMock(return_value=_FakeNestedTransaction())
+    return session
+
+
 # ── extract_image_tag ──────────────────────────────────────────────
 
 class TestExtractImageTag:
@@ -132,7 +155,7 @@ class TestResolveService:
             result.scalar_one_or_none.return_value = None
             return result
 
-        session = AsyncMock()
+        session = _session_with_begin_nested()
         session.execute = mock_execute
         session.flush = AsyncMock()
         session.add = MagicMock()
@@ -143,6 +166,42 @@ class TestResolveService:
         assert org_id == given_org_id
         added_service = session.add.call_args_list[0][0][0]
         assert added_service.org_id == given_org_id
+
+    @pytest.mark.asyncio
+    async def test_recovers_from_lost_registration_race(self) -> None:
+        """/code-review high + CodeRabbit on PR #796: two concurrent
+        first-time requests for the same (org_id, name) can both pass the
+        initial lookup and race to insert — the loser must reuse the
+        winner's row (uq_services_org_name violation) instead of 500ing."""
+        from sqlalchemy.exc import IntegrityError
+
+        given_org_id = uuid.uuid4()
+        winner = MagicMock(id=99, org_id=given_org_id)
+
+        call_count = 0
+
+        async def mock_execute(_stmt: object) -> MagicMock:
+            nonlocal call_count
+            call_count += 1
+            result = MagicMock()
+            result.scalars.return_value.all.return_value = []
+            # First SELECT (pre-insert lookup): nothing yet. Second SELECT
+            # (post-IntegrityError recovery): the winner's row.
+            result.scalar_one_or_none.return_value = None
+            result.scalar_one.return_value = winner
+            return result
+
+        session = _session_with_begin_nested()
+        session.execute = mock_execute
+        session.flush = AsyncMock(side_effect=IntegrityError("insert", {}, Exception("unique violation")))
+        session.add = MagicMock()
+        session.expunge = MagicMock()
+
+        service_id, org_id = await resolve_service(session, org_id=given_org_id, name="orders")
+
+        assert service_id == 99
+        assert org_id == given_org_id
+        session.expunge.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_links_repo_to_existing_service_by_name(self):
@@ -185,7 +244,7 @@ class TestResolveService:
             result.scalar_one_or_none.return_value = None
             return result
 
-        session = AsyncMock()
+        session = _session_with_begin_nested()
         session.execute = mock_execute
         session.flush = AsyncMock()
         session.add = MagicMock()
@@ -226,7 +285,7 @@ class TestResolveService:
             result.scalar_one_or_none.return_value = None
             return result
 
-        session = AsyncMock()
+        session = _session_with_begin_nested()
         session.execute = mock_execute
         session.flush = AsyncMock()
         session.add = MagicMock()

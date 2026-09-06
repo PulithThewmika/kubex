@@ -70,7 +70,7 @@ async def test_creates_orphan_deployment_and_logs_pipeline_event(api_key_client,
             result.scalars.return_value.all.return_value = [existing_service]
         elif table == "deployments":
             result.scalar_one_or_none.return_value = None  # no prior correlating deployment
-            result.scalar_one.return_value = 100  # RETURNING id from the ON CONFLICT insert
+            result.one.return_value = (100, "deployed")  # RETURNING id, status from the ON CONFLICT insert
         return result
 
     mock_session.execute = mock_execute
