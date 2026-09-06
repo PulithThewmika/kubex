@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth_middleware import UserContext, get_current_user
 from ..db import get_session
 from ..models.api_key import ApiKey
-from ..schemas.api_key import ApiKeyCreateRequest, ApiKeyCreateResponse
+from ..schemas.api_key import ApiKeyCreateRequest, ApiKeyCreateResponse, ApiKeyResponse
 
 router = APIRouter(prefix="/api/settings/api-keys", tags=["settings"])
 
@@ -44,3 +44,17 @@ async def create_api_key(
         token=token,
         created_at=key.created_at,
     )
+
+
+@router.get("", response_model=list[ApiKeyResponse])
+async def list_api_keys(
+    user: UserContext = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[ApiKeyResponse]:
+    result = await session.execute(
+        select(ApiKey).where(ApiKey.org_id == user.org_id).order_by(ApiKey.created_at.desc())
+    )
+    return [
+        ApiKeyResponse(id=str(k.id), name=k.name, created_at=k.created_at, last_used=k.last_used)
+        for k in result.scalars().all()
+    ]
