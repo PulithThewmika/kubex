@@ -1,6 +1,7 @@
 import { vi } from 'vitest'
 import type { Service } from '../types/service'
 import type { DeploymentDetail } from '../types/deploymentDetail'
+import type { Installation } from '../types/installation'
 
 export function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status })
@@ -67,6 +68,17 @@ export function makeDeploymentDetail(overrides: Partial<DeploymentDetail> = {}):
     },
     timeline: [],
     health_evidence: [],
+    ...overrides,
+  }
+}
+
+export function makeInstallation(overrides: Partial<Installation> = {}): Installation {
+  return {
+    id: '1',
+    account_login: 'acme-corp',
+    repos: ['acme-corp/kubex'],
+    status: 'active',
+    created_at: '2026-08-29T10:00:00Z',
     ...overrides,
   }
 }
