@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import bcrypt
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 
 from app.auth import verify_api_key
@@ -41,7 +41,7 @@ class _CreatedRow(NamedTuple):
 
 
 @pytest.mark.asyncio
-async def test_create_api_key_returns_token_once(client, mock_session):
+async def test_create_api_key_returns_token_once(client: FastAPI, mock_session: AsyncMock) -> None:
     key_id = uuid.uuid4()
     created_at = datetime.now(timezone.utc)
     mock_session.execute = AsyncMock(
@@ -59,7 +59,7 @@ async def test_create_api_key_returns_token_once(client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_create_api_key_requires_session(client):
+async def test_create_api_key_requires_session(client: FastAPI) -> None:
     from app.auth_middleware import get_current_user
     client.dependency_overrides.pop(get_current_user, None)
 
@@ -72,7 +72,7 @@ async def test_create_api_key_requires_session(client):
 
 
 @pytest.mark.asyncio
-async def test_list_api_keys_never_leaks_token_or_hash(client, mock_session):
+async def test_list_api_keys_never_leaks_token_or_hash(client: FastAPI, mock_session: AsyncMock) -> None:
     key = _fake_key(TEST_ORG_ID, "dl_secret-token-value")
     mock_session.execute = AsyncMock(return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[key])))))
 
@@ -94,7 +94,7 @@ async def test_list_api_keys_never_leaks_token_or_hash(client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_revoke_api_key_deletes_row(client, mock_session):
+async def test_revoke_api_key_deletes_row(client: FastAPI, mock_session: AsyncMock) -> None:
     mock_session.execute = AsyncMock(return_value=MagicMock(rowcount=1))
 
     async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
@@ -104,7 +104,7 @@ async def test_revoke_api_key_deletes_row(client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_revoke_api_key_not_found_returns_404(client, mock_session):
+async def test_revoke_api_key_not_found_returns_404(client: FastAPI, mock_session: AsyncMock) -> None:
     mock_session.execute = AsyncMock(return_value=MagicMock(rowcount=0))
 
     async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
@@ -114,7 +114,7 @@ async def test_revoke_api_key_not_found_returns_404(client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_revoke_api_key_malformed_id_returns_400(client):
+async def test_revoke_api_key_malformed_id_returns_400(client: FastAPI) -> None:
     async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
         resp = await ac.delete("/api/settings/api-keys/not-a-uuid")
 
@@ -122,7 +122,7 @@ async def test_revoke_api_key_malformed_id_returns_400(client):
 
 
 @pytest.mark.asyncio
-async def test_crud_routes_require_session_jwt(client):
+async def test_crud_routes_require_session_jwt(client: FastAPI) -> None:
     from app.auth_middleware import get_current_user
     client.dependency_overrides.pop(get_current_user, None)
 
@@ -146,7 +146,7 @@ def _session_with_keys(keys: list[ApiKey]) -> AsyncMock:
 
 
 @pytest.mark.asyncio
-async def test_verify_api_key_accepts_valid_token_and_returns_org_id():
+async def test_verify_api_key_accepts_valid_token_and_returns_org_id() -> None:
     token = "dl_" + "a" * 40
     key = _fake_key(TEST_ORG_ID, token)
     session = _session_with_keys([key])
@@ -158,7 +158,7 @@ async def test_verify_api_key_accepts_valid_token_and_returns_org_id():
 
 
 @pytest.mark.asyncio
-async def test_verify_api_key_rejects_wrong_token():
+async def test_verify_api_key_rejects_wrong_token() -> None:
     key = _fake_key(TEST_ORG_ID, "dl_" + "a" * 40)
     session = _session_with_keys([key])
 
@@ -168,7 +168,7 @@ async def test_verify_api_key_rejects_wrong_token():
 
 
 @pytest.mark.asyncio
-async def test_verify_api_key_rejects_revoked_token():
+async def test_verify_api_key_rejects_revoked_token() -> None:
     token = "dl_" + "a" * 40
     session = _session_with_keys([])  # revoked = no longer in the table
 
@@ -178,7 +178,7 @@ async def test_verify_api_key_rejects_revoked_token():
 
 
 @pytest.mark.asyncio
-async def test_verify_api_key_rejects_malformed_header():
+async def test_verify_api_key_rejects_malformed_header() -> None:
     session = _session_with_keys([])
 
     with pytest.raises(HTTPException) as exc_info:
@@ -191,7 +191,7 @@ async def test_verify_api_key_rejects_malformed_header():
 
 
 @pytest.mark.asyncio
-async def test_verify_api_key_scopes_to_correct_org_not_other_org():
+async def test_verify_api_key_scopes_to_correct_org_not_other_org() -> None:
     """A key issued for org A must not authenticate as org B, and must
     not match some other org's key that happens to share nothing but
     the coincidence of being checked in the same pool."""
