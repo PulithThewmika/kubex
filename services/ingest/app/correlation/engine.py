@@ -1,4 +1,5 @@
 import logging
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -6,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.deployment import Deployment
+from ..models.organization import Organization
 from ..models.service import Service
 
 logger = logging.getLogger("kubex.correlation")
@@ -54,12 +56,62 @@ class CorrelationResult:
     is_new: bool
 
 
+async def get_default_org_id(session: AsyncSession) -> uuid.UUID:
+    """Fallback org for a service with no other org signal to resolve from.
+
+    GitHub/ArgoCD webhooks authenticate with one global shared secret
+    today (GITHUB_WEBHOOK_SECRET / ARGOCD_WEBHOOK_TOKEN) — there is no
+    per-org signal in the request at all. Falls back to the oldest
+    organization row, the same one V014 backfilled all pre-multi-tenancy
+    data to. Revisit once webhooks carry a per-org secret/token that can
+    identify the calling org unambiguously (E20-T2 PR discussion).
+    """
+    result = await session.execute(
+        select(Organization.id).order_by(Organization.created_at.asc()).limit(1)
+    )
+    org_id = result.scalar_one_or_none()
+    if org_id is None:
+        raise RuntimeError("No organizations exist — cannot resolve a default org")
+    return org_id
+
+
+async def resolve_org_id(
+    session: AsyncSession,
+    *,
+    repo: str | None = None,
+    argocd_app: str | None = None,
+) -> uuid.UUID:
+    """Read-only org lookup, for events that must not auto-register a service.
+
+    Used to stamp org_id on pipeline_events rows for event types that
+    resolve_service() never sees (e.g. non-workflow_run GitHub events) —
+    matches an existing service's org if one exists, else the default org.
+    """
+    if repo:
+        result = await session.execute(
+            select(Service.org_id).where(Service.repo == repo).order_by(Service.id).limit(1)
+        )
+        org_id = result.scalar_one_or_none()
+        if org_id is not None:
+            return org_id
+
+    if argocd_app:
+        result = await session.execute(
+            select(Service.org_id).where(Service.argocd_app == argocd_app).order_by(Service.id).limit(1)
+        )
+        org_id = result.scalar_one_or_none()
+        if org_id is not None:
+            return org_id
+
+    return await get_default_org_id(session)
+
+
 async def resolve_service(
     session: AsyncSession,
     *,
     repo: str | None = None,
     argocd_app: str | None = None,
-) -> int:
+) -> tuple[int, uuid.UUID]:
     if repo:
         result = await session.execute(
             select(Service).where(Service.repo == repo).order_by(Service.id)
@@ -77,7 +129,7 @@ async def resolve_service(
                     "manual reconciliation needed",
                     repo, [s.id for s in services], services[0].id,
                 )
-            return services[0].id
+            return services[0].id, services[0].org_id
 
     if argocd_app:
         result = await session.execute(
@@ -91,7 +143,7 @@ async def resolve_service(
                     "manual reconciliation needed",
                     argocd_app, [s.id for s in services], services[0].id,
                 )
-            return services[0].id
+            return services[0].id, services[0].org_id
 
     name = (
         repo.split("/")[-1] if repo
@@ -111,16 +163,17 @@ async def resolve_service(
             existing.argocd_app = argocd_app
             logger.info("Linked ArgoCD app '%s' to existing service '%s' (id=%d)", argocd_app, name, existing.id)
         await session.flush()
-        return existing.id
+        return existing.id, existing.org_id
 
-    service = Service(name=name, repo=repo, argocd_app=argocd_app)
+    org_id = await get_default_org_id(session)
+    service = Service(name=name, repo=repo, argocd_app=argocd_app, org_id=org_id)
     session.add(service)
     await session.flush()
     logger.info(
-        "Auto-registered service '%s' (id=%d, repo=%s, argocd_app=%s)",
-        name, service.id, repo, argocd_app,
+        "Auto-registered service '%s' (id=%d, repo=%s, argocd_app=%s, org_id=%s)",
+        name, service.id, repo, argocd_app, org_id,
     )
-    return service.id
+    return service.id, org_id
 
 
 async def find_matching_deployment(
