@@ -27,7 +27,7 @@ export function useInstallations(options: UseInstallationsOptions = {}) {
     refetchInterval: (query) => {
       if (!options.pollWhileEmpty) return false
       if (query.state.data && query.state.data.length > 0) return false
-      if (query.state.dataUpdateCount >= MAX_POLL_ATTEMPTS) return false
+      if (query.state.dataUpdateCount + query.state.errorUpdateCount >= MAX_POLL_ATTEMPTS) return false
       return POLL_WHILE_EMPTY_MS
     },
   })
