@@ -34,7 +34,7 @@ describe("getSafetyScore", () => {
   it("returns the score, risk factor breakdown, and a summary on the happy path", async () => {
     mockedQueryOne.mockResolvedValue(makeRow());
 
-    const result = await getSafetyScore({ deployment_id: 5 });
+    const result = await getSafetyScore({ deployment_id: 5 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.summary).toBe("orders deployment #5 — pre-deploy safety score 40/100 (rule-based, not ML)");
@@ -46,7 +46,7 @@ describe("getSafetyScore", () => {
   it("returns an error when the deployment ID does not exist", async () => {
     mockedQueryOne.mockResolvedValue(null);
 
-    const result = await getSafetyScore({ deployment_id: 999 });
+    const result = await getSafetyScore({ deployment_id: 999 }, null);
     const parsed = parseResult(result);
 
     expect(parsed).toEqual({
@@ -55,12 +55,22 @@ describe("getSafetyScore", () => {
     });
   });
 
+  it("scopes the query to the given org_id", async () => {
+    mockedQueryOne.mockResolvedValue(makeRow());
+
+    await getSafetyScore({ deployment_id: 5 }, "org-a");
+
+    const [sql, params] = mockedQueryOne.mock.calls[0];
+    expect(sql).toContain("s.org_id = $2");
+    expect(params).toEqual([5, "org-a"]);
+  });
+
   it("returns an informational message with current status when no safety score exists", async () => {
     mockedQueryOne.mockResolvedValue(
       makeRow({ score: null, risk_factors: null, computed_at: null, deploy_status: "deployed" }),
     );
 
-    const result = await getSafetyScore({ deployment_id: 5 });
+    const result = await getSafetyScore({ deployment_id: 5 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.safety).toBeNull();

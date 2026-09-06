@@ -44,7 +44,7 @@ describe("listDeployments", () => {
   it("returns deployments array with a summary field on the happy path", async () => {
     mockedQuery.mockResolvedValue([makeRow()]);
 
-    const result = await listDeployments({ limit: 10 });
+    const result = await listDeployments({ limit: 10 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.summary).toContain("1 deployment(s)");
@@ -60,7 +60,7 @@ describe("listDeployments", () => {
   it("returns a 'No deployments found' summary when the result set is empty", async () => {
     mockedQuery.mockResolvedValue([]);
 
-    const result = await listDeployments({ limit: 10 });
+    const result = await listDeployments({ limit: 10 }, null);
     const parsed = parseResult(result);
 
     expect(parsed).toEqual({ summary: "No deployments found", deployments: [] });
@@ -69,7 +69,7 @@ describe("listDeployments", () => {
   it("filters by service name", async () => {
     mockedQuery.mockResolvedValue([makeRow({ service_name: "orders" })]);
 
-    await listDeployments({ service: "orders", limit: 10 });
+    await listDeployments({ service: "orders", limit: 10 }, null);
 
     const [sql, params] = mockedQuery.mock.calls[0];
     expect(sql).toContain("s.name =");
@@ -79,7 +79,7 @@ describe("listDeployments", () => {
   it("returns an empty array when the service filter matches no service", async () => {
     mockedQuery.mockResolvedValue([]);
 
-    const result = await listDeployments({ service: "nonexistent", limit: 10 });
+    const result = await listDeployments({ service: "nonexistent", limit: 10 }, null);
     const parsed = parseResult(result);
 
     expect(parsed).toEqual({ summary: "No deployments found", deployments: [] });
@@ -91,7 +91,7 @@ describe("listDeployments", () => {
   it("filters by status", async () => {
     mockedQuery.mockResolvedValue([makeRow({ status: "sync_failed" })]);
 
-    await listDeployments({ status: "sync_failed", limit: 10 });
+    await listDeployments({ status: "sync_failed", limit: 10 }, null);
 
     const [sql, params] = mockedQuery.mock.calls[0];
     expect(sql).toContain("d.status =");
@@ -105,7 +105,7 @@ describe("listDeployments", () => {
       makeRow({ id: 3, service_name: "frontend", health_verdict: "failed" }),
     ]);
 
-    const result = await listDeployments({ limit: 10 });
+    const result = await listDeployments({ limit: 10 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.summary).toContain("2 unhealthy");
@@ -116,7 +116,7 @@ describe("listDeployments", () => {
   it("represents deployments with no health assessment as health: null", async () => {
     mockedQuery.mockResolvedValue([makeRow({ health_score: null, health_verdict: null })]);
 
-    const result = await listDeployments({ limit: 10 });
+    const result = await listDeployments({ limit: 10 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.deployments[0].health).toBeNull();
