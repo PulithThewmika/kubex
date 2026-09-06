@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ARRAY, DateTime, ForeignKey, String, Text
+from sqlalchemy import ARRAY, DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,6 +17,14 @@ if TYPE_CHECKING:
 
 class Service(Base):
     __tablename__ = "services"
+    __table_args__ = (
+        # Matches migration V018 (#792) — uniqueness is per-org, not global.
+        # repo/argocd_app are also uniquely constrained per-org (partial
+        # indexes, since nullable), but partial indexes have no SQLAlchemy
+        # Core equivalent, so they stay migration-only per this project's
+        # convention (see deployments.workflow_run_id/argocd_revision).
+        UniqueConstraint("org_id", "name"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     org_id: Mapped[uuid.UUID] = mapped_column(

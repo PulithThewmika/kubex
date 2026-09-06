@@ -171,19 +171,29 @@ class TestResolveService:
         session.flush = AsyncMock()
         session.add = MagicMock()
 
+        def compiled_where(stmt):
+            return str(stmt.whereclause.compile(compile_kwargs={"literal_binds": True}))
+
         # org A registers "payments" via its own repo.
         await resolve_service(session, org_id=org_a, repo="org-a/payments")
+        stmts_a = [compiled_where(s) for s in captured_stmts]
+        captured_stmts.clear()
 
         # org B derives the same `name` from a different repo — the repo
         # lookup won't match (different repo string), so it falls through
-        # to the name lookup, which must be scoped to org_b.
+        # to the name lookup, which must be scoped to org_b, not org_a.
         await resolve_service(session, org_id=org_b, repo="org-b/payments")
+        stmts_b = [compiled_where(s) for s in captured_stmts]
 
-        where_clauses = [str(s.whereclause) for s in captured_stmts]
-        name_lookup_clauses = [w for w in where_clauses if "repo" not in w.lower()]
-        assert name_lookup_clauses, "expected a name-only lookup query"
-        for clause in name_lookup_clauses:
-            assert "org_id" in clause, "name fallback lookup must be scoped by org_id"
+        name_lookup_a = [s for s in stmts_a if "repo" not in s.lower()]
+        name_lookup_b = [s for s in stmts_b if "repo" not in s.lower()]
+        assert name_lookup_a and name_lookup_b, "expected a name-only lookup query on each call"
+
+        for stmt in name_lookup_a:
+            assert org_a.hex in stmt.replace("-", "") and org_b.hex not in stmt.replace("-", "")
+
+        for stmt in name_lookup_b:
+            assert org_b.hex in stmt.replace("-", "") and org_a.hex not in stmt.replace("-", "")
 
     @pytest.mark.asyncio
     async def test_repo_and_argocd_app_mismatch_creates_separate_rows(self):
