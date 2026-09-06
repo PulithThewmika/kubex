@@ -29,12 +29,13 @@ from urllib.parse import urljoin, urlparse
 import httpx
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, JWT_SECRET, SHELL_URL
+from ..auth_middleware import UserContext, get_current_user
 from ..db import get_session
 from ..models.org_membership import OrgMembership
 from ..models.organization import Organization
@@ -345,6 +346,89 @@ async def github_callback(
     response.set_cookie(
         key="session",
         value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=SESSION_TTL_HOURS * 3600,
+        path="/",
+    )
+    return response
+
+
+@router.post("/logout")
+async def logout():
+    response = JSONResponse(content={"status": "ok"})
+    response.delete_cookie(key="session", path="/")
+    return response
+
+
+@router.get("/me")
+async def me(
+    user: UserContext = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(
+        select(User).where(User.id == user.user_id)
+    )
+    db_user = result.scalar_one_or_none()
+    if db_user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    org_result = await session.execute(
+        select(Organization).where(Organization.id == user.org_id)
+    )
+    db_org = org_result.scalar_one_or_none()
+
+    return {
+        "user_id": str(user.user_id),
+        "login": db_user.login,
+        "email": db_user.email,
+        "avatar_url": db_user.avatar_url,
+        "org_id": str(user.org_id),
+        "org_name": db_org.name if db_org else None,
+        "org_slug": db_org.slug if db_org else None,
+    }
+
+
+@router.post("/switch-org")
+async def switch_org(
+    request: Request,
+    user: UserContext = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    body = await request.json()
+    target_org_id = body.get("org_id")
+    if not target_org_id:
+        raise HTTPException(status_code=400, detail="org_id is required")
+
+    try:
+        target_uuid = uuid.UUID(target_org_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid org_id") from None
+
+    membership = await session.execute(
+        select(OrgMembership).where(
+            OrgMembership.user_id == user.user_id,
+            OrgMembership.org_id == target_uuid,
+        )
+    )
+    if membership.scalar_one_or_none() is None:
+        raise HTTPException(status_code=403, detail="Not a member of this organization")
+
+    new_token = jwt.encode(
+        {
+            "user_id": str(user.user_id),
+            "org_id": str(target_uuid),
+            "exp": datetime.now(timezone.utc) + timedelta(hours=SESSION_TTL_HOURS),
+        },
+        JWT_SECRET,
+        algorithm="HS256",
+    )
+
+    response = JSONResponse(content={"status": "ok", "org_id": str(target_uuid)})
+    response.set_cookie(
+        key="session",
+        value=new_token,
         httponly=True,
         secure=True,
         samesite="strict",
