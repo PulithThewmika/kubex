@@ -42,8 +42,7 @@ describe.skipIf(!DATABASE_URL)("list_deployments cross-org isolation (real Postg
   }
 
   beforeAll(async () => {
-    orgA = await seedOrg("org-a-mcp");
-    orgB = await seedOrg("org-b-mcp");
+    [orgA, orgB] = await Promise.all([seedOrg("org-a-mcp"), seedOrg("org-b-mcp")]);
   });
 
   afterAll(async () => {
