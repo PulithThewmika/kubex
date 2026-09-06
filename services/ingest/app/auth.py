@@ -2,8 +2,16 @@ import hashlib
 import hmac
 import logging
 import os
+import uuid
+from datetime import datetime, timezone
 
-from fastapi import Header, HTTPException, Request
+import bcrypt
+from fastapi import Depends, Header, HTTPException, Request
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .db import get_session
+from .models.api_key import ApiKey
 
 logger = logging.getLogger("kubex.ingest.auth")
 
@@ -70,3 +78,31 @@ async def verify_alertmanager_token(authorization: str | None = Header(default=N
     expected = f"Bearer {ALERTMANAGER_WEBHOOK_TOKEN}"
     if not hmac.compare_digest(authorization, expected):
         raise HTTPException(status_code=401, detail="Invalid bearer token")
+
+
+async def verify_api_key(
+    authorization: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> uuid.UUID:
+    """Validate a generic API key (E19-T4) and return its org_id.
+
+    bcrypt hashes can't be looked up by index, so this checks the token
+    against every stored hash. O(n) in the number of API keys
+    system-wide — fine at this project's scale.
+    """
+    if authorization is None or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    token = authorization.removeprefix("Bearer ").encode()
+
+    result = await session.execute(select(ApiKey))
+    for key in result.scalars().all():
+        if bcrypt.checkpw(token, key.token_hash.encode()):
+            try:
+                key.last_used = datetime.now(timezone.utc)
+                await session.commit()
+            except Exception:
+                logger.warning("Failed to update last_used for api key %s", key.id)
+                await session.rollback()
+            return key.org_id
+
+    raise HTTPException(status_code=401, detail="Invalid API key")
