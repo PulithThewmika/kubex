@@ -78,14 +78,15 @@ async def _handle_installation(session: AsyncSession, action: str, payload: dict
             repos=repos,
             status="active",
         )
+        # On a redelivered/retried "created" (same github_installation_id),
+        # only refresh account_login (the one field that can legitimately
+        # change, e.g. an account rename) — leaving repos/status alone.
+        # Overwriting them here would clobber repos appended since by
+        # installation_repositories.added, or reactivate an installation
+        # that installation.suspend already turned off.
         stmt = stmt.on_conflict_do_update(
             index_elements=["github_installation_id"],
-            set_={
-                "org_id": stmt.excluded.org_id,
-                "account_login": stmt.excluded.account_login,
-                "repos": stmt.excluded.repos,
-                "status": "active",
-            },
+            set_={"account_login": stmt.excluded.account_login},
         )
         await session.execute(stmt)
         logger.info(
@@ -223,6 +224,17 @@ async def _handle_deployment_status(session: AsyncSession, payload: dict) -> dic
     )
 
     if existing:
+        # Out-of-order/redelivered webhooks must not regress a deployment
+        # that's already reached a terminal state (deployed/sync_failed)
+        # back to "syncing" — same class of bug the classic webhook's
+        # "completed" handler guards against for ArgoCD/build races.
+        if existing.status in ("deployed", "sync_failed") and new_status == "syncing":
+            logger.info(
+                "Ignoring stale deployment_status '%s' for already-%s deployment_id=%d",
+                new_status, existing.status, existing.id,
+            )
+            return {"status": "ignored", "reason": f"deployment already {existing.status}"}
+
         existing.status = new_status
         if new_status in ("deployed", "sync_failed"):
             existing.finished_at = utcnow()

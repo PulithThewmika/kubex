@@ -12,8 +12,8 @@ class PipelineEvent(Base):
     __tablename__ = "pipeline_events"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    org_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True
     )
     source: Mapped[str] = mapped_column(String, nullable=False)
     event_type: Mapped[str] = mapped_column(Text, nullable=False)
