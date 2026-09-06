@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { apiFetch } from '../lib/apiFetch'
 
 type GrafanaPanelProps = {
   uid: string
@@ -32,7 +31,13 @@ export function GrafanaPanel({ uid, panelId, service, from = 'now-6h', to = 'now
     // us catch real backend failures the iframe itself can't detect.
     // (The route is GET-only — HEAD returns 405 — so this duplicates the
     // iframe's own request; acceptable for two lightweight panels a page.)
-    apiFetch(src)
+    //
+    // Deliberately plain fetch, not apiFetch: the proxy forwards Grafana's
+    // own upstream status verbatim (grafana.py), so a 401 here means
+    // Grafana's service-account token is stale, not that the user's
+    // session expired — routing it through apiFetch would force an
+    // app-wide logout over a Grafana-side misconfiguration.
+    fetch(src, { credentials: 'include' })
       .then((res) => {
         if (!cancelled && !res.ok) setStatus('error')
       })

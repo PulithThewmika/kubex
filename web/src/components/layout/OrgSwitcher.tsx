@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useMemberships } from '../../hooks/useMemberships'
+import { apiFetch } from '../../lib/apiFetch'
 
 export function OrgSwitcher({ onSwitched }: { onSwitched: () => void }) {
   const { user } = useAuth()
@@ -13,9 +14,8 @@ export function OrgSwitcher({ onSwitched }: { onSwitched: () => void }) {
     if (orgId === user?.org_id || switching) return
     setSwitching(true)
     try {
-      const res = await fetch('/auth/switch-org', {
+      const res = await apiFetch('/auth/switch-org', {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ org_id: orgId }),
       })
