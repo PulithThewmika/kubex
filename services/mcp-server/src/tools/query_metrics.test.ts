@@ -212,6 +212,17 @@ describe("queryMetrics", () => {
     expect(typeof parsed.promql).toBe("string");
   });
 
+  it("scopes the service lookup to the given org_id", async () => {
+    mockedQueryOne.mockResolvedValue({ name: "orders", namespace: "kubex" });
+    mockedRangeQuery.mockResolvedValue([]);
+
+    await queryMetrics({ service: "orders", metric: "error_rate", from: "-1h" }, "org-a");
+
+    const [sql, params] = mockedQueryOne.mock.calls[0];
+    expect(sql).toContain("org_id = $2");
+    expect(params).toEqual(["orders", "org-a"]);
+  });
+
   it("returns an error object (not a thrown exception) when Prometheus is unreachable", async () => {
     mockedQueryOne.mockResolvedValue({ name: "orders", namespace: "kubex" });
     mockedRangeQuery.mockRejectedValue(new Error("connect ECONNREFUSED"));
