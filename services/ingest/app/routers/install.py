@@ -11,6 +11,7 @@ work. The response never distinguishes "bad token" from "unknown cluster"
 
 from __future__ import annotations
 
+from ipaddress import ip_address
 from urllib.parse import urlparse
 
 import yaml
@@ -21,7 +22,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth import INGEST_PUBLIC_URL, find_cluster_by_token
 from ..db import get_session
 
-_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+_NO_STORE = {"Cache-Control": "no-store"}
+
+
+def _is_loopback(host: str | None) -> bool:
+    if host is None:
+        return False
+    if host == "localhost":
+        return True
+    try:
+        return ip_address(host).is_loopback
+    except ValueError:
+        return False
+
 
 router = APIRouter(tags=["install"])
 
@@ -118,10 +131,11 @@ async def install_manifest(token: str, session: AsyncSession = Depends(get_sessi
     # would deploy an agent that phones home to itself instead of this
     # service — fail loudly rather than hand out a manifest that can never
     # connect.
-    if urlparse(INGEST_PUBLIC_URL).hostname in _LOOPBACK_HOSTS:
+    if _is_loopback(urlparse(INGEST_PUBLIC_URL).hostname):
         raise HTTPException(
             status_code=500,
             detail="INGEST_PUBLIC_URL is not configured to an externally reachable address",
+            headers=_NO_STORE,
         )
 
     # allow_grace=False: a token accepted only via the post-rotation grace
@@ -130,7 +144,7 @@ async def install_manifest(token: str, session: AsyncSession = Depends(get_sessi
     # and make the caller re-fetch with the current token instead.
     cluster = await find_cluster_by_token(token.encode(), session, allow_grace=False)
     if cluster is None:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail="Not found", headers=_NO_STORE)
 
     manifest = build_install_manifest(token, INGEST_PUBLIC_URL)
-    return PlainTextResponse(manifest, media_type="application/yaml", headers={"Cache-Control": "no-store"})
+    return PlainTextResponse(manifest, media_type="application/yaml", headers=_NO_STORE)

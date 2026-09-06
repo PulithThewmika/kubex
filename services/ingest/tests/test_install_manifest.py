@@ -99,20 +99,33 @@ async def test_install_manifest_404_for_unknown_token(client: FastAPI, mock_sess
         resp = await ac.get("/install/kbx_nope.yaml")
 
     assert resp.status_code == 404
+    assert resp.headers["cache-control"] == "no-store"
 
 
 @pytest.mark.asyncio
-@patch("app.routers.install.INGEST_PUBLIC_URL", "http://localhost:8000")
+@pytest.mark.parametrize(
+    "loopback_url",
+    [
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.2:8000",  # whole 127.0.0.0/8 is loopback, not just .1
+        "http://[::1]:8000",
+        "http://[0:0:0:0:0:0:0:1]:8000",  # expanded IPv6 loopback form
+    ],
+)
 async def test_install_manifest_500_when_ingest_public_url_is_loopback(
-    client: FastAPI, mock_session: AsyncMock
+    client: FastAPI, mock_session: AsyncMock, loopback_url: str
 ) -> None:
     """A manifest embedding a loopback DEPLOYLENS_ENDPOINT would deploy an
     agent that can never reach this service — reject before even looking up
-    the token, per CodeRabbit's PR #800 finding."""
-    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
-        resp = await ac.get("/install/kbx_anything.yaml")
+    the token, per CodeRabbit's PR #800 finding. Covers the whole loopback
+    range/expanded IPv6 forms, not just the exact default value."""
+    with patch("app.routers.install.INGEST_PUBLIC_URL", loopback_url):
+        async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+            resp = await ac.get("/install/kbx_anything.yaml")
 
     assert resp.status_code == 500
+    assert resp.headers["cache-control"] == "no-store"
     mock_session.execute.assert_not_awaited()
 
 
