@@ -274,6 +274,42 @@ async def test_me_valid_jwt_returns_profile(client: AsyncClient, mock_session: A
     assert data["org_id"] == ORG_ID
 
 
+# ── Memberships (E19-T5/S10) ──────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_memberships_no_cookie_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/auth/memberships")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_memberships_returns_all_orgs_for_user(client: AsyncClient, mock_session: AsyncMock) -> None:
+    org_a = uuid.uuid4()
+    org_b = uuid.uuid4()
+    mock_session.execute = AsyncMock(
+        return_value=MagicMock(all=MagicMock(return_value=[(org_a, "Acme", "acme"), (org_b, "Beta", "beta")]))
+    )
+    token = _make_token()
+    resp = await client.get("/auth/memberships", cookies={"session": token})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data == [
+        {"org_id": str(org_a), "org_name": "Acme", "org_slug": "acme"},
+        {"org_id": str(org_b), "org_name": "Beta", "org_slug": "beta"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_memberships_single_org(client: AsyncClient, mock_session: AsyncMock) -> None:
+    org_id = uuid.uuid4()
+    mock_session.execute = AsyncMock(return_value=MagicMock(all=MagicMock(return_value=[(org_id, "Solo", "solo")])))
+    token = _make_token()
+    resp = await client.get("/auth/memberships", cookies={"session": token})
+    assert resp.status_code == 200
+    assert resp.json() == [{"org_id": str(org_id), "org_name": "Solo", "org_slug": "solo"}]
+
+
 # ── Switch Org (S5) ──────────────────────────────────────────────────
 
 
