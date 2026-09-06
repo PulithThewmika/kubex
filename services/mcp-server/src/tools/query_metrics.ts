@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { queryOne } from "../clients/postgres.js";
 import { rangeQuery, type PromRangeResult } from "../clients/prometheus.js";
+import { orgFilter } from "./org-filter.js";
 
 const METRIC_NAMES = [
   "error_rate",
@@ -218,11 +219,10 @@ interface ServiceRow {
 }
 
 async function resolveService(name: string, orgId: string | null): Promise<ServiceRow | null> {
-  const orgFilter = orgId !== null ? "AND org_id = $2" : "";
-  const params: unknown[] = orgId !== null ? [name, orgId] : [name];
+  const org = orgFilter(orgId, 2, "org_id");
   return queryOne<ServiceRow>(
-    `SELECT name, namespace FROM services WHERE name = $1 ${orgFilter}`,
-    params,
+    `SELECT name, namespace FROM services WHERE name = $1 ${org.clause}`,
+    [name, ...org.params],
   );
 }
 

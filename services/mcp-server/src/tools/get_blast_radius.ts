@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { query, queryOne } from "../clients/postgres.js";
+import { orgFilter } from "./org-filter.js";
 
 export const getBlastRadiusSchema = {
   service: z
@@ -38,15 +39,14 @@ export async function getBlastRadius(input: {
   // match over a prom_components hit, so a name/component string
   // collision across two different services rows can't flip which one
   // wins between calls).
-  const orgFilter = orgId !== null ? "AND org_id = $2" : "";
-  const matchParams: unknown[] = orgId !== null ? [input.service, orgId] : [input.service];
+  const matchOrg = orgFilter(orgId, 2, "org_id");
   const matched = await queryOne<MatchedServiceRow>(
     `SELECT id, name, prom_components, (name = $1) AS matched_by_name
      FROM services
-     WHERE (name = $1 OR $1 = ANY(prom_components)) ${orgFilter}
+     WHERE (name = $1 OR $1 = ANY(prom_components)) ${matchOrg.clause}
      ORDER BY (name = $1) DESC
      LIMIT 1`,
-    matchParams,
+    [input.service, ...matchOrg.params],
   );
 
   if (!matched) {
@@ -87,10 +87,7 @@ export async function getBlastRadius(input: {
   // same "latest health_assessments row per service" pattern the Platform
   // Overview Grafana dashboard's Services panel uses) instead of N+1
   // round-trips, one per downstream edge.
-  const targetOrgFilter = orgId !== null ? "AND s2.org_id = $3" : "";
-  const edgeParams: unknown[] = orgId !== null
-    ? [matched.id, sourceComponents, orgId]
-    : [matched.id, sourceComponents];
+  const targetOrg = orgFilter(orgId, 3, "s2.org_id");
   const rows = await query<EdgeWithHealthRow>(
     `SELECT sd.source_component, sd.target_component, sd.dep_type,
             s2.id AS target_service_id, s2.name AS target_service_name,
@@ -105,9 +102,9 @@ export async function getBlastRadius(input: {
        ORDER BY ha.assessed_at DESC
        LIMIT 1
      ) latest ON true
-     WHERE sd.source_id = $1 AND sd.source_component = ANY($2::text[]) ${targetOrgFilter}
+     WHERE sd.source_id = $1 AND sd.source_component = ANY($2::text[]) ${targetOrg.clause}
      ORDER BY sd.source_component, sd.target_component`,
-    edgeParams,
+    [matched.id, sourceComponents, ...targetOrg.params],
   );
 
   const downstream = rows.map((row) => ({
