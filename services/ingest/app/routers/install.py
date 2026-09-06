@@ -70,6 +70,10 @@ def build_install_manifest(token: str, endpoint: str) -> str:
             # matters before this ships to real clusters.
             {"apiGroups": [""], "resources": ["configmaps"], "verbs": ["get", "list", "watch", "patch"]},
             {"apiGroups": [""], "resources": ["services", "endpoints"], "verbs": ["get", "list"]},
+            # E22-T3's ArgoCD/Prometheus discovery (S3/S6) scans Deployments
+            # cluster-wide for argocd-server — missing from #660's original
+            # rule set, added here since the agent can't function without it.
+            {"apiGroups": ["apps"], "resources": ["deployments"], "verbs": ["get", "list"]},
         ],
     }
     cluster_role_binding = {
