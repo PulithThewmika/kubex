@@ -12,10 +12,26 @@
 -- Idempotent — safe to run multiple times.
 
 DO $$
+DECLARE
+    default_org_id UUID;
 BEGIN
     IF EXISTS (SELECT 1 FROM schema_versions WHERE version = 'V014') THEN
         RAISE NOTICE 'V014 already applied, skipping.';
         RETURN;
+    END IF;
+
+    -- ── default organization ────────────────────────────────────────────────
+    -- Backfill target for all pre-multi-tenancy rows. Reuses the org that
+    -- already exists (the real user's org from OAuth testing) if there is
+    -- exactly one, rather than creating a separate synthetic "legacy" org —
+    -- simpler and correct given today's data. Falls back to creating one so
+    -- this migration also runs cleanly against an empty database.
+    SELECT id INTO default_org_id FROM organizations ORDER BY created_at LIMIT 1;
+
+    IF default_org_id IS NULL THEN
+        INSERT INTO organizations (name, slug)
+        VALUES ('Legacy', 'legacy')
+        RETURNING id INTO default_org_id;
     END IF;
 
     INSERT INTO schema_versions (version, description)
