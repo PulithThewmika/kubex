@@ -10,3 +10,4 @@ mcp==2.1.1
 PyJWT==2.10.1
 cryptography==49.0.0
 bcrypt==4.2.1
+PyYAML==6.0.3

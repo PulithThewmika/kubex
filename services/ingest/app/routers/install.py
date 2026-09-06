@@ -1,0 +1,105 @@
+"""Cluster-agent install-manifest generator (EPIC-022 / E22-T2).
+
+Unauthenticated by design — it's curl'd directly, before any agent (and
+therefore any session) exists. The URL token IS the cluster's real E22-T1
+bearer credential (shown once at POST /api/clusters time); this endpoint
+looks it up the same way verify_cluster_token does and embeds it as-is into
+the generated Secret, matching how Rancher/Weave-style agent installers
+work. The response never distinguishes "bad token" from "unknown cluster"
+(both 404) and isn't cached, so it can't be used to enumerate clusters.
+"""
+
+from __future__ import annotations
+
+import yaml
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import PlainTextResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..auth import INGEST_PUBLIC_URL, find_cluster_by_token
+from ..db import get_session
+
+router = APIRouter(tags=["install"])
+
+AGENT_IMAGE = "ghcr.io/puliththewmika/deploylens-agent:latest"
+AGENT_NAMESPACE = "kubex-agent"
+
+
+def build_install_manifest(token: str, endpoint: str) -> str:
+    namespace = {
+        "apiVersion": "v1",
+        "kind": "Namespace",
+        "metadata": {"name": AGENT_NAMESPACE},
+    }
+    service_account = {
+        "apiVersion": "v1",
+        "kind": "ServiceAccount",
+        "metadata": {"name": "kubex-agent", "namespace": AGENT_NAMESPACE},
+    }
+    cluster_role = {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "kind": "ClusterRole",
+        "metadata": {"name": "kubex-agent"},
+        "rules": [],
+    }
+    cluster_role_binding = {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "kind": "ClusterRoleBinding",
+        "metadata": {"name": "kubex-agent"},
+        "roleRef": {
+            "apiGroup": "rbac.authorization.k8s.io",
+            "kind": "ClusterRole",
+            "name": "kubex-agent",
+        },
+        "subjects": [{"kind": "ServiceAccount", "name": "kubex-agent", "namespace": AGENT_NAMESPACE}],
+    }
+    secret = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {"name": "kubex-agent-token", "namespace": AGENT_NAMESPACE},
+        "type": "Opaque",
+        "stringData": {"CLUSTER_TOKEN": token},
+    }
+    deployment = {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {"name": "kubex-agent", "namespace": AGENT_NAMESPACE},
+        "spec": {
+            "replicas": 1,
+            "selector": {"matchLabels": {"app": "kubex-agent"}},
+            "template": {
+                "metadata": {"labels": {"app": "kubex-agent"}},
+                "spec": {
+                    "serviceAccountName": "kubex-agent",
+                    "containers": [
+                        {
+                            "name": "kubex-agent",
+                            "image": AGENT_IMAGE,
+                            "env": [
+                                {"name": "DEPLOYLENS_ENDPOINT", "value": endpoint},
+                                {
+                                    "name": "CLUSTER_TOKEN",
+                                    "valueFrom": {
+                                        "secretKeyRef": {"name": "kubex-agent-token", "key": "CLUSTER_TOKEN"}
+                                    },
+                                },
+                            ],
+                        }
+                    ],
+                },
+            },
+        },
+    }
+
+    documents = [namespace, service_account, cluster_role, cluster_role_binding, secret, deployment]
+    return yaml.safe_dump_all(documents, sort_keys=False)
+
+
+@router.get("/install/{token}.yaml", response_class=PlainTextResponse)
+async def install_manifest(token: str, session: AsyncSession = Depends(get_session)) -> PlainTextResponse:
+    cluster = await find_cluster_by_token(token.encode(), session)
+    if cluster is None:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    manifest = build_install_manifest(token, INGEST_PUBLIC_URL)
+    return PlainTextResponse(manifest, media_type="application/yaml", headers={"Cache-Control": "no-store"})
