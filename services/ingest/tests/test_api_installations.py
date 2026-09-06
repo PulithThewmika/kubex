@@ -40,6 +40,7 @@ async def test_list_installations_returns_org_installations(client: FastAPI, moc
     data = resp.json()
     assert len(data) == 1
     assert data[0]["account_login"] == "acme-corp"
+    assert data[0]["github_installation_id"] == 12345
     assert data[0]["repos"] == ["acme-corp/kubex", "acme-corp/sample-app"]
     assert data[0]["status"] == "active"
 
