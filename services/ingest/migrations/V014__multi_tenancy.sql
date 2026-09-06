@@ -52,6 +52,13 @@ BEGIN
         FROM services s
         WHERE a.service_id = s.id AND a.org_id IS NULL;
 
+    -- ── pipeline_events ─────────────────────────────────────────────────────
+    -- No FK to services exists here (see header) — backfills to the default
+    -- org directly. E20-T2 must resolve org_id from the payload at insert
+    -- time for new rows, since there is nothing to join through afterward.
+    ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES organizations(id);
+    UPDATE pipeline_events SET org_id = default_org_id WHERE org_id IS NULL;
+
     INSERT INTO schema_versions (version, description)
     VALUES ('V014', 'Multi-tenancy: org_id on services, deployments, alerts, pipeline_events');
 END $$;
