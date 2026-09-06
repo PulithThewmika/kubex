@@ -90,9 +90,15 @@ async def create_cluster(
     try:
         row = (await session.execute(stmt)).one()
         await session.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         await session.rollback()
-        raise HTTPException(status_code=409, detail="A cluster with this name already exists") from None
+        # 23505 = unique_violation. Only the (org_id, name) constraint can
+        # fire here (org_id/token_hash are always present and org_id's FK
+        # always resolves for an authenticated session) — but re-raise
+        # anything else rather than mislabeling it as a name collision.
+        if getattr(e.orig, "sqlstate", None) == "23505":
+            raise HTTPException(status_code=409, detail="A cluster with this name already exists") from None
+        raise
 
     return ClusterCreateResponse(id=str(row.id), name=row.name, token=token, created_at=row.created_at)
 
@@ -120,17 +126,29 @@ async def cluster_heartbeat(
     session: AsyncSession = Depends(get_session),
 ) -> ClusterHeartbeatResponse:
     now = datetime.now(timezone.utc)
-    cluster.last_heartbeat = now
-    cluster.status = "connected"
+    values = {"last_heartbeat": now, "status": "connected"}
     if body.agent_version is not None:
-        cluster.agent_version = body.agent_version
+        values["agent_version"] = body.agent_version
+    if body.argocd_version is not None:
+        values["argocd_version"] = body.argocd_version
     if body.argocd_status is not None:
-        cluster.argocd_status = body.argocd_status
+        values["argocd_status"] = body.argocd_status
     if body.prometheus_status is not None:
-        cluster.prometheus_status = body.prometheus_status
+        values["prometheus_status"] = body.prometheus_status
+
+    # A Core UPDATE, not ORM attribute assignment: if a concurrent
+    # disconnect-sweep (app.cluster_monitor) commits 'disconnected'
+    # between this session's read of `cluster` (via verify_cluster_token)
+    # and this commit, SQLAlchemy's dirty-tracking would see
+    # `cluster.status = "connected"` as a no-op against the loaded value
+    # and silently drop it from the UPDATE, leaving the row stuck
+    # disconnected. Writing status unconditionally through Core sidesteps
+    # that (caught by test_cluster_lifecycle_integration.py's
+    # concurrent-lock tests).
+    await session.execute(update(Cluster).where(Cluster.id == cluster.id).values(**values))
     await session.commit()
 
-    return ClusterHeartbeatResponse(status=cluster.status, last_heartbeat=now)
+    return ClusterHeartbeatResponse(status="connected", last_heartbeat=now)
 
 
 @router.get("/{cluster_id}/queries", response_model=list[ClusterQueryResponse])
@@ -185,8 +203,13 @@ async def rotate_cluster_token(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid cluster id") from None
 
+    # SELECT ... FOR UPDATE: two concurrent rotations for the same cluster
+    # must serialize, otherwise the second commit stores an
+    # already-superseded token_hash into token_hash_old and the first
+    # rotation's issued token never verifies (its grace record got
+    # overwritten before it was ever read).
     result = await session.execute(
-        select(Cluster).where(Cluster.id == cluster_uuid, Cluster.org_id == user.org_id)
+        select(Cluster).where(Cluster.id == cluster_uuid, Cluster.org_id == user.org_id).with_for_update()
     )
     cluster = result.scalar_one_or_none()
     if cluster is None:

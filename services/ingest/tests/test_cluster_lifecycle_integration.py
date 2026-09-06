@@ -20,12 +20,15 @@ test_dora_integration.py / test_resolve_service_race_integration.py:
 
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
+from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import pytest
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, AsyncSession
 
 try:
     import psycopg2
@@ -55,7 +58,7 @@ def _as_asyncpg_url(url: str) -> str:
 
 
 @pytest.fixture
-def pg():
+def pg() -> AsyncGenerator[tuple[str, str], None]:
     """Yield (asyncpg SQLAlchemy URL, schema name) with a real clusters
     table matching the Cluster model's mapped columns."""
     container = None
@@ -108,15 +111,15 @@ def pg():
         container.stop()
 
 
-def _engine_and_sessions(asyncpg_url: str, schema: str):
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+def _engine_and_sessions(asyncpg_url: str, schema: str) -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
+    from sqlalchemy.ext.asyncio import create_async_engine
 
     engine = create_async_engine(asyncpg_url, connect_args={"server_settings": {"search_path": schema}})
     return engine, async_sessionmaker(engine, expire_on_commit=False)
 
 
 @pytest.mark.asyncio
-async def test_create_verify_heartbeat_connected_then_three_missed_disconnects(pg) -> None:
+async def test_create_verify_heartbeat_connected_then_three_missed_disconnects(pg: tuple[str, str]) -> None:
     from app.auth import verify_cluster_token
     from app.cluster_monitor import mark_stale_clusters_disconnected
     from app.models.cluster import Cluster
@@ -168,18 +171,10 @@ async def test_create_verify_heartbeat_connected_then_three_missed_disconnects(p
     await engine.dispose()
 
 
-@pytest.mark.asyncio
-async def test_fresh_heartbeat_wins_race_against_disconnect_sweep(pg) -> None:
-    """Sweep's SELECT-equivalent condition is evaluated at UPDATE time
-    under the row lock — if a heartbeat commits its last_heartbeat=now
-    write before the sweep's UPDATE runs, the sweep's WHERE no longer
-    matches and the row is left connected."""
-    from app.cluster_monitor import mark_stale_clusters_disconnected
+async def _seed_stale_connected_cluster(
+    session_factory: async_sessionmaker[AsyncSession], org_id: uuid.UUID
+) -> uuid.UUID:
     from app.models.cluster import Cluster
-
-    asyncpg_url, schema = pg
-    engine, session_factory = _engine_and_sessions(asyncpg_url, schema)
-    org_id = uuid.uuid4()
 
     async with session_factory() as session:
         cluster = Cluster(
@@ -191,19 +186,44 @@ async def test_fresh_heartbeat_wins_race_against_disconnect_sweep(pg) -> None:
         )
         session.add(cluster)
         await session.commit()
-        cluster_id = cluster.id
+        return cluster.id
 
-    # Heartbeat lands and commits first.
-    async with session_factory() as session:
-        cluster = await session.get(Cluster, cluster_id)
+
+@pytest.mark.asyncio
+async def test_heartbeat_holds_lock_sweep_blocks_then_sees_no_match(pg: tuple[str, str]) -> None:
+    """Real concurrency, not just sequential ordering: heartbeat's UPDATE
+    takes the row lock and stays uncommitted while the sweep's UPDATE is
+    fired concurrently on a second connection. The sweep must block on
+    the lock (proven by asserting it hasn't finished yet), then — once
+    heartbeat commits — re-evaluate its WHERE clause under Postgres's
+    read-committed EvalPlanQual against the now-fresh last_heartbeat and
+    find no match."""
+    from app.cluster_monitor import mark_stale_clusters_disconnected
+    from app.models.cluster import Cluster
+
+    asyncpg_url, schema = pg
+    engine, session_factory = _engine_and_sessions(asyncpg_url, schema)
+    org_id = uuid.uuid4()
+    cluster_id = await _seed_stale_connected_cluster(session_factory, org_id)
+
+    async def run_sweep() -> int:
+        async with session_factory() as sweep_session:
+            return await mark_stale_clusters_disconnected(sweep_session)
+
+    async with session_factory() as hb_session:
+        cluster = await hb_session.get(Cluster, cluster_id)
         cluster.status = "connected"
         cluster.last_heartbeat = datetime.now(timezone.utc)
-        await session.commit()
+        await hb_session.flush()  # UPDATE sent, row lock held, not yet committed
 
-    # Sweep runs after — its cutoff no longer covers the fresh heartbeat.
-    async with session_factory() as session:
-        count = await mark_stale_clusters_disconnected(session)
-    assert count == 0
+        sweep_task = asyncio.create_task(run_sweep())
+        await asyncio.sleep(0.3)
+        assert not sweep_task.done(), "sweep should still be blocked behind heartbeat's uncommitted row lock"
+
+        await hb_session.commit()  # releases the lock; sweep's UPDATE can now proceed
+
+    sweep_count = await sweep_task
+    assert sweep_count == 0
 
     async with session_factory() as session:
         cluster = await session.get(Cluster, cluster_id)
@@ -213,38 +233,53 @@ async def test_fresh_heartbeat_wins_race_against_disconnect_sweep(pg) -> None:
 
 
 @pytest.mark.asyncio
-async def test_heartbeat_after_sweep_reconnects(pg) -> None:
-    """The other ordering: sweep flips the row to disconnected first,
-    then a heartbeat arrives — the heartbeat unconditionally sets
-    status='connected', so the cluster ends up connected either way."""
-    from app.cluster_monitor import mark_stale_clusters_disconnected
+async def test_sweep_holds_lock_heartbeat_blocks_then_reconnects(pg: tuple[str, str]) -> None:
+    """The other ordering, also driven with real concurrency: sweep takes
+    the row lock first and stays uncommitted while a heartbeat is fired
+    concurrently on a second connection (proven blocked, same as above).
+    Once sweep commits (flipping the row to disconnected), the heartbeat
+    proceeds and unconditionally sets status='connected' — so the final
+    state is the same as the other ordering."""
     from app.models.cluster import Cluster
+    from sqlalchemy import update
 
     asyncpg_url, schema = pg
     engine, session_factory = _engine_and_sessions(asyncpg_url, schema)
     org_id = uuid.uuid4()
+    cluster_id = await _seed_stale_connected_cluster(session_factory, org_id)
 
-    async with session_factory() as session:
-        cluster = Cluster(
-            org_id=org_id,
-            name="prod",
-            token_hash="x",
-            status="connected",
-            last_heartbeat=datetime.now(timezone.utc) - timedelta(minutes=4),
+    async def run_heartbeat() -> None:
+        # Same Core-UPDATE shape as app.routers.clusters.cluster_heartbeat
+        # (not ORM attribute assignment) — see that function's comment for
+        # why: ORM dirty-tracking would drop status="connected" from the
+        # UPDATE if this session's loaded value already matched it.
+        async with session_factory() as hb_session:
+            await hb_session.execute(
+                update(Cluster)
+                .where(Cluster.id == cluster_id)
+                .values(status="connected", last_heartbeat=datetime.now(timezone.utc))
+            )
+            await hb_session.commit()
+
+    async with session_factory() as sweep_session:
+        # Drive the UPDATE by hand (rather than mark_stale_clusters_disconnected,
+        # which also commits) so the lock stays held until we choose to release it.
+        from sqlalchemy import update
+
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=3)
+        await sweep_session.execute(
+            update(Cluster)
+            .where(Cluster.status == "connected", Cluster.last_heartbeat < cutoff)
+            .values(status="disconnected")
         )
-        session.add(cluster)
-        await session.commit()
-        cluster_id = cluster.id
 
-    async with session_factory() as session:
-        count = await mark_stale_clusters_disconnected(session)
-    assert count == 1
+        hb_task = asyncio.create_task(run_heartbeat())
+        await asyncio.sleep(0.3)
+        assert not hb_task.done(), "heartbeat should still be blocked behind sweep's uncommitted row lock"
 
-    async with session_factory() as session:
-        cluster = await session.get(Cluster, cluster_id)
-        cluster.status = "connected"
-        cluster.last_heartbeat = datetime.now(timezone.utc)
-        await session.commit()
+        await sweep_session.commit()  # releases the lock; heartbeat's UPDATE can now proceed
+
+    await hb_task
 
     async with session_factory() as session:
         cluster = await session.get(Cluster, cluster_id)

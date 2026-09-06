@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 from unittest.mock import AsyncMock, MagicMock
 
@@ -88,17 +88,42 @@ async def test_create_cluster_requires_session(client: FastAPI) -> None:
     assert resp.status_code == 401
 
 
-@pytest.mark.asyncio
-async def test_create_cluster_rejects_duplicate_name_with_409(client: FastAPI, mock_session: AsyncMock) -> None:
+def _integrity_error(sqlstate: str | None) -> "IntegrityError":
     from sqlalchemy.exc import IntegrityError
 
-    mock_session.execute = AsyncMock(side_effect=IntegrityError("stmt", {}, Exception("duplicate key")))
+    orig = Exception("db error")
+    orig.sqlstate = sqlstate
+    return IntegrityError("stmt", {}, orig)
+
+
+@pytest.mark.asyncio
+async def test_create_cluster_rejects_duplicate_name_with_409(client: FastAPI, mock_session: AsyncMock) -> None:
+    mock_session.execute = AsyncMock(side_effect=_integrity_error("23505"))
     mock_session.rollback = AsyncMock()
 
     async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
         resp = await ac.post("/api/clusters", json={"name": "prod-cluster"})
 
     assert resp.status_code == 409
+    mock_session.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_create_cluster_reraises_non_duplicate_integrity_error(client: FastAPI, mock_session: AsyncMock) -> None:
+    """Only the (org_id, name) unique violation (sqlstate 23505) should be
+    mapped to 409 — anything else (a FK/NOT NULL/check violation) must not
+    be mislabeled as a name collision. ASGITransport re-raises unhandled
+    app exceptions to the caller by default, so the un-mapped IntegrityError
+    surfaces here rather than as a response."""
+    from sqlalchemy.exc import IntegrityError
+
+    mock_session.execute = AsyncMock(side_effect=_integrity_error("23503"))  # foreign_key_violation
+    mock_session.rollback = AsyncMock()
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        with pytest.raises(IntegrityError):
+            await ac.post("/api/clusters", json={"name": "prod-cluster"})
+
     mock_session.rollback.assert_awaited_once()
 
 
@@ -124,6 +149,9 @@ async def test_list_clusters_never_leaks_token_hash(client: FastAPI, mock_sessio
     assert "token" not in data[0]
     assert cluster.token_hash not in body_str
 
+    stmt = mock_session.execute.await_args.args[0]
+    assert stmt.compile().params["org_id_1"] == TEST_ORG_ID
+
 
 @pytest.mark.asyncio
 async def test_list_clusters_requires_session(client: FastAPI) -> None:
@@ -141,6 +169,12 @@ async def test_list_clusters_requires_session(client: FastAPI) -> None:
 
 @pytest.mark.asyncio
 async def test_heartbeat_updates_status_and_fields(client: FastAPI, mock_session: AsyncMock) -> None:
+    """cluster_heartbeat issues a Core UPDATE (not ORM attribute
+    assignment) so the write always lands even if a concurrent sweep
+    already committed a different status against this same row — see
+    test_cluster_lifecycle_integration.py for the real-Postgres proof.
+    A mocked session can't observe a DB write, so assert on the executed
+    statement's bound values instead of a mutated Python object."""
     token = "kbx_" + "a" * 40
     cluster = _fake_cluster(TEST_ORG_ID, token, status="pending")
     mock_session.execute = AsyncMock(
@@ -158,11 +192,14 @@ async def test_heartbeat_updates_status_and_fields(client: FastAPI, mock_session
     data = resp.json()
     assert data["status"] == "connected"
     assert data["last_heartbeat"] is not None
-    assert cluster.status == "connected"
-    assert cluster.agent_version == "1.2.3"
-    assert cluster.argocd_status == "healthy"
-    assert cluster.prometheus_status == "up"
-    assert cluster.last_heartbeat is not None
+
+    update_stmt = mock_session.execute.await_args_list[-1].args[0]
+    params = update_stmt.compile().params
+    assert params["status"] == "connected"
+    assert params["agent_version"] == "1.2.3"
+    assert params["argocd_status"] == "healthy"
+    assert params["prometheus_status"] == "up"
+    assert params["last_heartbeat"] is not None
 
 
 @pytest.mark.asyncio
@@ -180,7 +217,7 @@ async def test_heartbeat_rejects_invalid_token(client: FastAPI, mock_session: As
 # ── S8: GET /api/clusters/:id/queries ────────────────────────────────────
 
 
-def _fake_query(cluster_id: uuid.UUID, promql: str = "up", status: str = "pending") -> ClusterQuery:
+def _fake_query(cluster_id: uuid.UUID, promql: str = 'up{service="orders"}', status: str = "pending") -> ClusterQuery:
     return ClusterQuery(
         id=uuid.uuid4(),
         cluster_id=cluster_id,
@@ -309,8 +346,10 @@ async def test_rotate_token_returns_new_token_and_grace_expiry(client: FastAPI, 
     original_hash = cluster.token_hash
     mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=cluster)))
 
+    before = datetime.now(timezone.utc)
     async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
         resp = await ac.post(f"/api/clusters/{cluster.id}/rotate-token")
+    after = datetime.now(timezone.utc)
 
     assert resp.status_code == 200
     data = resp.json()
@@ -318,6 +357,9 @@ async def test_rotate_token_returns_new_token_and_grace_expiry(client: FastAPI, 
     assert cluster.token_hash != original_hash
     assert cluster.token_hash_old == original_hash
     assert cluster.token_old_expires_at is not None
+    expected_min = before + timedelta(minutes=10) - timedelta(seconds=2)
+    expected_max = after + timedelta(minutes=10) + timedelta(seconds=2)
+    assert expected_min <= cluster.token_old_expires_at <= expected_max
 
 
 @pytest.mark.asyncio
@@ -351,8 +393,6 @@ async def test_old_token_still_verifies_within_grace_period_after_rotation() -> 
     cluster = _fake_cluster(TEST_ORG_ID, old_token, cluster_id=uuid.uuid4())
 
     # Simulate what rotate_cluster_token does to the row.
-    from datetime import timedelta
-
     cluster.token_hash_old = cluster.token_hash
     cluster.token_old_expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
     cluster.token_hash = bcrypt.hashpw(new_token.encode(), bcrypt.gensalt()).decode()
@@ -371,8 +411,6 @@ async def test_old_token_rejected_once_grace_period_expires() -> None:
     old_token = "kbx_" + "old" * 15
     new_token = "kbx_" + "new" * 15
     cluster = _fake_cluster(TEST_ORG_ID, old_token, cluster_id=uuid.uuid4())
-
-    from datetime import timedelta
 
     cluster.token_hash_old = cluster.token_hash
     cluster.token_old_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)  # already expired
