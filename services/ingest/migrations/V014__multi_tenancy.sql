@@ -38,6 +38,14 @@ BEGIN
     ALTER TABLE services ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES organizations(id);
     UPDATE services SET org_id = default_org_id WHERE org_id IS NULL;
 
+    -- ── deployments ─────────────────────────────────────────────────────────
+    -- Derived via service_id → services.org_id rather than the default org
+    -- directly, so a deployment always agrees with its own service's org.
+    ALTER TABLE deployments ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES organizations(id);
+    UPDATE deployments d SET org_id = s.org_id
+        FROM services s
+        WHERE d.service_id = s.id AND d.org_id IS NULL;
+
     INSERT INTO schema_versions (version, description)
     VALUES ('V014', 'Multi-tenancy: org_id on services, deployments, alerts, pipeline_events');
 END $$;
