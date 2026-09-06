@@ -691,26 +691,27 @@ async def notify_deployment(
     )
 
     if existing:
-        if not apply_terminal_guarded_status(existing, new_status):
+        applied, persisted_status = await apply_terminal_guarded_status(session, existing.id, new_status)
+        if not applied:
             logger.info(
                 "Ignoring stale deploy notification '%s' for already-%s deployment_id=%d",
-                new_status, existing.status, existing.id,
+                new_status, persisted_status, existing.id,
             )
             await session.commit()
             return DeploymentNotifyResponse(
                 status="ignored", deployment_id=existing.id,
-                deployment_status=existing.status, correlation=correlation_method,
+                deployment_status=persisted_status, correlation=correlation_method,
             )
 
         existing.image_tag = image_tag
         await session.commit()
         logger.info(
             "Deploy notification %s (correlated via %s): service_id=%d deployment_id=%d sha=%s",
-            new_status, correlation_method, service_id, existing.id, body.commit_sha,
+            persisted_status, correlation_method, service_id, existing.id, body.commit_sha,
         )
         return DeploymentNotifyResponse(
             status="ok", deployment_id=existing.id,
-            deployment_status=new_status, correlation=correlation_method,
+            deployment_status=persisted_status, correlation=correlation_method,
         )
 
     # No prior CI/CD event correlated this commit — orphan case, same
