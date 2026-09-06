@@ -219,6 +219,73 @@ async def test_list_pending_queries_rejects_token_for_a_different_cluster(
     assert resp.status_code == 403
 
 
+# ── S9: POST /api/clusters/:id/results ───────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_submit_query_result_marks_completed(client: FastAPI, mock_session: AsyncMock) -> None:
+    token = "kbx_" + "a" * 40
+    cluster = _fake_cluster(TEST_ORG_ID, token)
+    query_id = uuid.uuid4()
+    mock_session.execute = AsyncMock(
+        side_effect=[
+            MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[cluster])))),
+            MagicMock(rowcount=1),
+        ]
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.post(
+            f"/api/clusters/{cluster.id}/results",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"query_id": str(query_id), "result": {"value": 1}},
+        )
+
+    assert resp.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_submit_query_result_404_for_unknown_query(client: FastAPI, mock_session: AsyncMock) -> None:
+    token = "kbx_" + "a" * 40
+    cluster = _fake_cluster(TEST_ORG_ID, token)
+    mock_session.execute = AsyncMock(
+        side_effect=[
+            MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[cluster])))),
+            MagicMock(rowcount=0),
+        ]
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.post(
+            f"/api/clusters/{cluster.id}/results",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"query_id": str(uuid.uuid4()), "result": {}},
+        )
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_submit_query_result_rejects_token_for_a_different_cluster(
+    client: FastAPI, mock_session: AsyncMock
+) -> None:
+    token = "kbx_" + "a" * 40
+    cluster = _fake_cluster(TEST_ORG_ID, token)
+    other_cluster_id = uuid.uuid4()
+    mock_session.execute = AsyncMock(
+        return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[cluster]))))
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.post(
+            f"/api/clusters/{other_cluster_id}/results",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"query_id": str(uuid.uuid4()), "result": {}},
+        )
+
+    assert resp.status_code == 403
+
+
 # ── S6: verify_cluster_token / POST /api/clusters/verify ────────────────
 
 
