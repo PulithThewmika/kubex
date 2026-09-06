@@ -5,6 +5,8 @@ import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
+from sqlalchemy.sql import Select
+
 from app.correlation.engine import (
     extract_image_tag,
     parse_iso_timestamp,
@@ -65,7 +67,7 @@ class TestResolveService:
         session = AsyncMock()
         session.execute = AsyncMock(return_value=mock_result)
 
-        service_id, resolved_org_id = await resolve_service(session, repo="PulithThewmika/kubex")
+        service_id, resolved_org_id = await resolve_service(session, org_id=org_id, repo="PulithThewmika/kubex")
         assert service_id == 42
         assert resolved_org_id == org_id
 
@@ -79,39 +81,55 @@ class TestResolveService:
         session = AsyncMock()
         session.execute = AsyncMock(return_value=mock_result)
 
-        service_id, resolved_org_id = await resolve_service(session, argocd_app="sample-app")
+        service_id, resolved_org_id = await resolve_service(session, org_id=org_id, argocd_app="sample-app")
         assert service_id == 31
         assert resolved_org_id == org_id
 
     @pytest.mark.asyncio
-    async def test_finds_oldest_by_repo_when_duplicates_exist(self):
+    async def test_finds_oldest_by_repo_when_duplicates_exist(self) -> None:
         """Regression test: a repo-migration seed update (V011) racing an
-        auto-registration can leave two rows sharing the same repo. Since
-        services.repo has no unique constraint, resolve_service must not
-        crash on MultipleResultsFound — it should prefer the oldest row."""
-        older = MagicMock(id=31, org_id=uuid.uuid4())
-        newer = MagicMock(id=99, org_id=uuid.uuid4())
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [older, newer]
+        auto-registration can leave two rows sharing the same repo within
+        one org (V018's (org_id, repo) uniqueness constrains across orgs,
+        not the race window within one). resolve_service must not crash on
+        MultipleResultsFound — it should prefer the oldest row, and the
+        underlying query itself (not just the mock's return order) must be
+        both org-scoped and ordered by id."""
+        shared_org_id = uuid.uuid4()
+        older = MagicMock(id=31, org_id=shared_org_id)
+        newer = MagicMock(id=99, org_id=shared_org_id)
+        captured_stmt = None
+
+        async def mock_execute(stmt: object) -> MagicMock:
+            nonlocal captured_stmt
+            captured_stmt = stmt
+            result = MagicMock()
+            result.scalars.return_value.all.return_value = [older, newer]
+            return result
 
         session = AsyncMock()
-        session.execute = AsyncMock(return_value=mock_result)
+        session.execute = mock_execute
 
-        service_id, org_id = await resolve_service(session, repo="PulithThewmika/deploylens-sample-app")
+        service_id, org_id = await resolve_service(
+            session, org_id=shared_org_id, repo="PulithThewmika/deploylens-sample-app"
+        )
         assert service_id == 31
-        assert org_id == older.org_id
+        assert org_id == shared_org_id
+
+        where_clause = str(captured_stmt.whereclause.compile(compile_kwargs={"literal_binds": True}))
+        assert shared_org_id.hex in where_clause.replace("-", "")
+        assert "PulithThewmika/deploylens-sample-app" in where_clause
+        assert any(
+            "services.id" in str(col) for col in captured_stmt._order_by_clauses
+        ), "expected the query itself to order by Service.id, not rely on mock return order"
 
     @pytest.mark.asyncio
-    async def test_auto_registers_unknown_service_with_default_org(self):
-        default_org_id = uuid.uuid4()
+    async def test_auto_registers_unknown_service_with_given_org_id(self) -> None:
+        given_org_id = uuid.uuid4()
 
-        async def mock_execute(stmt):
+        async def mock_execute(_stmt: object) -> MagicMock:
             result = MagicMock()
-            if "organizations" in str(stmt):
-                result.scalar_one_or_none.return_value = default_org_id
-            else:
-                result.scalars.return_value.all.return_value = []
-                result.scalar_one_or_none.return_value = None
+            result.scalars.return_value.all.return_value = []
+            result.scalar_one_or_none.return_value = None
             return result
 
         session = AsyncMock()
@@ -119,12 +137,12 @@ class TestResolveService:
         session.flush = AsyncMock()
         session.add = MagicMock()
 
-        service_id, org_id = await resolve_service(session, repo="org/new-service")
+        service_id, org_id = await resolve_service(session, org_id=given_org_id, repo="org/new-service")
         session.add.assert_called_once()
         session.flush.assert_called_once()
-        assert org_id == default_org_id
+        assert org_id == given_org_id
         added_service = session.add.call_args_list[0][0][0]
-        assert added_service.org_id == default_org_id
+        assert added_service.org_id == given_org_id
 
     @pytest.mark.asyncio
     async def test_links_repo_to_existing_service_by_name(self):
@@ -145,10 +163,56 @@ class TestResolveService:
         session.execute = mock_execute
         session.flush = AsyncMock()
 
-        service_id, org_id = await resolve_service(session, repo="org/myapp")
+        service_id, org_id = await resolve_service(session, org_id=existing.org_id, repo="org/myapp")
         assert service_id == 10
         assert org_id == existing.org_id
         assert existing.repo == "org/myapp"
+
+    @pytest.mark.asyncio
+    async def test_name_fallback_does_not_cross_org(self) -> None:
+        """Regression test for #792: two orgs deriving the same `name` from
+        different repos must not collide — the name-fallback lookup has to
+        be scoped to the caller's org_id, not global, or it would match
+        (and mis-attribute to) another org's row."""
+        org_a = uuid.uuid4()
+        org_b = uuid.uuid4()
+        captured_stmts = []
+
+        async def mock_execute(stmt: object) -> MagicMock:
+            captured_stmts.append(stmt)
+            result = MagicMock()
+            result.scalars.return_value.all.return_value = []
+            result.scalar_one_or_none.return_value = None
+            return result
+
+        session = AsyncMock()
+        session.execute = mock_execute
+        session.flush = AsyncMock()
+        session.add = MagicMock()
+
+        def compiled_where(stmt: Select) -> str:
+            return str(stmt.whereclause.compile(compile_kwargs={"literal_binds": True}))
+
+        # org A registers "payments" via its own repo.
+        await resolve_service(session, org_id=org_a, repo="org-a/payments")
+        stmts_a = [compiled_where(s) for s in captured_stmts]
+        captured_stmts.clear()
+
+        # org B derives the same `name` from a different repo — the repo
+        # lookup won't match (different repo string), so it falls through
+        # to the name lookup, which must be scoped to org_b, not org_a.
+        await resolve_service(session, org_id=org_b, repo="org-b/payments")
+        stmts_b = [compiled_where(s) for s in captured_stmts]
+
+        name_lookup_a = [s for s in stmts_a if "repo" not in s.lower()]
+        name_lookup_b = [s for s in stmts_b if "repo" not in s.lower()]
+        assert name_lookup_a and name_lookup_b, "expected a name-only lookup query on each call"
+
+        for stmt in name_lookup_a:
+            assert org_a.hex in stmt.replace("-", "") and org_b.hex not in stmt.replace("-", "")
+
+        for stmt in name_lookup_b:
+            assert org_b.hex in stmt.replace("-", "") and org_a.hex not in stmt.replace("-", "")
 
     @pytest.mark.asyncio
     async def test_repo_and_argocd_app_mismatch_creates_separate_rows(self):
@@ -158,11 +222,8 @@ class TestResolveService:
 
         async def mock_execute(stmt):
             result = MagicMock()
-            if "organizations" in str(stmt):
-                result.scalar_one_or_none.return_value = default_org_id
-            else:
-                result.scalars.return_value.all.return_value = []
-                result.scalar_one_or_none.return_value = None
+            result.scalars.return_value.all.return_value = []
+            result.scalar_one_or_none.return_value = None
             return result
 
         session = AsyncMock()
@@ -170,12 +231,12 @@ class TestResolveService:
         session.flush = AsyncMock()
         session.add = MagicMock()
 
-        await resolve_service(session, repo="PulithThewmika/kubex")
+        await resolve_service(session, org_id=default_org_id, repo="PulithThewmika/kubex")
         added_service_1 = session.add.call_args_list[0][0][0]
         assert added_service_1.name == "kubex"
 
         session.add.reset_mock()
-        await resolve_service(session, argocd_app="sample-app")
+        await resolve_service(session, org_id=default_org_id, argocd_app="sample-app")
         added_service_2 = session.add.call_args_list[0][0][0]
         assert added_service_2.name == "sample-app"
 
@@ -187,7 +248,7 @@ class TestResolveOrgId:
     async def test_returns_existing_services_org(self):
         org_id = uuid.uuid4()
         mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = org_id
+        mock_result.scalars.return_value.all.return_value = [org_id]
 
         session = AsyncMock()
         session.execute = AsyncMock(return_value=mock_result)
@@ -201,9 +262,10 @@ class TestResolveOrgId:
 
         async def mock_execute(stmt):
             result = MagicMock()
-            result.scalar_one_or_none.return_value = (
-                default_org_id if "organizations" in str(stmt) else None
-            )
+            if "organizations" in str(stmt):
+                result.scalar_one_or_none.return_value = default_org_id
+            else:
+                result.scalars.return_value.all.return_value = []
             return result
 
         session = AsyncMock()
@@ -211,6 +273,21 @@ class TestResolveOrgId:
 
         resolved = await resolve_org_id(session, repo="org/unknown-service")
         assert resolved == default_org_id
+
+    @pytest.mark.asyncio
+    async def test_raises_when_repo_ambiguous_across_orgs(self):
+        """Regression test for #792/#793 review: a repo registered under
+        more than one org (schema-legal since V018 scoped uniqueness
+        per-org) must fail loudly, not silently pick one org."""
+        org_a, org_b = uuid.uuid4(), uuid.uuid4()
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [org_a, org_b]
+
+        session = AsyncMock()
+        session.execute = AsyncMock(return_value=mock_result)
+
+        with pytest.raises(RuntimeError):
+            await resolve_org_id(session, repo="shared/repo")
 
     @pytest.mark.asyncio
     async def test_get_default_org_id_raises_when_no_orgs_exist(self):

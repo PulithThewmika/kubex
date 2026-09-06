@@ -62,7 +62,7 @@ async def github_webhook(
         await session.commit()
         return {"status": "ignored", "reason": "missing repository.full_name"}
 
-    service_id, org_id = await resolve_service(session, repo=repo_full_name)
+    service_id, org_id = await resolve_service(session, org_id=org_id, repo=repo_full_name)
     workflow_run_id = workflow_run.get("id")
     commit_sha = workflow_run.get("head_sha")
     branch = workflow_run.get("head_branch")

@@ -56,7 +56,7 @@ async def argocd_webhook(
         await session.commit()
         return {"status": "ignored", "reason": "missing app.metadata.name"}
 
-    service_id, org_id = await resolve_service(session, argocd_app=app_name)
+    service_id, org_id = await resolve_service(session, org_id=org_id, argocd_app=app_name)
 
     if not revision:
         revision = operation_state.get("syncResult", {}).get("revision", "")
