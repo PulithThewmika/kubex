@@ -1,5 +1,4 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { timingSafeEqual } from "node:crypto";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -9,6 +8,7 @@ import { z } from "zod";
 import * as postgres from "./clients/postgres.js";
 import * as prometheus from "./clients/prometheus.js";
 import * as loki from "./clients/loki.js";
+import { UUID_RE, isValidBearerToken } from "./http-auth.js";
 import {
   listDeploymentsSchema,
   listDeployments,
@@ -162,21 +162,6 @@ function createMcpServer(orgId: string | null): McpServer {
   return server;
 }
 
-// Constant-time compare so a mismatched token can't be brute-forced via
-// response-time differences — same approach as the ArgoCD/Alertmanager
-// webhook token checks in services/ingest/app/auth.py
-// (hmac.compare_digest). Different-length buffers never match, and
-// comparing them directly would leak length via timingSafeEqual's own
-// length check throwing, so pad to equal length first.
-function isValidBearerToken(authorization: string | undefined, expected: string): boolean {
-  const prefix = "Bearer ";
-  if (!authorization || !authorization.startsWith(prefix)) return false;
-  const provided = Buffer.from(authorization.slice(prefix.length));
-  const expectedBuf = Buffer.from(expected);
-  if (provided.length !== expectedBuf.length) return false;
-  return timingSafeEqual(provided, expectedBuf);
-}
-
 async function main(): Promise<void> {
   await postgres.testConnection();
   try {
@@ -247,6 +232,16 @@ async function main(): Promise<void> {
             .end(JSON.stringify({ error: "Missing required X-Org-Id header" }));
           return;
         }
+        // Node joins a repeated non-list header ("X-Org-Id: a" twice) into
+        // one comma-separated string, which would otherwise pass the
+        // truthiness check above and only fail later as an opaque Postgres
+        // UUID-cast error. Validate the shape here so a malformed or
+        // duplicated header gets a clean 400 instead.
+        if (!UUID_RE.test(orgId)) {
+          res.writeHead(400, { "Content-Type": "application/json" })
+            .end(JSON.stringify({ error: "X-Org-Id must be a single UUID" }));
+          return;
+        }
 
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: undefined,
@@ -278,6 +273,9 @@ async function main(): Promise<void> {
     // dashboards' NULL-org queries) rather than inventing an env var for a
     // single org — this transport isn't reachable from the multi-tenant
     // chat proxy at all, only from a developer's own terminal.
+    // ponytail: platform-wide, no per-org stdio mode; upgrade to an
+    // MCP_STDIO_ORG_ID env var if a non-admin CLI user ever needs this
+    // transport scoped to one org.
     const server = createMcpServer(null);
     const transport = new StdioServerTransport();
     await server.connect(transport);

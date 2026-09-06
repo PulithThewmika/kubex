@@ -16,6 +16,10 @@
 -- the API, MCP server, and agent. A view and a function CAN share the same
 -- name in Postgres (pg_class vs pg_proc are separate namespaces), so no
 -- rename was needed.
+-- ponytail: Grafana dashboards stay platform-wide (NULL org), not
+-- per-tenant; upgrade by adding an org_id template variable to
+-- dora-scorecard.json/platform-overview.json and switching their rawSql
+-- from the views to the functions if per-org Grafana views are ever needed.
 --
 -- Functions are plain CREATE OR REPLACE FUNCTION (naturally idempotent, and
 -- CREATE OR REPLACE FUNCTION cannot rerun-fail the way CREATE OR REPLACE VIEW
