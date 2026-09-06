@@ -44,7 +44,7 @@ async def test_chat_returns_503_when_mcp_unreachable(client):
 
 @pytest.mark.asyncio
 async def test_chat_streams_sse_response(client):
-    async def fake_run_chat_turn(messages, tools):
+    async def fake_run_chat_turn(messages, tools, org_id):
         yield 'event: text\ndata: {"text": "hi"}\n\n'
 
     with (
