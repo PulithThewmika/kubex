@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { queryOne } from "../clients/postgres.js";
+import { orgFilter } from "./org-filter.js";
 
 export const getSafetyScoreSchema = {
   deployment_id: z.number().int().describe("Deployment ID"),
@@ -17,8 +18,7 @@ interface SafetyScoreRow {
 export async function getSafetyScore(input: {
   deployment_id: number;
 }, orgId: string | null): Promise<{ content: { type: "text"; text: string }[] }> {
-  const orgFilter = orgId !== null ? "AND s.org_id = $2" : "";
-  const params: unknown[] = orgId !== null ? [input.deployment_id, orgId] : [input.deployment_id];
+  const org = orgFilter(orgId, 2, "s.org_id");
 
   const row = await queryOne<SafetyScoreRow>(
     `SELECT d.id AS deploy_id, d.status AS deploy_status,
@@ -27,8 +27,8 @@ export async function getSafetyScore(input: {
      FROM deployments d
      JOIN services s ON s.id = d.service_id
      LEFT JOIN safety_scores ss ON ss.deployment_id = d.id
-     WHERE d.id = $1 ${orgFilter}`,
-    params,
+     WHERE d.id = $1 ${org.clause}`,
+    [input.deployment_id, ...org.params],
   );
 
   if (!row) {
