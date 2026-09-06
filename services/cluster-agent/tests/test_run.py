@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Generator, NoReturn
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -10,14 +11,14 @@ from cluster_agent.backoff import Backoff
 
 
 @pytest.fixture(autouse=True)
-def _reset_shutdown_event():
+def _reset_shutdown_event() -> Generator[None, None, None]:
     run._shutdown_event.clear()
     yield
     run._shutdown_event.clear()
 
 
 @pytest.mark.asyncio
-async def test_run_with_backoff_resets_on_success_and_reports_no_wait():
+async def test_run_with_backoff_resets_on_success_and_reports_no_wait() -> None:
     backoff = Backoff(initial=1, maximum=60)
     backoff.next_delay()  # simulate a prior failure having advanced it
     already_waited = await run._run_with_backoff("test", backoff, AsyncMock())
@@ -26,7 +27,7 @@ async def test_run_with_backoff_resets_on_success_and_reports_no_wait():
 
 
 @pytest.mark.asyncio
-async def test_run_with_backoff_sleeps_on_connectivity_error_and_reports_wait():
+async def test_run_with_backoff_sleeps_on_connectivity_error_and_reports_wait() -> None:
     backoff = Backoff(initial=1, maximum=60)
     failing = AsyncMock(side_effect=httpx.ConnectError("refused"))
     with patch("cluster_agent.run.asyncio.sleep", AsyncMock()) as mock_sleep:
@@ -36,7 +37,7 @@ async def test_run_with_backoff_sleeps_on_connectivity_error_and_reports_wait():
 
 
 @pytest.mark.asyncio
-async def test_run_with_backoff_shuts_down_on_auth_error():
+async def test_run_with_backoff_shuts_down_on_auth_error() -> None:
     failing = AsyncMock(side_effect=ingest_client.AuthError("bad token"))
     already_waited = await run._run_with_backoff("test", Backoff(), failing)
     assert already_waited is True
@@ -44,10 +45,10 @@ async def test_run_with_backoff_shuts_down_on_auth_error():
 
 
 @pytest.mark.asyncio
-async def test_heartbeat_loop_does_not_stack_interval_sleep_after_backoff():
+async def test_heartbeat_loop_does_not_stack_interval_sleep_after_backoff() -> None:
     # Bug found in review, E22-T3: previously slept backoff_delay AND the
     # full interval on a connectivity failure, instead of backoff alone.
-    async def fail_and_shutdown():
+    async def fail_and_shutdown() -> NoReturn:
         run._shutdown_event.set()  # stop the loop after this one tick
         raise httpx.ConnectError("refused")
 
@@ -63,7 +64,7 @@ async def test_heartbeat_loop_does_not_stack_interval_sleep_after_backoff():
 
 
 @pytest.mark.asyncio
-async def test_query_relay_tick_skips_when_prometheus_not_discovered():
+async def test_query_relay_tick_skips_when_prometheus_not_discovered() -> None:
     run._state["prometheus_status"] = "not_found"
     with (
         patch("cluster_agent.run.ingest_client.list_queries", AsyncMock(return_value=[{"id": "q1", "promql": "up"}])),
@@ -74,7 +75,7 @@ async def test_query_relay_tick_skips_when_prometheus_not_discovered():
 
 
 @pytest.mark.asyncio
-async def test_query_relay_tick_executes_and_submits_pending_queries():
+async def test_query_relay_tick_executes_and_submits_pending_queries() -> None:
     run._state["prometheus_status"] = "found"
     run._state["prometheus_namespace"] = "monitoring"
     run._state["prometheus_service"] = "prometheus-operated"
@@ -89,11 +90,11 @@ async def test_query_relay_tick_executes_and_submits_pending_queries():
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_retries_on_connectivity_error_then_succeeds():
+async def test_bootstrap_retries_on_connectivity_error_then_succeeds() -> None:
     identity = {"id": "c1", "name": "my-cluster", "org_id": "o1"}
     call_count = 0
 
-    async def flaky_verify():
+    async def flaky_verify() -> dict[str, str]:
         nonlocal call_count
         call_count += 1
         if call_count == 1:
@@ -111,7 +112,7 @@ async def test_bootstrap_retries_on_connectivity_error_then_succeeds():
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_does_not_retry_auth_error():
+async def test_bootstrap_does_not_retry_auth_error() -> None:
     with (
         patch(
             "cluster_agent.run.bootstrap_module.verify_identity",
@@ -124,7 +125,7 @@ async def test_bootstrap_does_not_retry_auth_error():
 
 
 @pytest.mark.asyncio
-async def test_query_relay_tick_continues_after_one_query_fails():
+async def test_query_relay_tick_continues_after_one_query_fails() -> None:
     run._state["prometheus_status"] = "found"
     run._state["prometheus_namespace"] = "monitoring"
     run._state["prometheus_service"] = "prometheus-operated"
