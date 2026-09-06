@@ -34,7 +34,7 @@ describe("getDeployHealth", () => {
   it("returns health score, verdict, evidence breakdown and a summary on the happy path", async () => {
     mockedQueryOne.mockResolvedValue(makeRow());
 
-    const result = await getDeployHealth({ deployment_id: 5 });
+    const result = await getDeployHealth({ deployment_id: 5 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.summary).toBe("orders deployment #5 — health score 92/100 (healthy)");
@@ -51,7 +51,7 @@ describe("getDeployHealth", () => {
   it("returns an error when the deployment ID does not exist", async () => {
     mockedQueryOne.mockResolvedValue(null);
 
-    const result = await getDeployHealth({ deployment_id: 999 });
+    const result = await getDeployHealth({ deployment_id: 999 }, null);
     const parsed = parseResult(result);
 
     expect(parsed).toEqual({
@@ -65,7 +65,7 @@ describe("getDeployHealth", () => {
       makeRow({ score: null, verdict: null, assessed_at: null, deploy_status: "syncing" }),
     );
 
-    const result = await getDeployHealth({ deployment_id: 5 });
+    const result = await getDeployHealth({ deployment_id: 5 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.health).toBeNull();
@@ -84,7 +84,7 @@ describe("getDeployHealth", () => {
       }),
     );
 
-    const result = await getDeployHealth({ deployment_id: 5 });
+    const result = await getDeployHealth({ deployment_id: 5 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.health.details.reason).toContain("request volume below 0.1 rps");

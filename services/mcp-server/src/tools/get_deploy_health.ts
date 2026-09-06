@@ -53,7 +53,10 @@ function buildEvidence(row: HealthRow): EvidenceItem[] {
 
 export async function getDeployHealth(input: {
   deployment_id: number;
-}): Promise<{ content: { type: "text"; text: string }[] }> {
+}, orgId: string | null): Promise<{ content: { type: "text"; text: string }[] }> {
+  const orgFilter = orgId !== null ? "AND s.org_id = $2" : "";
+  const params: unknown[] = orgId !== null ? [input.deployment_id, orgId] : [input.deployment_id];
+
   const row = await queryOne<HealthRow>(
     `SELECT d.id AS deploy_id, d.status AS deploy_status,
             s.name AS service_name,
@@ -65,8 +68,8 @@ export async function getDeployHealth(input: {
      FROM deployments d
      JOIN services s ON s.id = d.service_id
      LEFT JOIN health_assessments ha ON ha.deployment_id = d.id
-     WHERE d.id = $1`,
-    [input.deployment_id],
+     WHERE d.id = $1 ${orgFilter}`,
+    params,
   );
 
   if (!row) {

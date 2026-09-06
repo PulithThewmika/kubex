@@ -217,10 +217,12 @@ interface ServiceRow {
   namespace: string;
 }
 
-async function resolveService(name: string): Promise<ServiceRow | null> {
+async function resolveService(name: string, orgId: string | null): Promise<ServiceRow | null> {
+  const orgFilter = orgId !== null ? "AND org_id = $2" : "";
+  const params: unknown[] = orgId !== null ? [name, orgId] : [name];
   return queryOne<ServiceRow>(
-    `SELECT name, namespace FROM services WHERE name = $1`,
-    [name],
+    `SELECT name, namespace FROM services WHERE name = $1 ${orgFilter}`,
+    params,
   );
 }
 
@@ -232,8 +234,8 @@ export async function queryMetrics(input: {
   from: string;
   to?: string;
   step?: string;
-}): Promise<{ content: { type: "text"; text: string }[] }> {
-  const svc = await resolveService(input.service);
+}, orgId: string | null): Promise<{ content: { type: "text"; text: string }[] }> {
+  const svc = await resolveService(input.service, orgId);
   if (!svc) {
     return {
       content: [{

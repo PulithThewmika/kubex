@@ -236,7 +236,10 @@ function buildMarkdownReport(row: IncidentRow, metricSeries: Record<string, { t:
 
 export async function generateIncidentReport(input: {
   alert_id: number;
-}): Promise<{ content: { type: "text"; text: string }[] }> {
+}, orgId: string | null): Promise<{ content: { type: "text"; text: string }[] }> {
+  const orgFilter = orgId !== null ? "AND a.org_id = $2" : "";
+  const params: unknown[] = orgId !== null ? [input.alert_id, orgId] : [input.alert_id];
+
   const row = await queryOne<IncidentRow>(
     `SELECT
        a.id AS alert_id, a.severity, a.title, a.description, a.fired_at, a.resolved_at, a.alertmanager_id,
@@ -251,8 +254,8 @@ export async function generateIncidentReport(input: {
      JOIN deployments d ON d.id = a.deployment_id
      JOIN services s ON s.id = d.service_id
      LEFT JOIN health_assessments ha ON ha.deployment_id = d.id
-     WHERE a.id = $1`,
-    [input.alert_id],
+     WHERE a.id = $1 ${orgFilter}`,
+    params,
   );
 
   if (!row) {
