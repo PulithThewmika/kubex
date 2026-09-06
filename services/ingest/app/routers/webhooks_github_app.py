@@ -2,7 +2,7 @@ import json
 import logging
 
 from fastapi import APIRouter, Depends, Request
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -73,6 +73,17 @@ async def _handle_installation(session: AsyncSession, action: str, payload: dict
             github_installation_id, org_id, account_login, repos,
         )
         return {"status": "ok", "installation": "created"}
+
+    if action == "deleted":
+        # Mark removed rather than delete the row — its org_id/repos stay
+        # around for historical deployments that still reference it.
+        await session.execute(
+            update(Installation)
+            .where(Installation.github_installation_id == github_installation_id)
+            .values(status="removed")
+        )
+        logger.info("Installation removed: github_installation_id=%s org_id=%s", github_installation_id, org_id)
+        return {"status": "ok", "installation": "removed"}
 
     return {"status": "ignored", "reason": f"installation action '{action}' not handled"}
 
