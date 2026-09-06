@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import bcrypt
@@ -13,6 +16,40 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.models.cluster import Cluster
+from app.routers.install import build_install_manifest
+
+_CHART_DIR = Path(__file__).resolve().parents[3] / "deploy" / "helm" / "cluster-agent"
+
+
+def _rules_by_resources(rules: list[dict]) -> dict[tuple[str, ...], dict]:
+    return {
+        tuple(sorted(rule["resources"])): {
+            "verbs": set(rule["verbs"]),
+            "resourceNames": set(rule.get("resourceNames", [])),
+        }
+        for rule in rules
+    }
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="helm CLI not installed")
+def test_helm_chart_clusterrole_matches_install_manifest() -> None:
+    """E22-T4 (#802 review): the Helm chart's clusterrole.yaml is a
+    hand-copy of build_install_manifest()'s RBAC rules, kept in sync only
+    by a comment. Render the real chart and diff its rules against this
+    function's own output so a future edit to one that forgets the other
+    fails CI instead of silently diverging."""
+    raw_manifest = build_install_manifest("test-token", "https://ingest.example.com")
+    raw_role = next(doc for doc in yaml.safe_load_all(raw_manifest) if doc["kind"] == "ClusterRole")
+
+    rendered = subprocess.run(
+        ["helm", "template", "test", str(_CHART_DIR), "--set", "token=x", "--set", "endpoint=https://e"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    chart_role = next(doc for doc in yaml.safe_load_all(rendered.stdout) if doc["kind"] == "ClusterRole")
+
+    assert _rules_by_resources(chart_role["rules"]) == _rules_by_resources(raw_role["rules"])
 
 
 def _fake_cluster(token: str) -> Cluster:
