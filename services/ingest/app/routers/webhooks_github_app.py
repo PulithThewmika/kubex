@@ -1,5 +1,6 @@
 import json
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select, update
@@ -34,7 +35,9 @@ logger = logging.getLogger("kubex.webhooks.github_app")
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
-async def _log_event(session: AsyncSession, org_id, source: str, event_type: str, payload: dict) -> None:
+async def _log_event(
+    session: AsyncSession, org_id: uuid.UUID | None, source: str, event_type: str, payload: dict,
+) -> None:
     await session.execute(
         PipelineEvent.__table__.insert().values(
             org_id=org_id, source=source, event_type=event_type, payload=payload,
@@ -42,7 +45,7 @@ async def _log_event(session: AsyncSession, org_id, source: str, event_type: str
     )
 
 
-async def _resolve_org_by_github_org_id(session: AsyncSession, github_org_id: int | None):
+async def _resolve_org_by_github_org_id(session: AsyncSession, github_org_id: int | None) -> uuid.UUID | None:
     if github_org_id is None:
         return None
     result = await session.execute(select(Organization.id).where(Organization.github_org_id == github_org_id))
@@ -162,7 +165,9 @@ async def _handle_installation_repositories(session: AsyncSession, action: str, 
     return {"status": "ignored", "reason": f"installation_repositories action '{action}' not handled"}
 
 
-async def _resolve_org_by_installation_id(session: AsyncSession, github_installation_id: int | None):
+async def _resolve_org_by_installation_id(
+    session: AsyncSession, github_installation_id: int | None,
+) -> uuid.UUID | None:
     if github_installation_id is None:
         return None
     result = await session.execute(

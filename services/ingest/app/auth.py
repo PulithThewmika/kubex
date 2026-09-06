@@ -66,11 +66,11 @@ async def _verify_hmac_signature(request: Request, secret: str) -> bytes:
     return body
 
 
-async def verify_github_signature(request: Request):
+async def verify_github_signature(request: Request) -> bytes:
     return await _verify_hmac_signature(request, GITHUB_WEBHOOK_SECRET)
 
 
-async def verify_github_app_signature(request: Request):
+async def verify_github_app_signature(request: Request) -> bytes:
     return await _verify_hmac_signature(request, GITHUB_APP_WEBHOOK_SECRET)
 
 

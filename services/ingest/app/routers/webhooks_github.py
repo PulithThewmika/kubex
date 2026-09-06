@@ -1,5 +1,6 @@
 import json
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import case
@@ -63,7 +64,7 @@ async def github_webhook(
 
 
 async def process_workflow_run(
-    session: AsyncSession, org_id, repo_full_name: str, payload: dict,
+    session: AsyncSession, org_id: uuid.UUID, repo_full_name: str, payload: dict,
 ) -> dict:
     """Shared by the classic per-repo webhook and the GitHub App webhook
     (E21-T2) — org_id is resolved differently by each caller (repo lookup
