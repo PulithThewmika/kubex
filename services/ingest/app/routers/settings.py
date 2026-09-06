@@ -13,6 +13,7 @@ import uuid
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth_middleware import UserContext, get_current_user
@@ -34,16 +35,19 @@ async def create_api_key(
     token = TOKEN_PREFIX + secrets.token_urlsafe(32)
     token_hash = bcrypt.hashpw(token.encode(), bcrypt.gensalt()).decode()
 
-    key = ApiKey(org_id=user.org_id, name=body.name, token_hash=token_hash)
-    session.add(key)
-    await session.flush()
+    stmt = (
+        pg_insert(ApiKey)
+        .values(org_id=user.org_id, name=body.name, token_hash=token_hash)
+        .returning(ApiKey.id, ApiKey.name, ApiKey.created_at)
+    )
+    row = (await session.execute(stmt)).one()
     await session.commit()
 
     return ApiKeyCreateResponse(
-        id=str(key.id),
-        name=key.name,
+        id=str(row.id),
+        name=row.name,
         token=token,
-        created_at=key.created_at,
+        created_at=row.created_at,
     )
 
 
@@ -61,7 +65,7 @@ async def list_api_keys(
     ]
 
 
-@router.delete("/{key_id}", status_code=204)
+@router.delete("/{key_id}", status_code=204, response_model=None)
 async def revoke_api_key(
     key_id: str,
     user: UserContext = Depends(get_current_user),
