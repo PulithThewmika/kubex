@@ -23,17 +23,22 @@ from mcp.client.streamable_http import create_mcp_http_client, streamable_http_c
 logger = logging.getLogger("kubex.ingest.mcp_client")
 
 MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://mcp-server:3001/mcp")
+MCP_INTERNAL_TOKEN = os.environ.get("MCP_INTERNAL_TOKEN", "")
 
 
 @asynccontextmanager
 async def mcp_session(org_id: uuid.UUID) -> AsyncIterator[ClientSession]:
     """Open a short-lived, initialized MCP session against the KubeX MCP server.
 
-    org_id is passed as an X-Org-Id header so the MCP server can scope
-    its tool calls to the caller's org. Full server-side enforcement of
-    this header is E20-T3's scope -- this just plumbs it through.
+    org_id is passed as an X-Org-Id header so the MCP server can scope its
+    tool calls to the caller's org (E20-T3 enforces this server-side).
+    The Authorization bearer token authenticates ingest itself to the MCP
+    server -- same shared-token pattern as ARGOCD_WEBHOOK_TOKEN /
+    ALERTMANAGER_WEBHOOK_TOKEN in app/auth.py -- so X-Org-Id can't be
+    forged by some other caller on the compose network.
     """
-    async with create_mcp_http_client(headers={"X-Org-Id": str(org_id)}) as http_client:
+    headers = {"X-Org-Id": str(org_id), "Authorization": f"Bearer {MCP_INTERNAL_TOKEN}"}
+    async with create_mcp_http_client(headers=headers) as http_client:
         async with streamable_http_client(MCP_SERVER_URL, http_client=http_client) as (read_stream, write_stream):
             async with ClientSession(read_stream, write_stream) as session:
                 await session.initialize()
