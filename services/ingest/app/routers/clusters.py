@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, update
@@ -33,8 +33,11 @@ from ..schemas.cluster import (
     ClusterQueryResponse,
     ClusterQueryResultRequest,
     ClusterResponse,
+    ClusterRotateTokenResponse,
     ClusterVerifyResponse,
 )
+
+ROTATE_GRACE_PERIOD = timedelta(minutes=10)
 
 
 def _require_own_cluster(path_cluster_id: str, cluster: Cluster) -> None:
@@ -164,3 +167,39 @@ async def submit_query_result(
     await session.commit()
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Query not found for this cluster")
+
+
+@router.post("/{cluster_id}/rotate-token", response_model=ClusterRotateTokenResponse)
+async def rotate_cluster_token(
+    cluster_id: str,
+    user: UserContext = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ClusterRotateTokenResponse:
+    try:
+        cluster_uuid = uuid.UUID(cluster_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid cluster id") from None
+
+    result = await session.execute(
+        select(Cluster).where(Cluster.id == cluster_uuid, Cluster.org_id == user.org_id)
+    )
+    cluster = result.scalar_one_or_none()
+    if cluster is None:
+        raise HTTPException(status_code=404, detail="Cluster not found")
+
+    new_token = TOKEN_PREFIX + secrets.token_urlsafe(32)
+    new_token_hash = (await asyncio.to_thread(bcrypt.hashpw, new_token.encode(), bcrypt.gensalt())).decode()
+    grace_expires_at = datetime.now(timezone.utc) + ROTATE_GRACE_PERIOD
+
+    # Old token keeps verifying until grace_expires_at (verify_cluster_token
+    # checks token_hash_old too) so an agent that hasn't picked up the new
+    # token yet doesn't get locked out mid-rotation. token_hash and
+    # token_hash_old/token_old_expires_at are set together in this one
+    # UPDATE, so there's no window where a concurrent verify sees a new
+    # token_hash with a stale/missing old-token grace record.
+    cluster.token_hash_old = cluster.token_hash
+    cluster.token_old_expires_at = grace_expires_at
+    cluster.token_hash = new_token_hash
+    await session.commit()
+
+    return ClusterRotateTokenResponse(token=new_token, grace_period_expires_at=grace_expires_at)
