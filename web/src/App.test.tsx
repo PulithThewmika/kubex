@@ -22,6 +22,7 @@ const ME_RESPONSE = {
 }
 
 const AUTHENTICATED_ROUTES = {
+  '/auth/memberships': () => jsonResponse([{ org_id: '2', org_name: 'Acme', org_slug: 'acme' }]),
   '/auth/me': () => jsonResponse(ME_RESPONSE),
   '/api/services': () => jsonResponse([]),
   '/api/deployments/': () => jsonResponse(makeDeploymentDetail()),
