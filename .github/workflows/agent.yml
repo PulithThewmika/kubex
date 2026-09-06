@@ -33,15 +33,35 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set short SHA
+      - name: Compute tags
         id: vars
-        run: echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        # github.ref_name is "802/merge" on a pull_request event — not a
+        # valid Docker tag component — so the floating branch/latest tag
+        # only applies on push, where ref_name is a real branch name.
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          floating=""
+          if [ "${{ github.event_name }}" = "push" ]; then
+            if [ "${{ github.ref_name }}" = "main" ]; then
+              floating="latest"
+            else
+              floating="${{ github.ref_name }}"
+            fi
+          fi
+          {
+            echo "tags<<EOF"
+            printf '%s:%s\n' "$IMAGE" "$short_sha"
+            if [ -n "$floating" ]; then
+              printf '%s:%s\n' "$IMAGE" "$floating"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          IMAGE: ${{ env.IMAGE }}
 
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
           context: services/cluster-agent
           push: ${{ github.event_name == 'push' }}
-          tags: |
-            ${{ env.IMAGE }}:${{ steps.vars.outputs.short_sha }}
-            ${{ env.IMAGE }}:${{ github.ref_name == 'main' && 'latest' || github.ref_name }}
+          tags: ${{ steps.vars.outputs.tags }}
