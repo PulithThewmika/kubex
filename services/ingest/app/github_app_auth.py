@@ -35,7 +35,10 @@ _token_cache: dict[int, tuple[str, float]] = {}
 def _read_private_key() -> str | None:
     if not GITHUB_APP_PRIVATE_KEY_PATH:
         return None
-    with open(GITHUB_APP_PRIVATE_KEY_PATH) as f:
+    # Explicit encoding, not the platform default (cp1252 on Windows
+    # doesn't reject most byte sequences, so a corrupt key file wouldn't
+    # reliably raise UnicodeDecodeError without this — CodeRabbit, PR #796).
+    with open(GITHUB_APP_PRIVATE_KEY_PATH, encoding="utf-8") as f:
         return f.read()
 
 
