@@ -58,13 +58,13 @@ def test_in_cluster_url() -> None:
 @pytest.mark.asyncio
 async def test_query_returns_raw_response_json() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.params["query"] == "up"
+        assert request.url.params["query"] == 'up{service="frontend"}'
         assert request.url.params["timeout"] == prometheus.PROM_QUERY_TIMEOUT
         return httpx.Response(200, json={"status": "success", "data": {"result": []}})
 
     prometheus._client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://prom.test")
     prometheus._base_url = "http://prom.test"
-    result = await prometheus.query("http://prom.test", "up")
+    result = await prometheus.query("http://prom.test", 'up{service="frontend"}')
     assert result == {"status": "success", "data": {"result": []}}
     await prometheus.close_client()
 
