@@ -10,7 +10,7 @@ from sqlalchemy import text
 
 from .auth import validate_auth_tokens
 from .db import async_session, engine
-from .routers import auth, webhooks_github, webhooks_github_app, webhooks_argocd, api, chat, grafana, settings
+from .routers import auth, webhooks_github, webhooks_github_app, webhooks_argocd, api, chat, clusters, grafana, settings
 
 
 @asynccontextmanager
@@ -84,6 +84,7 @@ app.include_router(webhooks_github_app.router)
 app.include_router(webhooks_argocd.router)
 app.include_router(api.router)
 app.include_router(chat.router)
+app.include_router(clusters.router)
 app.include_router(grafana.router)
 app.include_router(settings.router)
 app.include_router(settings.installations_router)
