@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import case, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.deployment import Deployment
@@ -248,8 +249,29 @@ async def resolve_service(
         return existing.id, existing.org_id
 
     service = Service(name=name, repo=repo, argocd_app=argocd_app, org_id=org_id)
-    session.add(service)
-    await session.flush()
+    try:
+        async with session.begin_nested():
+            session.add(service)
+            await session.flush()
+    except IntegrityError:
+        # Lost a race with a concurrent request auto-registering the same
+        # (org_id, name)/(org_id, repo)/(org_id, argocd_app) between this
+        # function's lookup above and this flush — the other request's row
+        # already exists (uq_services_org_name/_repo/_argocd_app), so reuse
+        # it instead of erroring. Most likely to bite the generic notify
+        # endpoint (E21-T3), which can register a brand-new service name
+        # from a burst of concurrent first deliveries.
+        session.expunge(service)
+        result = await session.execute(
+            select(Service).where(Service.name == name, Service.org_id == org_id)
+        )
+        existing = result.scalar_one()
+        logger.info(
+            "Lost service auto-registration race for '%s' (org_id=%s) — reusing id=%d",
+            name, org_id, existing.id,
+        )
+        return existing.id, existing.org_id
+
     logger.info(
         "Auto-registered service '%s' (id=%d, repo=%s, argocd_app=%s, org_id=%s)",
         name, service.id, repo, argocd_app, org_id,

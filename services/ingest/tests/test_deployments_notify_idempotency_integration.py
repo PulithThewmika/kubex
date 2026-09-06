@@ -51,6 +51,16 @@ def pg():
     conn.autocommit = True
     cur = conn.cursor()
 
+    # A dedicated schema, not the tables' bare names in the default
+    # schema — a second run against the same DORA_TEST_DATABASE_URL (a
+    # persistent, shared Postgres, unlike the disposable testcontainers
+    # path) would otherwise fail with "relation already exists" on a
+    # leftover table from a prior run that didn't get torn down.
+    schema = "test_deployments_notify_idempotency"
+    cur.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
+    cur.execute(f"CREATE SCHEMA {schema}")
+    cur.execute(f"SET search_path TO {schema}")
+
     cur.execute("""
         CREATE TABLE services (
             id SERIAL PRIMARY KEY,
@@ -81,6 +91,7 @@ def pg():
 
     yield conn, service_id
 
+    cur.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
     cur.close()
     conn.close()
     if container:
