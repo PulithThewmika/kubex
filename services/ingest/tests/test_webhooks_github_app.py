@@ -45,6 +45,15 @@ def _workflow_run_app_payload(installation_id=42, action="requested", head_sha="
     }
 
 
+def _deployment_status_payload(installation_id=42, state="success", sha="abc1234567890"):
+    return {
+        "installation": {"id": installation_id},
+        "repository": {"full_name": "acme/orders"},
+        "deployment": {"sha": sha},
+        "deployment_status": {"state": state},
+    }
+
+
 async def _post_app_event(app, payload_dict, event_type, sign_fn):
     payload = json.dumps(payload_dict).encode()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -86,6 +95,92 @@ async def test_installation_created_stores_row_linked_to_org(client, mock_sessio
     assert params["github_installation_id"] == 42
     assert params["account_login"] == "acme"
     assert params["org_id"] == TEST_ORG_ID
+
+
+@pytest.mark.asyncio
+async def test_installation_created_conflict_does_not_clobber_repos_or_status(
+    client, mock_session, sign_github_app_payload,
+):
+    """A redelivered installation.created must not reset repos appended by a
+    later installation_repositories.added, or reactivate an installation a
+    later installation.suspend already turned off — the ON CONFLICT clause
+    must only ever refresh account_login."""
+    executed_statements = []
+    original_execute = mock_session.execute
+
+    async def capture_execute(stmt):
+        executed_statements.append(stmt)
+        return await original_execute(stmt)
+
+    mock_session.execute = capture_execute
+
+    resp = await _post_app_event(
+        client, _installation_created_payload(), "installation", sign_github_app_payload,
+    )
+    assert resp.status_code == 200
+
+    installation_stmts = [s for s in executed_statements if _table_of(s) == "installations"]
+    on_conflict = installation_stmts[0]._post_values_clause
+    updated_columns = {c if isinstance(c, str) else c.name for c, _ in on_conflict.update_values_to_set}
+    assert updated_columns == {"account_login"}
+
+
+@pytest.mark.asyncio
+async def test_installation_created_unknown_account_logs_null_org(client, mock_session, sign_github_app_payload):
+    """An installation.created for an account with no matching organization
+    must still be logged (org_id=NULL — schema allows this since V020) and
+    return ignored, not guess an org."""
+    executed_statements = []
+    original_execute = mock_session.execute
+
+    async def capture_execute(stmt):
+        executed_statements.append(stmt)
+        return await original_execute(stmt)
+
+    async def mock_execute(stmt):
+        executed_statements.append(stmt)
+        result = MagicMock()
+        if _table_of(stmt) == "organizations":
+            result.scalar_one_or_none.return_value = None
+        return result
+
+    mock_session.execute = mock_execute
+
+    resp = await _post_app_event(
+        client, _installation_created_payload(), "installation", sign_github_app_payload,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ignored"
+
+    event_stmts = [s for s in executed_statements if _table_of(s) == "pipeline_events"]
+    assert len(event_stmts) == 1
+    assert event_stmts[0].compile(dialect=postgresql.dialect()).params["org_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_deployment_status_does_not_regress_deployed_to_syncing(client, mock_session, sign_github_app_payload):
+    existing_service = MagicMock(id=5, org_id=TEST_ORG_ID)
+    existing_deployment = MagicMock(id=100, status="deployed")
+
+    async def mock_execute(stmt):
+        table = _table_of(stmt)
+        result = MagicMock()
+        if table == "installations":
+            result.scalar_one_or_none.return_value = TEST_ORG_ID
+        elif table == "services":
+            result.scalars.return_value.all.return_value = [existing_service]
+        elif table == "deployments":
+            result.scalar_one_or_none.return_value = existing_deployment
+        return result
+
+    mock_session.execute = mock_execute
+
+    resp = await _post_app_event(
+        client, _deployment_status_payload(state="in_progress"), "deployment_status", sign_github_app_payload,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ignored"
+    assert existing_deployment.status == "deployed"
 
 
 @pytest.mark.asyncio
