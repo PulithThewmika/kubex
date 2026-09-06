@@ -138,6 +138,12 @@ async def test_api_chat_no_cookie_returns_401(client):
     assert resp.status_code == 401
 
 
+@pytest.mark.asyncio
+async def test_api_grafana_proxy_no_cookie_returns_401(client):
+    resp = await client.get("/api/grafana/proxy", params={"uid": "deploy-timeline", "panelId": 1})
+    assert resp.status_code == 401
+
+
 # ── S10: Expired/tampered JWT → 401 ──────────────────────────────────
 
 
@@ -293,4 +299,16 @@ async def test_switch_org_invalid_org_id_returns_400(client):
 async def test_switch_org_missing_org_id_returns_400(client):
     token = _make_token()
     resp = await client.post("/auth/switch-org", json={}, cookies={"session": token})
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_switch_org_empty_body_returns_400_not_500(client):
+    token = _make_token()
+    resp = await client.post(
+        "/auth/switch-org",
+        content=b"",
+        headers={"Content-Type": "application/json"},
+        cookies={"session": token},
+    )
     assert resp.status_code == 400
