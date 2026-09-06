@@ -15,6 +15,11 @@ type AuthContextValue = {
   user: Me | null
   isAuthenticated: boolean
   isLoading: boolean
+  // True only for a genuine backend failure while fetching /auth/me (e.g. a
+  // 5xx) — distinct from "no data yet" so RequireAuth can show a retry
+  // state instead of redirecting an already-logged-in user to /login just
+  // because the backend hiccuped.
+  isError: boolean
   refetch: () => void
   logout: () => Promise<void>
 }
@@ -23,7 +28,7 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ME_QUERY_KEY,
     queryFn: fetchMe,
     retry: false,
@@ -31,7 +36,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   })
 
   async function logout() {
-    await fetch('/auth/logout', { method: 'POST', credentials: 'include' })
+    const res = await fetch('/auth/logout', { method: 'POST', credentials: 'include' })
+    if (!res.ok) throw new Error(`Failed to log out: ${res.status}`)
     queryClient.setQueryData(ME_QUERY_KEY, null)
   }
 
@@ -39,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user: data ?? null,
     isAuthenticated: !!data,
     isLoading,
+    isError,
     refetch: () => void refetch(),
     logout,
   }
