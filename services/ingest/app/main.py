@@ -86,6 +86,7 @@ app.include_router(api.router)
 app.include_router(chat.router)
 app.include_router(grafana.router)
 app.include_router(settings.router)
+app.include_router(settings.installations_router)
 
 
 @app.get("/healthz")
