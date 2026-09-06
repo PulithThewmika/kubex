@@ -35,7 +35,7 @@ async def grafana_proxy(
     to: str = Query(default="now"),
     theme: str = Query(default="light"),
     _user: UserContext = Depends(get_current_user),
-):
+) -> StreamingResponse:
     """Proxy an embedded Grafana panel (/d-solo/) for the React shell.
 
     The Grafana service account token is injected server-side and never

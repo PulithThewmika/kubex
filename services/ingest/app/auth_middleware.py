@@ -33,7 +33,7 @@ def _decode_session(request: Request) -> UserContext | None:
             user_id=uuid.UUID(claims["user_id"]),
             org_id=uuid.UUID(claims["org_id"]),
         )
-    except (jwt.PyJWTError, KeyError, ValueError):
+    except (jwt.PyJWTError, KeyError, TypeError, ValueError, AttributeError):
         return None
 
 
