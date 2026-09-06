@@ -170,7 +170,12 @@ async def test_deployment_status_does_not_regress_deployed_to_syncing(client, mo
         elif table == "services":
             result.scalars.return_value.all.return_value = [existing_service]
         elif table == "deployments":
-            result.scalar_one_or_none.return_value = existing_deployment
+            if getattr(stmt, "is_update", False):
+                result.scalar_one_or_none.return_value = None  # WHERE excluded the already-terminal row
+            elif stmt.column_descriptions[0]["name"] == "status":
+                result.scalar_one.return_value = existing_deployment.status  # fallback re-query
+            else:
+                result.scalar_one_or_none.return_value = existing_deployment  # correlation SELECT
         return result
 
     mock_session.execute = mock_execute
@@ -199,7 +204,12 @@ async def test_deployment_status_does_not_flip_between_terminal_states(client, m
         elif table == "services":
             result.scalars.return_value.all.return_value = [existing_service]
         elif table == "deployments":
-            result.scalar_one_or_none.return_value = existing_deployment
+            if getattr(stmt, "is_update", False):
+                result.scalar_one_or_none.return_value = None  # WHERE excluded the already-terminal row
+            elif stmt.column_descriptions[0]["name"] == "status":
+                result.scalar_one.return_value = existing_deployment.status  # fallback re-query
+            else:
+                result.scalar_one_or_none.return_value = existing_deployment  # correlation SELECT
         return result
 
     mock_session.execute = mock_execute
@@ -231,7 +241,12 @@ async def test_deployment_status_same_state_redelivery_preserves_finished_at(
         elif table == "services":
             result.scalars.return_value.all.return_value = [existing_service]
         elif table == "deployments":
-            result.scalar_one_or_none.return_value = existing_deployment
+            if getattr(stmt, "is_update", False):
+                result.scalar_one_or_none.return_value = None  # WHERE excluded the already-terminal row
+            elif stmt.column_descriptions[0]["name"] == "status":
+                result.scalar_one.return_value = existing_deployment.status  # fallback re-query
+            else:
+                result.scalar_one_or_none.return_value = existing_deployment  # correlation SELECT
         return result
 
     mock_session.execute = mock_execute
@@ -305,7 +320,7 @@ async def test_deployment_status_orphan_upsert_index_excludes_workflow_run_rows(
 
     deployment_inserts = [
         s for s in executed_statements
-        if _table_of(s) == "deployments" and hasattr(s, "_post_values_clause")
+        if _table_of(s) == "deployments" and getattr(s, "is_insert", False)
     ]
     assert len(deployment_inserts) == 1
     where_sql = str(deployment_inserts[0]._post_values_clause.inferred_target_whereclause)

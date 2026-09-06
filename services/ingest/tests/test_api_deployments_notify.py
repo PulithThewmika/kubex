@@ -88,7 +88,7 @@ async def test_creates_orphan_deployment_and_logs_pipeline_event(api_key_client,
 
     deployment_inserts = [
         s for s in executed_statements
-        if _table_of(s) == "deployments" and hasattr(s, "_post_values_clause")
+        if _table_of(s) == "deployments" and getattr(s, "is_insert", False)
     ]
     assert len(deployment_inserts) == 1
     assert deployment_inserts[0]._post_values_clause is not None
@@ -120,7 +120,10 @@ async def test_duplicate_commit_sha_updates_existing_row_not_a_new_one(api_key_c
         if table == "services":
             result.scalars.return_value.all.return_value = [existing_service]
         elif table == "deployments":
-            result.scalar_one_or_none.return_value = existing_deployment
+            if getattr(stmt, "is_update", False):
+                result.scalar_one_or_none.return_value = "deployed"  # non-terminal -> applied
+            else:
+                result.scalar_one_or_none.return_value = existing_deployment  # correlation SELECT
         return result
 
     mock_session.execute = mock_execute
@@ -132,13 +135,13 @@ async def test_duplicate_commit_sha_updates_existing_row_not_a_new_one(api_key_c
     assert data["deployment_id"] == 100
     assert data["deployment_status"] == "deployed"
 
-    # No second Deployment row was inserted — only the correlation SELECT ran.
+    # No second Deployment row was inserted — only the correlation SELECT
+    # and the guarded UPDATE ran.
     deployment_inserts = [
         s for s in executed_statements
-        if _table_of(s) == "deployments" and hasattr(s, "_post_values_clause")
+        if _table_of(s) == "deployments" and getattr(s, "is_insert", False)
     ]
     assert deployment_inserts == []
-    assert existing_deployment.status == "deployed"
 
 
 @pytest.mark.asyncio
@@ -152,15 +155,21 @@ async def test_terminal_state_not_regressed(api_key_client, mock_session):
         if table == "services":
             result.scalars.return_value.all.return_value = [existing_service]
         elif table == "deployments":
-            result.scalar_one_or_none.return_value = existing_deployment
+            if getattr(stmt, "is_update", False):
+                result.scalar_one_or_none.return_value = None  # WHERE excluded the already-terminal row
+            elif stmt.column_descriptions[0]["name"] == "status":
+                result.scalar_one.return_value = existing_deployment.status  # fallback re-query
+            else:
+                result.scalar_one_or_none.return_value = existing_deployment  # correlation SELECT
         return result
 
     mock_session.execute = mock_execute
 
     resp = await _post_notify(api_key_client, _notify_body(status="in_progress"))
     assert resp.status_code == 200
-    assert resp.json()["status"] == "ignored"
-    assert existing_deployment.status == "deployed"
+    data = resp.json()
+    assert data["status"] == "ignored"
+    assert data["deployment_status"] == "deployed"
 
 
 @pytest.mark.asyncio

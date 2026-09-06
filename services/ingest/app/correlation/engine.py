@@ -3,7 +3,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import case, select
+from sqlalchemy import case, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,15 +25,34 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def apply_terminal_guarded_status(existing: Deployment, new_status: str) -> bool:
-    """Update `existing`'s status (and finished_at, if newly terminal)
-    unless it's already terminal. Returns False if skipped as stale."""
-    if existing.status in TERMINAL_STATUSES:
-        return False
-    existing.status = new_status
+async def apply_terminal_guarded_status(
+    session: AsyncSession, deployment_id: int, new_status: str,
+) -> tuple[bool, str]:
+    """Transition a deployment's status via a WHERE-guarded UPDATE ...
+    RETURNING, rather than mutating an already-loaded ORM object in
+    place. Mutating in place and committing would issue an unconditional
+    UPDATE that can overwrite a status a *concurrent* transaction already
+    committed to terminal between this request's correlating SELECT and
+    this call (/code-review high on PR #796 fixed the same class of race
+    for the ON CONFLICT path via SQL CASE; this closes it for the
+    existing-row path too). Returns (applied, persisted_status) — when
+    not applied, persisted_status is the real current value, re-queried,
+    for accurate logging/response reporting."""
+    values = {"status": new_status}
     if new_status in TERMINAL_STATUSES:
-        existing.finished_at = utcnow()
-    return True
+        values["finished_at"] = utcnow()
+    stmt = (
+        update(Deployment)
+        .where(Deployment.id == deployment_id, Deployment.status.not_in(TERMINAL_STATUSES))
+        .values(**values)
+        .returning(Deployment.status)
+    )
+    persisted = (await session.execute(stmt)).scalar_one_or_none()
+    if persisted is not None:
+        return True, persisted
+
+    result = await session.execute(select(Deployment.status).where(Deployment.id == deployment_id))
+    return False, result.scalar_one()
 
 
 def terminal_guarded_upsert_set(new_status: str, extra: dict | None = None) -> dict:
