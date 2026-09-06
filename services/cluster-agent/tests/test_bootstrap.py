@@ -8,7 +8,7 @@ from cluster_agent import bootstrap, ingest_client
 
 
 @pytest.mark.asyncio
-async def test_verify_identity_returns_verified_cluster():
+async def test_verify_identity_returns_verified_cluster() -> None:
     identity = {"id": "c1", "name": "my-cluster", "org_id": "o1"}
     with (
         patch("cluster_agent.bootstrap.validate", lambda: None),
@@ -19,7 +19,7 @@ async def test_verify_identity_returns_verified_cluster():
 
 
 @pytest.mark.asyncio
-async def test_verify_identity_propagates_auth_error():
+async def test_verify_identity_propagates_auth_error() -> None:
     with (
         patch("cluster_agent.bootstrap.validate", lambda: None),
         patch("cluster_agent.ingest_client.verify", AsyncMock(side_effect=ingest_client.AuthError("bad token"))),

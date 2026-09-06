@@ -10,35 +10,35 @@ from cluster_agent import k8s, prometheus
 
 
 @pytest.mark.asyncio
-async def test_discover_not_found():
+async def test_discover_not_found() -> None:
     with patch("cluster_agent.k8s.find_prometheus", AsyncMock(return_value=None)):
         result = await prometheus.discover()
     assert result == {"status": "not_found", "namespace": None, "service_name": None}
 
 
 @pytest.mark.asyncio
-async def test_discover_found():
+async def test_discover_found() -> None:
     with patch("cluster_agent.k8s.find_prometheus", AsyncMock(return_value=("monitoring", "prometheus-operated"))):
         result = await prometheus.discover()
     assert result == {"status": "found", "namespace": "monitoring", "service_name": "prometheus-operated"}
 
 
 @pytest.mark.asyncio
-async def test_discover_rbac_denied():
+async def test_discover_rbac_denied() -> None:
     with patch("cluster_agent.k8s.find_prometheus", AsyncMock(side_effect=k8s.RBACDeniedError("nope"))):
         result = await prometheus.discover()
     assert result["status"] == "rbac_denied"
 
 
 @pytest.mark.asyncio
-async def test_discover_reports_error_on_non_rbac_k8s_failure():
+async def test_discover_reports_error_on_non_rbac_k8s_failure() -> None:
     with patch("cluster_agent.k8s.find_prometheus", AsyncMock(side_effect=RuntimeError("500 from apiserver"))):
         result = await prometheus.discover()
     assert result["status"] == "error"
 
 
 @pytest.mark.asyncio
-async def test_client_for_closes_previous_client_on_url_change():
+async def test_client_for_closes_previous_client_on_url_change() -> None:
     # Bug found in review, E22-T3: switching base URLs used to replace
     # _client without closing the old one, leaking its connection pool.
     first = prometheus._client_for("http://prom-a.test")
@@ -49,14 +49,14 @@ async def test_client_for_closes_previous_client_on_url_change():
     await prometheus.close_client()
 
 
-def test_in_cluster_url():
+def test_in_cluster_url() -> None:
     assert prometheus.in_cluster_url("monitoring", "prometheus-operated") == (
         "http://prometheus-operated.monitoring.svc.cluster.local:9090"
     )
 
 
 @pytest.mark.asyncio
-async def test_query_returns_raw_response_json():
+async def test_query_returns_raw_response_json() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.params["query"] == "up"
         assert request.url.params["timeout"] == prometheus.PROM_QUERY_TIMEOUT
@@ -70,7 +70,7 @@ async def test_query_returns_raw_response_json():
 
 
 @pytest.mark.asyncio
-async def test_query_rejects_oversized_promql_without_hitting_prometheus():
+async def test_query_rejects_oversized_promql_without_hitting_prometheus() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise AssertionError("should never reach Prometheus")
 

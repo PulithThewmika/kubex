@@ -25,6 +25,8 @@ from __future__ import annotations
 import base64
 import logging
 
+from kubernetes import client
+
 from . import k8s
 from .config import DEPLOYLENS_ENDPOINT, CLUSTER_TOKEN
 
@@ -102,7 +104,7 @@ def desired_notifications_data() -> dict[str, str]:
     return data
 
 
-def _decode_secret_data(secret) -> dict[str, str]:
+def _decode_secret_data(secret: client.V1Secret | None) -> dict[str, str]:
     if secret is None or secret.data is None:
         return {}
     return {k: base64.b64decode(v).decode() for k, v in secret.data.items()}
