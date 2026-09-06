@@ -17,7 +17,6 @@ test_dora_integration.py / test_deployments_notify_idempotency_integration.py:
 
 from __future__ import annotations
 
-import asyncio
 import os
 import uuid
 
@@ -105,7 +104,17 @@ def pg():
 
 
 @pytest.mark.asyncio
-async def test_concurrent_first_time_registration_does_not_crash(pg):
+async def test_concurrent_first_time_registration_does_not_crash(pg, caplog):
+    """asyncio.gather() alone doesn't reliably reproduce this race — the
+    SELECT-then-INSERT window inside resolve_service is too fast for two
+    real asyncpg round trips to reliably interleave, even behind a
+    barrier that only synchronizes the *start* of each call (verified:
+    it doesn't in practice). So drive the race deterministically instead:
+    intercept session A's first statement (the pre-insert name lookup)
+    and, before returning control to resolve_service, have session B run
+    and commit a full competing registration on a separate connection.
+    By the time session A reaches its own INSERT, B's row already exists,
+    forcing the exact IntegrityError recovery path for real."""
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     from app.correlation.engine import resolve_service
@@ -118,13 +127,34 @@ async def test_concurrent_first_time_registration_does_not_crash(pg):
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     org_id = uuid.uuid4()
 
-    async def register():
-        async with session_factory() as session:
-            service_id, resolved_org_id = await resolve_service(session, org_id=org_id, name="orders")
-            await session.commit()
-            return service_id, resolved_org_id
+    winner_id = None
 
-    results = await asyncio.gather(register(), register(), register())
+    async with session_factory() as session_a:
+        original_execute = session_a.execute
+        injected = False
+
+        async def execute_with_injected_race(stmt, *args, **kwargs):
+            nonlocal injected, winner_id
+            result = await original_execute(stmt, *args, **kwargs)
+            if not injected:
+                injected = True
+                async with session_factory() as session_b:
+                    winner_id, _ = await resolve_service(session_b, org_id=org_id, name="orders")
+                    await session_b.commit()
+            return result
+
+        session_a.execute = execute_with_injected_race
+
+        with caplog.at_level("INFO", logger="kubex.correlation"):
+            service_id_a, org_id_a = await resolve_service(session_a, org_id=org_id, name="orders")
+            await session_a.commit()
+
+    assert injected, "expected session A's first execute() to trigger the injected competing registration"
+    assert any("Lost service auto-registration race" in r.message for r in caplog.records), (
+        "expected session A to take the IntegrityError recovery path, not just get lucky"
+    )
+    assert service_id_a == winner_id
+    assert org_id_a == org_id
 
     async with session_factory() as session:
         from sqlalchemy import text
@@ -132,7 +162,4 @@ async def test_concurrent_first_time_registration_does_not_crash(pg):
 
     await engine.dispose()
 
-    # Every caller must agree on the same row — no crash, no duplicates.
-    service_ids = {r[0] for r in results}
-    assert len(service_ids) == 1
     assert count == 1
