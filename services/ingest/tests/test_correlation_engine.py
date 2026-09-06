@@ -65,7 +65,7 @@ class TestResolveService:
         session = AsyncMock()
         session.execute = AsyncMock(return_value=mock_result)
 
-        service_id, resolved_org_id = await resolve_service(session, repo="PulithThewmika/kubex")
+        service_id, resolved_org_id = await resolve_service(session, org_id=org_id, repo="PulithThewmika/kubex")
         assert service_id == 42
         assert resolved_org_id == org_id
 
@@ -79,7 +79,7 @@ class TestResolveService:
         session = AsyncMock()
         session.execute = AsyncMock(return_value=mock_result)
 
-        service_id, resolved_org_id = await resolve_service(session, argocd_app="sample-app")
+        service_id, resolved_org_id = await resolve_service(session, org_id=org_id, argocd_app="sample-app")
         assert service_id == 31
         assert resolved_org_id == org_id
 
@@ -97,21 +97,20 @@ class TestResolveService:
         session = AsyncMock()
         session.execute = AsyncMock(return_value=mock_result)
 
-        service_id, org_id = await resolve_service(session, repo="PulithThewmika/deploylens-sample-app")
+        service_id, org_id = await resolve_service(
+            session, org_id=older.org_id, repo="PulithThewmika/deploylens-sample-app"
+        )
         assert service_id == 31
         assert org_id == older.org_id
 
     @pytest.mark.asyncio
-    async def test_auto_registers_unknown_service_with_default_org(self):
-        default_org_id = uuid.uuid4()
+    async def test_auto_registers_unknown_service_with_given_org_id(self):
+        given_org_id = uuid.uuid4()
 
         async def mock_execute(stmt):
             result = MagicMock()
-            if "organizations" in str(stmt):
-                result.scalar_one_or_none.return_value = default_org_id
-            else:
-                result.scalars.return_value.all.return_value = []
-                result.scalar_one_or_none.return_value = None
+            result.scalars.return_value.all.return_value = []
+            result.scalar_one_or_none.return_value = None
             return result
 
         session = AsyncMock()
@@ -119,12 +118,12 @@ class TestResolveService:
         session.flush = AsyncMock()
         session.add = MagicMock()
 
-        service_id, org_id = await resolve_service(session, repo="org/new-service")
+        service_id, org_id = await resolve_service(session, org_id=given_org_id, repo="org/new-service")
         session.add.assert_called_once()
         session.flush.assert_called_once()
-        assert org_id == default_org_id
+        assert org_id == given_org_id
         added_service = session.add.call_args_list[0][0][0]
-        assert added_service.org_id == default_org_id
+        assert added_service.org_id == given_org_id
 
     @pytest.mark.asyncio
     async def test_links_repo_to_existing_service_by_name(self):
@@ -145,10 +144,46 @@ class TestResolveService:
         session.execute = mock_execute
         session.flush = AsyncMock()
 
-        service_id, org_id = await resolve_service(session, repo="org/myapp")
+        service_id, org_id = await resolve_service(session, org_id=existing.org_id, repo="org/myapp")
         assert service_id == 10
         assert org_id == existing.org_id
         assert existing.repo == "org/myapp"
+
+    @pytest.mark.asyncio
+    async def test_name_fallback_does_not_cross_org(self):
+        """Regression test for #792: two orgs deriving the same `name` from
+        different repos must not collide — the name-fallback lookup has to
+        be scoped to the caller's org_id, not global, or it would match
+        (and mis-attribute to) another org's row."""
+        org_a = uuid.uuid4()
+        org_b = uuid.uuid4()
+        captured_stmts = []
+
+        async def mock_execute(stmt):
+            captured_stmts.append(stmt)
+            result = MagicMock()
+            result.scalars.return_value.all.return_value = []
+            result.scalar_one_or_none.return_value = None
+            return result
+
+        session = AsyncMock()
+        session.execute = mock_execute
+        session.flush = AsyncMock()
+        session.add = MagicMock()
+
+        # org A registers "payments" via its own repo.
+        await resolve_service(session, org_id=org_a, repo="org-a/payments")
+
+        # org B derives the same `name` from a different repo — the repo
+        # lookup won't match (different repo string), so it falls through
+        # to the name lookup, which must be scoped to org_b.
+        await resolve_service(session, org_id=org_b, repo="org-b/payments")
+
+        where_clauses = [str(s.whereclause) for s in captured_stmts]
+        name_lookup_clauses = [w for w in where_clauses if "repo" not in w.lower()]
+        assert name_lookup_clauses, "expected a name-only lookup query"
+        for clause in name_lookup_clauses:
+            assert "org_id" in clause, "name fallback lookup must be scoped by org_id"
 
     @pytest.mark.asyncio
     async def test_repo_and_argocd_app_mismatch_creates_separate_rows(self):
@@ -158,11 +193,8 @@ class TestResolveService:
 
         async def mock_execute(stmt):
             result = MagicMock()
-            if "organizations" in str(stmt):
-                result.scalar_one_or_none.return_value = default_org_id
-            else:
-                result.scalars.return_value.all.return_value = []
-                result.scalar_one_or_none.return_value = None
+            result.scalars.return_value.all.return_value = []
+            result.scalar_one_or_none.return_value = None
             return result
 
         session = AsyncMock()
@@ -170,12 +202,12 @@ class TestResolveService:
         session.flush = AsyncMock()
         session.add = MagicMock()
 
-        await resolve_service(session, repo="PulithThewmika/kubex")
+        await resolve_service(session, org_id=default_org_id, repo="PulithThewmika/kubex")
         added_service_1 = session.add.call_args_list[0][0][0]
         assert added_service_1.name == "kubex"
 
         session.add.reset_mock()
-        await resolve_service(session, argocd_app="sample-app")
+        await resolve_service(session, org_id=default_org_id, argocd_app="sample-app")
         added_service_2 = session.add.call_args_list[0][0][0]
         assert added_service_2.name == "sample-app"
 
