@@ -671,10 +671,10 @@ async def notify_deployment(
         )
     )
 
-    new_status = DEPLOYMENT_STATE_MAP.get(body.status)
-    if new_status is None:
-        await session.commit()
-        return DeploymentNotifyResponse(status="ignored", correlation="none")
+    # DEPLOYMENT_STATE_MAP covers every value DeploymentNotifyRequest's
+    # Literal["pending", "in_progress", "success", "failure", "error"]
+    # allows, so this is a plain lookup, not a fallible one.
+    new_status = DEPLOYMENT_STATE_MAP[body.status]
 
     service_id, org_id = await resolve_service(session, org_id=org_id, name=body.service)
     image_tag = body.image_tag or extract_image_tag(body.commit_sha)
