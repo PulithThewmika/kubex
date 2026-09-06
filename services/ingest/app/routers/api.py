@@ -456,11 +456,11 @@ async def list_alerts(
     active: bool | None = Query(None, description="Filter active alerts (resolved_at IS NULL)"),
     service: str | None = Query(None, description="Filter by service name"),
     session: AsyncSession = Depends(get_session),
-    _user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(get_current_user),
 ):
     """List alerts with optional active/service filters."""
-    conditions = []
-    params: dict = {}
+    conditions = ["a.org_id = :org_id"]
+    params: dict = {"org_id": user.org_id}
 
     if active is True:
         conditions.append("a.resolved_at IS NULL")
@@ -471,9 +471,7 @@ async def list_alerts(
         conditions.append("s.name = :service")
         params["service"] = service
 
-    where_clause = ""
-    if conditions:
-        where_clause = "WHERE " + " AND ".join(conditions)
+    where_clause = "WHERE " + " AND ".join(conditions)
 
     result = await session.execute(
         text(f"""
