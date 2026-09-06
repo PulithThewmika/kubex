@@ -64,17 +64,22 @@ def build_install_manifest(token: str, endpoint: str) -> str:
         "rules": [
             # ponytail: configmaps access is cluster-wide rather than
             # scoped to the argocd namespace as the issue names — scoping
-            # it would need a namespaced Role+RoleBinding in addition to
-            # this ClusterRole, which #658's fixed resource list doesn't
-            # include. Tighten with a Role/RoleBinding pair if that gap
-            # matters before this ships to real clusters.
-            # "watch" dropped (security review, E22-T3): the agent only
-            # ever get/patches this ConfigMap, it never watches it. "create"
-            # added (bug found in review, E22-T3): a fresh ArgoCD install
-            # may not ship argocd-notifications-cm yet, and PATCH 404s on a
-            # ConfigMap that doesn't exist. This grant is already
-            # cluster-wide/unscoped (see the ponytail note above), so
-            # adding create doesn't change that existing blast radius.
+            # it needs a namespaced Role+RoleBinding the agent provisions
+            # itself once it discovers the ArgoCD namespace at runtime
+            # (the namespace isn't known yet when this manifest is
+            # generated, so it can't be baked in upfront). "watch" dropped
+            # (security review, E22-T3): the agent only ever get/patches
+            # this ConfigMap. "create" added (bug found in review,
+            # E22-T3): a fresh ArgoCD install may not ship
+            # argocd-notifications-cm yet, and PATCH 404s on a ConfigMap
+            # that doesn't exist. Flagged, not silently accepted: "create"
+            # is a genuine (if incremental) widening of an already-broad
+            # grant — it lets a compromised agent Pod create new
+            # ConfigMaps anywhere, not just modify existing ones. Track
+            # the namespaced Role/RoleBinding fix as its own follow-up
+            # task rather than attempting it here — it needs the agent to
+            # also safely create Roles/RoleBindings, which is its own
+            # privilege-escalation-adjacent design question.
             {"apiGroups": [""], "resources": ["configmaps"], "verbs": ["get", "list", "create", "patch"]},
             # "endpoints" dropped (security review, E22-T3): unused by any
             # agent code path — Prometheus discovery only lists Services.

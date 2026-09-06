@@ -7,7 +7,7 @@ import pytest
 from cluster_agent import config
 
 
-def test_validate_rejects_http_endpoint_by_default():
+def test_validate_rejects_http_endpoint_by_default() -> None:
     with (
         patch.object(config, "CLUSTER_TOKEN", "kbx_test"),
         patch.object(config, "DEPLOYLENS_ENDPOINT", "http://ingest.example.com"),
@@ -17,7 +17,7 @@ def test_validate_rejects_http_endpoint_by_default():
             config.validate()
 
 
-def test_validate_allows_http_endpoint_with_escape_hatch():
+def test_validate_allows_http_endpoint_with_escape_hatch() -> None:
     with (
         patch.object(config, "CLUSTER_TOKEN", "kbx_test"),
         patch.object(config, "DEPLOYLENS_ENDPOINT", "http://host.docker.internal:8000"),
@@ -26,7 +26,7 @@ def test_validate_allows_http_endpoint_with_escape_hatch():
         config.validate()  # must not raise
 
 
-def test_validate_accepts_https_endpoint():
+def test_validate_accepts_https_endpoint() -> None:
     with (
         patch.object(config, "CLUSTER_TOKEN", "kbx_test"),
         patch.object(config, "DEPLOYLENS_ENDPOINT", "https://ingest.example.com"),
