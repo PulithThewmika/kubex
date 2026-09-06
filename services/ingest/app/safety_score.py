@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import uuid
 from datetime import datetime
 
 import httpx
@@ -34,7 +35,7 @@ CLUSTER_CPU_THRESHOLD_PCT = 75.0
 CLUSTER_MEM_THRESHOLD_PCT = 80.0
 
 
-async def _query_cfr_30d(session: AsyncSession, service_name: str, org_id) -> float | None:
+async def _query_cfr_30d(session: AsyncSession, service_name: str, org_id: uuid.UUID) -> float | None:
     result = await session.execute(
         text("""
             SELECT ROUND(
