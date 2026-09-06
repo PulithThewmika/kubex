@@ -237,7 +237,7 @@ def _build_health_evidence(row) -> list[HealthEvidenceItem]:
 async def get_deployment_detail(
     deploy_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(get_current_user),
 ):
     """Get full deployment detail with timeline and health evidence."""
     result = await session.execute(
@@ -258,9 +258,9 @@ async def get_deployment_detail(
             FROM deployments d
             JOIN services s ON s.id = d.service_id
             LEFT JOIN health_assessments ha ON ha.deployment_id = d.id
-            WHERE d.id = :deploy_id
+            WHERE d.id = :deploy_id AND d.org_id = :org_id
         """),
-        {"deploy_id": deploy_id},
+        {"deploy_id": deploy_id, "org_id": user.org_id},
     )
     row = result.fetchone()
     if row is None:
@@ -320,7 +320,7 @@ async def get_deployment_detail(
 async def get_deployment_health(
     deploy_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(get_current_user),
 ):
     """Get health assessment for a deployment with evidence array."""
     result = await session.execute(
@@ -332,9 +332,9 @@ async def get_deployment_health(
                    ha.restarts_base, ha.restarts_post
             FROM deployments d
             LEFT JOIN health_assessments ha ON ha.deployment_id = d.id
-            WHERE d.id = :deploy_id
+            WHERE d.id = :deploy_id AND d.org_id = :org_id
         """),
-        {"deploy_id": deploy_id},
+        {"deploy_id": deploy_id, "org_id": user.org_id},
     )
     row = result.fetchone()
     if row is None:
