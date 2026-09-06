@@ -11,6 +11,7 @@ import bcrypt
 import pytest
 from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.exc import IntegrityError
 
 from app.auth import verify_cluster_token
 from app.models.cluster import Cluster
@@ -88,9 +89,7 @@ async def test_create_cluster_requires_session(client: FastAPI) -> None:
     assert resp.status_code == 401
 
 
-def _integrity_error(sqlstate: str | None) -> "IntegrityError":
-    from sqlalchemy.exc import IntegrityError
-
+def _integrity_error(sqlstate: str | None) -> IntegrityError:
     orig = Exception("db error")
     orig.sqlstate = sqlstate
     return IntegrityError("stmt", {}, orig)
@@ -115,8 +114,6 @@ async def test_create_cluster_reraises_non_duplicate_integrity_error(client: Fas
     be mislabeled as a name collision. ASGITransport re-raises unhandled
     app exceptions to the caller by default, so the un-mapped IntegrityError
     surfaces here rather than as a response."""
-    from sqlalchemy.exc import IntegrityError
-
     mock_session.execute = AsyncMock(side_effect=_integrity_error("23503"))  # foreign_key_violation
     mock_session.rollback = AsyncMock()
 
