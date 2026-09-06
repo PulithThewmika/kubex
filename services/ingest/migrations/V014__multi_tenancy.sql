@@ -65,6 +65,12 @@ BEGIN
     ALTER TABLE alerts ALTER COLUMN org_id SET NOT NULL;
     ALTER TABLE pipeline_events ALTER COLUMN org_id SET NOT NULL;
 
+    -- ── indexes ─────────────────────────────────────────────────────────────
+    CREATE INDEX IF NOT EXISTS idx_services_org ON services (org_id);
+    CREATE INDEX IF NOT EXISTS idx_deployments_org ON deployments (org_id);
+    CREATE INDEX IF NOT EXISTS idx_alerts_org ON alerts (org_id);
+    CREATE INDEX IF NOT EXISTS idx_pipeline_events_org ON pipeline_events (org_id);
+
     INSERT INTO schema_versions (version, description)
     VALUES ('V014', 'Multi-tenancy: org_id on services, deployments, alerts, pipeline_events');
 END $$;
