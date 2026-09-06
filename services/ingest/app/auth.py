@@ -17,6 +17,7 @@ from .models.api_key import ApiKey
 logger = logging.getLogger("kubex.ingest.auth")
 
 GITHUB_WEBHOOK_SECRET = os.environ.get("GITHUB_WEBHOOK_SECRET", "")
+GITHUB_APP_WEBHOOK_SECRET = os.environ.get("GITHUB_APP_WEBHOOK_SECRET", "")
 ARGOCD_WEBHOOK_TOKEN = os.environ.get("ARGOCD_WEBHOOK_TOKEN", "")
 ALERTMANAGER_WEBHOOK_TOKEN = os.environ.get("ALERTMANAGER_WEBHOOK_TOKEN", "")
 GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
@@ -32,6 +33,8 @@ def validate_auth_tokens() -> None:
     missing = []
     if not GITHUB_WEBHOOK_SECRET:
         missing.append("GITHUB_WEBHOOK_SECRET")
+    if not GITHUB_APP_WEBHOOK_SECRET:
+        missing.append("GITHUB_APP_WEBHOOK_SECRET")
     if not ARGOCD_WEBHOOK_TOKEN:
         missing.append("ARGOCD_WEBHOOK_TOKEN")
     if not ALERTMANAGER_WEBHOOK_TOKEN:
@@ -49,20 +52,26 @@ def validate_auth_tokens() -> None:
         )
 
 
-async def verify_github_signature(request: Request):
+async def _verify_hmac_signature(request: Request, secret: str) -> bytes:
     signature_header = request.headers.get("X-Hub-Signature-256")
     if not signature_header:
         raise HTTPException(status_code=401, detail="Missing X-Hub-Signature-256 header")
 
     body = await request.body()
-    expected = "sha256=" + hmac.new(
-        GITHUB_WEBHOOK_SECRET.encode(), body, hashlib.sha256
-    ).hexdigest()
+    expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 
     if not hmac.compare_digest(expected, signature_header):
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
     return body
+
+
+async def verify_github_signature(request: Request) -> bytes:
+    return await _verify_hmac_signature(request, GITHUB_WEBHOOK_SECRET)
+
+
+async def verify_github_app_signature(request: Request) -> bytes:
+    return await _verify_hmac_signature(request, GITHUB_APP_WEBHOOK_SECRET)
 
 
 async def verify_argocd_token(authorization: str | None = Header(default=None)):
