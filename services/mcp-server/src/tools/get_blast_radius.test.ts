@@ -119,6 +119,26 @@ describe("getBlastRadius", () => {
     expect(parsed.summary).toBe("payments has no discovered downstream dependencies");
   });
 
+  it("scopes both the source-match and edge queries to the given org_id", async () => {
+    mockedQueryOne.mockResolvedValueOnce({
+      id: 31,
+      name: "sample-app",
+      prom_components: ["orders"],
+      matched_by_name: false,
+    });
+    mockedQuery.mockResolvedValueOnce([]);
+
+    await getBlastRadius({ service: "orders" }, "org-a");
+
+    const [matchSql, matchParams] = mockedQueryOne.mock.calls[0];
+    expect(matchSql).toContain("org_id = $2");
+    expect(matchParams).toEqual(["orders", "org-a"]);
+
+    const [edgeSql, edgeParams] = mockedQuery.mock.calls[0];
+    expect(edgeSql).toContain("s2.org_id = $3");
+    expect(edgeParams).toEqual([31, ["orders"], "org-a"]);
+  });
+
   it("prefers an exact services.name match over a prom_components collision, deterministically", async () => {
     // matched_by_name comes straight from the query/ORDER BY, so the tool
     // doesn't need to re-derive which column matched — this just checks

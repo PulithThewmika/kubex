@@ -55,6 +55,16 @@ describe("getSafetyScore", () => {
     });
   });
 
+  it("scopes the query to the given org_id", async () => {
+    mockedQueryOne.mockResolvedValue(makeRow());
+
+    await getSafetyScore({ deployment_id: 5 }, "org-a");
+
+    const [sql, params] = mockedQueryOne.mock.calls[0];
+    expect(sql).toContain("s.org_id = $2");
+    expect(params).toEqual([5, "org-a"]);
+  });
+
   it("returns an informational message with current status when no safety score exists", async () => {
     mockedQueryOne.mockResolvedValue(
       makeRow({ score: null, risk_factors: null, computed_at: null, deploy_status: "deployed" }),

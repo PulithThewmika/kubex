@@ -94,6 +94,20 @@ describe("compareDeploys", () => {
     expect(parsed.summary).toContain("have not finished yet");
   });
 
+  it("scopes the query to the given org_id", async () => {
+    mockedQuery.mockResolvedValue([
+      makeRow({ id: 1, health_score: 92, health_verdict: "healthy" }),
+      makeRow({ id: 2, health_score: 60, health_verdict: "degraded" }),
+    ]);
+    mockedInstantQuery.mockResolvedValue([]);
+
+    await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 }, "org-a");
+
+    const [sql, params] = mockedQuery.mock.calls[0];
+    expect(sql).toContain("s.org_id = $3");
+    expect(params).toEqual([1, 2, "org-a"]);
+  });
+
   it("returns comparison with a Prometheus-unreachable warning and adapted summary", async () => {
     mockedQuery.mockResolvedValue([
       makeRow({ id: 1, health_score: 92, health_verdict: "healthy" }),
