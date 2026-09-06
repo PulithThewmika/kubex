@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger("kubex.api")
 
 from ..auth import verify_alertmanager_token
+from ..auth_middleware import UserContext, get_current_user
 from ..db import get_session
 from ..schemas.responses import (
     ServiceWithStatusResponse,
@@ -31,7 +32,7 @@ router = APIRouter(prefix="/api", tags=["api"])
 
 
 @router.get("/services", response_model=list[ServiceWithStatusResponse])
-async def list_services(session: AsyncSession = Depends(get_session)):
+async def list_services(session: AsyncSession = Depends(get_session), _user: UserContext = Depends(get_current_user)):
     """List all services with latest deployment, health, and active alert count."""
     result = await session.execute(
         text("""
@@ -110,6 +111,7 @@ async def list_deployments(
     status: str | None = Query(None, description="Filter by deployment status"),
     limit: int = Query(10, ge=1, le=50, description="Max results (default 10, max 50)"),
     session: AsyncSession = Depends(get_session),
+    _user: UserContext = Depends(get_current_user),
 ):
     """List deployments with optional service/status filters."""
     conditions = []
@@ -235,6 +237,7 @@ def _build_health_evidence(row) -> list[HealthEvidenceItem]:
 async def get_deployment_detail(
     deploy_id: int,
     session: AsyncSession = Depends(get_session),
+    _user: UserContext = Depends(get_current_user),
 ):
     """Get full deployment detail with timeline and health evidence."""
     result = await session.execute(
@@ -317,6 +320,7 @@ async def get_deployment_detail(
 async def get_deployment_health(
     deploy_id: int,
     session: AsyncSession = Depends(get_session),
+    _user: UserContext = Depends(get_current_user),
 ):
     """Get health assessment for a deployment with evidence array."""
     result = await session.execute(
@@ -360,6 +364,7 @@ async def get_dora_metrics(
     service: str | None = Query(None, description="Service name (omit for platform-wide)"),
     period: str = Query("30d", description="Period: 7d, 30d, or 90d"),
     session: AsyncSession = Depends(get_session),
+    _user: UserContext = Depends(get_current_user),
 ):
     """Return all four DORA metrics for a service and period."""
     days = _PERIOD_DAYS.get(period, 30)
@@ -436,6 +441,7 @@ async def list_alerts(
     active: bool | None = Query(None, description="Filter active alerts (resolved_at IS NULL)"),
     service: str | None = Query(None, description="Filter by service name"),
     session: AsyncSession = Depends(get_session),
+    _user: UserContext = Depends(get_current_user),
 ):
     """List alerts with optional active/service filters."""
     conditions = []
@@ -489,6 +495,7 @@ async def compare_deployments(
     a: int = Query(..., description="First deployment ID"),
     b: int = Query(..., description="Second deployment ID"),
     session: AsyncSession = Depends(get_session),
+    _user: UserContext = Depends(get_current_user),
 ):
     """Compare two deployments side-by-side with live PromQL metrics."""
     from ..promql import fetch_metrics_at, OBSERVATION_WINDOW
