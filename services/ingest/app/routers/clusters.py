@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,7 @@ from ..schemas.cluster import (
     ClusterHeartbeatRequest,
     ClusterHeartbeatResponse,
     ClusterQueryResponse,
+    ClusterQueryResultRequest,
     ClusterResponse,
     ClusterVerifyResponse,
 )
@@ -138,3 +139,28 @@ async def list_pending_queries(
         .order_by(ClusterQuery.requested_at)
     )
     return [ClusterQueryResponse(id=str(q.id), promql=q.promql) for q in result.scalars().all()]
+
+
+@router.post("/{cluster_id}/results", status_code=204, response_model=None)
+async def submit_query_result(
+    cluster_id: str,
+    body: ClusterQueryResultRequest,
+    cluster: Cluster = Depends(verify_cluster_token),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    _require_own_cluster(cluster_id, cluster)
+
+    try:
+        query_uuid = uuid.UUID(body.query_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid query id") from None
+
+    stmt = (
+        update(ClusterQuery)
+        .where(ClusterQuery.id == query_uuid, ClusterQuery.cluster_id == cluster.id)
+        .values(status="completed", result=body.result, completed_at=datetime.now(timezone.utc))
+    )
+    result = await session.execute(stmt)
+    await session.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Query not found for this cluster")
