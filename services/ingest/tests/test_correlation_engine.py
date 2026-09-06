@@ -1,5 +1,6 @@
 """Tests for the correlation engine — pure functions and async DB logic."""
 
+import uuid
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
@@ -8,6 +9,8 @@ from app.correlation.engine import (
     extract_image_tag,
     parse_iso_timestamp,
     resolve_service,
+    resolve_org_id,
+    get_default_org_id,
     find_matching_deployment,
 )
 
@@ -54,27 +57,31 @@ class TestParseIsoTimestamp:
 class TestResolveService:
     @pytest.mark.asyncio
     async def test_finds_by_repo(self):
-        mock_service = MagicMock(id=42)
+        org_id = uuid.uuid4()
+        mock_service = MagicMock(id=42, org_id=org_id)
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = [mock_service]
 
         session = AsyncMock()
         session.execute = AsyncMock(return_value=mock_result)
 
-        service_id = await resolve_service(session, repo="PulithThewmika/kubex")
+        service_id, resolved_org_id = await resolve_service(session, repo="PulithThewmika/kubex")
         assert service_id == 42
+        assert resolved_org_id == org_id
 
     @pytest.mark.asyncio
     async def test_finds_by_argocd_app(self):
-        mock_service = MagicMock(id=31)
+        org_id = uuid.uuid4()
+        mock_service = MagicMock(id=31, org_id=org_id)
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = [mock_service]
 
         session = AsyncMock()
         session.execute = AsyncMock(return_value=mock_result)
 
-        service_id = await resolve_service(session, argocd_app="sample-app")
+        service_id, resolved_org_id = await resolve_service(session, argocd_app="sample-app")
         assert service_id == 31
+        assert resolved_org_id == org_id
 
     @pytest.mark.asyncio
     async def test_finds_oldest_by_repo_when_duplicates_exist(self):
@@ -82,35 +89,46 @@ class TestResolveService:
         auto-registration can leave two rows sharing the same repo. Since
         services.repo has no unique constraint, resolve_service must not
         crash on MultipleResultsFound — it should prefer the oldest row."""
-        older = MagicMock(id=31)
-        newer = MagicMock(id=99)
+        older = MagicMock(id=31, org_id=uuid.uuid4())
+        newer = MagicMock(id=99, org_id=uuid.uuid4())
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = [older, newer]
 
         session = AsyncMock()
         session.execute = AsyncMock(return_value=mock_result)
 
-        service_id = await resolve_service(session, repo="PulithThewmika/deploylens-sample-app")
+        service_id, org_id = await resolve_service(session, repo="PulithThewmika/deploylens-sample-app")
         assert service_id == 31
+        assert org_id == older.org_id
 
     @pytest.mark.asyncio
-    async def test_auto_registers_unknown_service(self):
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        mock_result.scalar_one_or_none.return_value = None
+    async def test_auto_registers_unknown_service_with_default_org(self):
+        default_org_id = uuid.uuid4()
+
+        async def mock_execute(stmt):
+            result = MagicMock()
+            if "organizations" in str(stmt):
+                result.scalar_one_or_none.return_value = default_org_id
+            else:
+                result.scalars.return_value.all.return_value = []
+                result.scalar_one_or_none.return_value = None
+            return result
 
         session = AsyncMock()
-        session.execute = AsyncMock(return_value=mock_result)
+        session.execute = mock_execute
         session.flush = AsyncMock()
         session.add = MagicMock()
 
-        service_id = await resolve_service(session, repo="org/new-service")
+        service_id, org_id = await resolve_service(session, repo="org/new-service")
         session.add.assert_called_once()
         session.flush.assert_called_once()
+        assert org_id == default_org_id
+        added_service = session.add.call_args_list[0][0][0]
+        assert added_service.org_id == default_org_id
 
     @pytest.mark.asyncio
     async def test_links_repo_to_existing_service_by_name(self):
-        existing = MagicMock(id=10, name="myapp", repo=None, argocd_app="myapp")
+        existing = MagicMock(id=10, name="myapp", repo=None, argocd_app="myapp", org_id=uuid.uuid4())
         call_count = 0
 
         async def mock_execute(stmt):
@@ -127,20 +145,28 @@ class TestResolveService:
         session.execute = mock_execute
         session.flush = AsyncMock()
 
-        service_id = await resolve_service(session, repo="org/myapp")
+        service_id, org_id = await resolve_service(session, repo="org/myapp")
         assert service_id == 10
+        assert org_id == existing.org_id
         assert existing.repo == "org/myapp"
 
     @pytest.mark.asyncio
     async def test_repo_and_argocd_app_mismatch_creates_separate_rows(self):
         """Regression test for bug #112: when repo last segment != argocd_app,
         two separate resolve_service calls create two rows."""
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        mock_result.scalar_one_or_none.return_value = None
+        default_org_id = uuid.uuid4()
+
+        async def mock_execute(stmt):
+            result = MagicMock()
+            if "organizations" in str(stmt):
+                result.scalar_one_or_none.return_value = default_org_id
+            else:
+                result.scalars.return_value.all.return_value = []
+                result.scalar_one_or_none.return_value = None
+            return result
 
         session = AsyncMock()
-        session.execute = AsyncMock(return_value=mock_result)
+        session.execute = mock_execute
         session.flush = AsyncMock()
         session.add = MagicMock()
 
@@ -154,6 +180,48 @@ class TestResolveService:
         assert added_service_2.name == "sample-app"
 
         assert added_service_1.name != added_service_2.name
+
+
+class TestResolveOrgId:
+    @pytest.mark.asyncio
+    async def test_returns_existing_services_org(self):
+        org_id = uuid.uuid4()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = org_id
+
+        session = AsyncMock()
+        session.execute = AsyncMock(return_value=mock_result)
+
+        resolved = await resolve_org_id(session, repo="org/known-service")
+        assert resolved == org_id
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_default_org_when_unmatched(self):
+        default_org_id = uuid.uuid4()
+
+        async def mock_execute(stmt):
+            result = MagicMock()
+            result.scalar_one_or_none.return_value = (
+                default_org_id if "organizations" in str(stmt) else None
+            )
+            return result
+
+        session = AsyncMock()
+        session.execute = mock_execute
+
+        resolved = await resolve_org_id(session, repo="org/unknown-service")
+        assert resolved == default_org_id
+
+    @pytest.mark.asyncio
+    async def test_get_default_org_id_raises_when_no_orgs_exist(self):
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+
+        session = AsyncMock()
+        session.execute = AsyncMock(return_value=mock_result)
+
+        with pytest.raises(RuntimeError):
+            await get_default_org_id(session)
 
 
 # ── find_matching_deployment ───────────────────────────────────────
