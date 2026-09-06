@@ -11,6 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base
 
 if TYPE_CHECKING:
+    from .cluster_query import ClusterQuery
     from .organization import Organization
     from .service import Service
 
@@ -40,3 +41,4 @@ class Cluster(Base):
 
     organization: Mapped[Organization] = relationship(back_populates="clusters")
     services: Mapped[list[Service]] = relationship(back_populates="cluster")
+    queries: Mapped[list[ClusterQuery]] = relationship(back_populates="cluster")

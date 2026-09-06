@@ -56,4 +56,5 @@ class ClusterQueryResponse(BaseModel):
 
 
 class ClusterQueryResultRequest(BaseModel):
+    query_id: str
     result: dict

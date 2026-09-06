@@ -14,6 +14,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth import verify_cluster_token
 from app.models.cluster import Cluster
+from app.models.cluster_query import ClusterQuery
 from tests.conftest import TEST_ORG_ID, TEST_USER_ID
 
 OTHER_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000099")
@@ -160,6 +161,62 @@ async def test_heartbeat_rejects_invalid_token(client: FastAPI, mock_session: As
         resp = await ac.post("/api/clusters/heartbeat", headers={"Authorization": "Bearer kbx_nope"}, json={})
 
     assert resp.status_code == 401
+
+
+# ── S8: GET /api/clusters/:id/queries ────────────────────────────────────
+
+
+def _fake_query(cluster_id: uuid.UUID, promql: str = "up", status: str = "pending") -> ClusterQuery:
+    return ClusterQuery(
+        id=uuid.uuid4(),
+        cluster_id=cluster_id,
+        promql=promql,
+        status=status,
+        result=None,
+        requested_at=datetime.now(timezone.utc),
+        completed_at=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_pending_queries_returns_only_pending_for_this_cluster(
+    client: FastAPI, mock_session: AsyncMock
+) -> None:
+    token = "kbx_" + "a" * 40
+    cluster = _fake_cluster(TEST_ORG_ID, token)
+    query = _fake_query(cluster.id, promql='up{service="orders"}')
+    mock_session.execute = AsyncMock(
+        side_effect=[
+            MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[cluster])))),
+            MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[query])))),
+        ]
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get(f"/api/clusters/{cluster.id}/queries", headers={"Authorization": f"Bearer {token}"})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["id"] == str(query.id)
+    assert data[0]["promql"] == 'up{service="orders"}'
+
+
+@pytest.mark.asyncio
+async def test_list_pending_queries_rejects_token_for_a_different_cluster(
+    client: FastAPI, mock_session: AsyncMock
+) -> None:
+    token = "kbx_" + "a" * 40
+    cluster = _fake_cluster(TEST_ORG_ID, token)
+    other_cluster_id = uuid.uuid4()
+    mock_session.execute = AsyncMock(
+        return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[cluster]))))
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get(f"/api/clusters/{other_cluster_id}/queries", headers={"Authorization": f"Bearer {token}"})
+
+    assert resp.status_code == 403
 
 
 # ── S6: verify_cluster_token / POST /api/clusters/verify ────────────────
