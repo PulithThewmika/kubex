@@ -86,24 +86,41 @@ class TestResolveService:
         assert resolved_org_id == org_id
 
     @pytest.mark.asyncio
-    async def test_finds_oldest_by_repo_when_duplicates_exist(self):
+    async def test_finds_oldest_by_repo_when_duplicates_exist(self) -> None:
         """Regression test: a repo-migration seed update (V011) racing an
-        auto-registration can leave two rows sharing the same repo. Since
-        services.repo has no unique constraint, resolve_service must not
-        crash on MultipleResultsFound — it should prefer the oldest row."""
-        older = MagicMock(id=31, org_id=uuid.uuid4())
-        newer = MagicMock(id=99, org_id=uuid.uuid4())
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [older, newer]
+        auto-registration can leave two rows sharing the same repo within
+        one org (V018's (org_id, repo) uniqueness constrains across orgs,
+        not the race window within one). resolve_service must not crash on
+        MultipleResultsFound — it should prefer the oldest row, and the
+        underlying query itself (not just the mock's return order) must be
+        both org-scoped and ordered by id."""
+        shared_org_id = uuid.uuid4()
+        older = MagicMock(id=31, org_id=shared_org_id)
+        newer = MagicMock(id=99, org_id=shared_org_id)
+        captured_stmt = None
+
+        async def mock_execute(stmt: object) -> MagicMock:
+            nonlocal captured_stmt
+            captured_stmt = stmt
+            result = MagicMock()
+            result.scalars.return_value.all.return_value = [older, newer]
+            return result
 
         session = AsyncMock()
-        session.execute = AsyncMock(return_value=mock_result)
+        session.execute = mock_execute
 
         service_id, org_id = await resolve_service(
-            session, org_id=older.org_id, repo="PulithThewmika/deploylens-sample-app"
+            session, org_id=shared_org_id, repo="PulithThewmika/deploylens-sample-app"
         )
         assert service_id == 31
-        assert org_id == older.org_id
+        assert org_id == shared_org_id
+
+        where_clause = str(captured_stmt.whereclause.compile(compile_kwargs={"literal_binds": True}))
+        assert shared_org_id.hex in where_clause.replace("-", "")
+        assert "PulithThewmika/deploylens-sample-app" in where_clause
+        assert any(
+            "services.id" in str(col) for col in captured_stmt._order_by_clauses
+        ), "expected the query itself to order by Service.id, not rely on mock return order"
 
     @pytest.mark.asyncio
     async def test_auto_registers_unknown_service_with_given_org_id(self) -> None:
