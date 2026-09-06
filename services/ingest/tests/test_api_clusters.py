@@ -286,6 +286,90 @@ async def test_submit_query_result_rejects_token_for_a_different_cluster(
     assert resp.status_code == 403
 
 
+# ── S10: POST /api/clusters/:id/rotate-token ──────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_rotate_token_returns_new_token_and_grace_expiry(client: FastAPI, mock_session: AsyncMock) -> None:
+    cluster = _fake_cluster(TEST_ORG_ID, "kbx_" + "a" * 40, cluster_id=uuid.uuid4())
+    original_hash = cluster.token_hash
+    mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=cluster)))
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.post(f"/api/clusters/{cluster.id}/rotate-token")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["token"].startswith("kbx_")
+    assert cluster.token_hash != original_hash
+    assert cluster.token_hash_old == original_hash
+    assert cluster.token_old_expires_at is not None
+
+
+@pytest.mark.asyncio
+async def test_rotate_token_requires_session(client: FastAPI) -> None:
+    from app.auth_middleware import get_current_user
+
+    client.dependency_overrides.pop(get_current_user, None)
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.post(f"/api/clusters/{uuid.uuid4()}/rotate-token")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_rotate_token_404_for_other_orgs_cluster(client: FastAPI, mock_session: AsyncMock) -> None:
+    mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.post(f"/api/clusters/{uuid.uuid4()}/rotate-token")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_old_token_still_verifies_within_grace_period_after_rotation() -> None:
+    """End-to-end through both auth paths: rotate, then confirm the OLD
+    token still authenticates (grace period) and the NEW token also
+    authenticates — both valid at once, exactly what the grace period
+    is for."""
+    old_token = "kbx_" + "old" * 15
+    new_token = "kbx_" + "new" * 15
+    cluster = _fake_cluster(TEST_ORG_ID, old_token, cluster_id=uuid.uuid4())
+
+    # Simulate what rotate_cluster_token does to the row.
+    from datetime import timedelta
+
+    cluster.token_hash_old = cluster.token_hash
+    cluster.token_old_expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    cluster.token_hash = bcrypt.hashpw(new_token.encode(), bcrypt.gensalt()).decode()
+
+    session_for_old = _session_with_clusters([cluster])
+    result_old = await verify_cluster_token(authorization=f"Bearer {old_token}", session=session_for_old)
+    assert result_old.id == cluster.id
+
+    session_for_new = _session_with_clusters([cluster])
+    result_new = await verify_cluster_token(authorization=f"Bearer {new_token}", session=session_for_new)
+    assert result_new.id == cluster.id
+
+
+@pytest.mark.asyncio
+async def test_old_token_rejected_once_grace_period_expires() -> None:
+    old_token = "kbx_" + "old" * 15
+    new_token = "kbx_" + "new" * 15
+    cluster = _fake_cluster(TEST_ORG_ID, old_token, cluster_id=uuid.uuid4())
+
+    from datetime import timedelta
+
+    cluster.token_hash_old = cluster.token_hash
+    cluster.token_old_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)  # already expired
+    cluster.token_hash = bcrypt.hashpw(new_token.encode(), bcrypt.gensalt()).decode()
+
+    session = _session_with_clusters([cluster])
+    with pytest.raises(HTTPException) as exc_info:
+        await verify_cluster_token(authorization=f"Bearer {old_token}", session=session)
+    assert exc_info.value.status_code == 401
+
+
 # ── S6: verify_cluster_token / POST /api/clusters/verify ────────────────
 
 
