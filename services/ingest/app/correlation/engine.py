@@ -94,22 +94,39 @@ async def resolve_org_id(
     # path from ever triggering resolve_service()'s auto-registration
     # side effect. Upgrade to a single combined lookup if webhook volume
     # ever makes the extra indexed SELECT per delivery matter.
+    #
+    # This repo/argocd_app match relies on repo (GitHub owner/repo) and
+    # argocd_app (one app name per cluster) being de-facto globally unique —
+    # true today, but V018 (#792) made (org_id, repo)/(org_id, argocd_app)
+    # uniqueness org-scoped rather than global, so two orgs sharing a repo
+    # is now schema-legal. Rather than silently picking whichever org has
+    # the lower services.id (misattributing the event), fail loudly on that
+    # ambiguity — same "refuse to guess" convention as V014's backfill
+    # guard.
+    # ponytail: full fix is trusting the caller's own org identity instead
+    # of inferring it from repo/argocd_app at all — the natural point for
+    # that is EPIC-021's per-installation org identification, not this
+    # read-only lookup.
     """
     if repo:
-        result = await session.execute(
-            select(Service.org_id).where(Service.repo == repo).order_by(Service.id).limit(1)
-        )
-        org_id = result.scalar_one_or_none()
-        if org_id is not None:
-            return org_id
+        result = await session.execute(select(Service.org_id).where(Service.repo == repo).distinct())
+        org_ids = result.scalars().all()
+        if len(org_ids) > 1:
+            raise RuntimeError(
+                f"repo '{repo}' is registered under multiple orgs ({org_ids}) — ambiguous, refusing to guess"
+            )
+        if org_ids:
+            return org_ids[0]
 
     if argocd_app:
-        result = await session.execute(
-            select(Service.org_id).where(Service.argocd_app == argocd_app).order_by(Service.id).limit(1)
-        )
-        org_id = result.scalar_one_or_none()
-        if org_id is not None:
-            return org_id
+        result = await session.execute(select(Service.org_id).where(Service.argocd_app == argocd_app).distinct())
+        org_ids = result.scalars().all()
+        if len(org_ids) > 1:
+            raise RuntimeError(
+                f"argocd_app '{argocd_app}' is registered under multiple orgs ({org_ids}) — ambiguous, refusing to guess"
+            )
+        if org_ids:
+            return org_ids[0]
 
     return await get_default_org_id(session)
 
@@ -117,12 +134,25 @@ async def resolve_org_id(
 async def resolve_service(
     session: AsyncSession,
     *,
+    org_id: uuid.UUID,
     repo: str | None = None,
     argocd_app: str | None = None,
 ) -> tuple[int, uuid.UUID]:
+    # org_id is the caller's already-resolved org for this event (today,
+    # always resolve_org_id()'s result — the default org, since webhooks
+    # share one secret; once EPIC-021 identifies the org per GitHub App
+    # installation, callers pass that instead). Every lookup below is
+    # scoped to it: repo and argocd_app are effectively globally unique
+    # (GitHub owner/repo, one ArgoCD app name per cluster) so matching on
+    # them without the scope would still be safe, but the name fallback is
+    # not — two orgs can derive the same `name` from different repos, and
+    # without this scope it would match (and mis-attribute to) another
+    # org's row. See #792.
     if repo:
         result = await session.execute(
-            select(Service).where(Service.repo == repo).order_by(Service.id)
+            select(Service)
+            .where(Service.repo == repo, Service.org_id == org_id)
+            .order_by(Service.id)
         )
         services = result.scalars().all()
         if services:
@@ -141,7 +171,9 @@ async def resolve_service(
 
     if argocd_app:
         result = await session.execute(
-            select(Service).where(Service.argocd_app == argocd_app).order_by(Service.id)
+            select(Service)
+            .where(Service.argocd_app == argocd_app, Service.org_id == org_id)
+            .order_by(Service.id)
         )
         services = result.scalars().all()
         if services:
@@ -160,7 +192,7 @@ async def resolve_service(
     )
 
     result = await session.execute(
-        select(Service).where(Service.name == name)
+        select(Service).where(Service.name == name, Service.org_id == org_id)
     )
     existing = result.scalar_one_or_none()
     if existing is not None:
@@ -173,7 +205,6 @@ async def resolve_service(
         await session.flush()
         return existing.id, existing.org_id
 
-    org_id = await get_default_org_id(session)
     service = Service(name=name, repo=repo, argocd_app=argocd_app, org_id=org_id)
     session.add(service)
     await session.flush()
