@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -161,6 +162,21 @@ function createMcpServer(orgId: string | null): McpServer {
   return server;
 }
 
+// Constant-time compare so a mismatched token can't be brute-forced via
+// response-time differences — same approach as the ArgoCD/Alertmanager
+// webhook token checks in services/ingest/app/auth.py
+// (hmac.compare_digest). Different-length buffers never match, and
+// comparing them directly would leak length via timingSafeEqual's own
+// length check throwing, so pad to equal length first.
+function isValidBearerToken(authorization: string | undefined, expected: string): boolean {
+  const prefix = "Bearer ";
+  if (!authorization || !authorization.startsWith(prefix)) return false;
+  const provided = Buffer.from(authorization.slice(prefix.length));
+  const expectedBuf = Buffer.from(expected);
+  if (provided.length !== expectedBuf.length) return false;
+  return timingSafeEqual(provided, expectedBuf);
+}
+
 async function main(): Promise<void> {
   await postgres.testConnection();
   try {
@@ -192,10 +208,27 @@ async function main(): Promise<void> {
     // pooled-connection modules imported once above), so a new
     // McpServer per request is cheap.
     const port = Number(process.env.MCP_HTTP_PORT ?? 3001);
+    const internalToken = process.env.MCP_INTERNAL_TOKEN;
+    if (!internalToken) {
+      throw new Error("MCP_INTERNAL_TOKEN is required when MCP_TRANSPORT=http");
+    }
     const httpServer = createServer(
       (req: IncomingMessage, res: ServerResponse) => {
         if (req.url !== "/mcp") {
           res.writeHead(404).end();
+          return;
+        }
+
+        // Shared bearer token, same pattern as the ArgoCD/Alertmanager
+        // webhook checks in services/ingest/app/auth.py — this is the only
+        // caller ingest's mcp_client.py authenticates itself with before
+        // this server trusts the X-Org-Id header below. Without this, any
+        // container on the compose network could forge X-Org-Id and read
+        // another org's data (this container has no published port, but
+        // that alone isn't caller authentication).
+        if (!isValidBearerToken(req.headers.authorization, internalToken)) {
+          res.writeHead(401, { "Content-Type": "application/json" })
+            .end(JSON.stringify({ error: "Missing or invalid Authorization bearer token" }));
           return;
         }
 
@@ -205,15 +238,8 @@ async function main(): Promise<void> {
         // this server on behalf of a real authenticated user; a request with
         // no org context here is a bug in the caller, not a legitimate
         // platform-wide query (that's what the stdio path below is for).
-        //
-        // The header is trusted verbatim — there's no signature binding it
-        // to a session — which is safe only because this container has no
-        // published port in deploy/docker-compose.yml, so nothing but
-        // ingest (on the compose network) can reach it, and ingest only
-        // ever sets it from the JWT-verified user.org_id in chat_engine.py,
-        // never from client-supplied input. If this ever gets a published
-        // port or a new network-mate that isn't ingest, that assumption
-        // breaks and the header would need real authentication of its own.
+        // ingest only ever sets it from the JWT-verified user.org_id in
+        // chat_engine.py, never from client-supplied input.
         const orgIdHeader = req.headers["x-org-id"];
         const orgId = Array.isArray(orgIdHeader) ? orgIdHeader[0] : orgIdHeader;
         if (!orgId) {
