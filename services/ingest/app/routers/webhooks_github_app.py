@@ -85,6 +85,19 @@ async def _handle_installation(session: AsyncSession, action: str, payload: dict
         logger.info("Installation removed: github_installation_id=%s org_id=%s", github_installation_id, org_id)
         return {"status": "ok", "installation": "removed"}
 
+    if action in ("suspend", "unsuspend"):
+        new_status = "suspended" if action == "suspend" else "active"
+        await session.execute(
+            update(Installation)
+            .where(Installation.github_installation_id == github_installation_id)
+            .values(status=new_status)
+        )
+        logger.info(
+            "Installation %s: github_installation_id=%s org_id=%s",
+            new_status, github_installation_id, org_id,
+        )
+        return {"status": "ok", "installation": new_status}
+
     return {"status": "ignored", "reason": f"installation action '{action}' not handled"}
 
 
