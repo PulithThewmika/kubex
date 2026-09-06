@@ -63,8 +63,10 @@ async def get_default_org_id(session: AsyncSession) -> uuid.UUID:
     today (GITHUB_WEBHOOK_SECRET / ARGOCD_WEBHOOK_TOKEN) — there is no
     per-org signal in the request at all. Falls back to the oldest
     organization row, the same one V014 backfilled all pre-multi-tenancy
-    data to. Revisit once webhooks carry a per-org secret/token that can
-    identify the calling org unambiguously (E20-T2 PR discussion).
+    data to.
+    # ponytail: single global default-org fallback for auto-registration,
+    # correct only while webhooks share one secret; upgrade when webhooks
+    # carry a per-org secret/token that identifies the calling org directly.
     """
     result = await session.execute(
         select(Organization.id).order_by(Organization.created_at.asc()).limit(1)
@@ -86,6 +88,12 @@ async def resolve_org_id(
     Used to stamp org_id on pipeline_events rows for event types that
     resolve_service() never sees (e.g. non-workflow_run GitHub events) —
     matches an existing service's org if one exists, else the default org.
+    # ponytail: webhook handlers that go on to call resolve_service() for
+    # the same repo/argocd_app pay two lookups instead of one for the
+    # common case of an already-known service, to keep this read-only
+    # path from ever triggering resolve_service()'s auto-registration
+    # side effect. Upgrade to a single combined lookup if webhook volume
+    # ever makes the extra indexed SELECT per delivery matter.
     """
     if repo:
         result = await session.execute(
