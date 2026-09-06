@@ -5,6 +5,8 @@ import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
+from sqlalchemy.sql import Select
+
 from app.correlation.engine import (
     extract_image_tag,
     parse_iso_timestamp,
@@ -171,7 +173,7 @@ class TestResolveService:
         session.flush = AsyncMock()
         session.add = MagicMock()
 
-        def compiled_where(stmt):
+        def compiled_where(stmt: Select) -> str:
             return str(stmt.whereclause.compile(compile_kwargs={"literal_binds": True}))
 
         # org A registers "payments" via its own repo.
