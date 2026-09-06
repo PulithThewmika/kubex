@@ -10,6 +10,7 @@ rather than caching the token themselves.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
@@ -72,12 +73,16 @@ async def get_installation_token(github_installation_id: int) -> str | None:
         if expires_at - time.time() > 60:
             return token
 
-    app_jwt = _generate_app_jwt()
+    # File I/O (_read_private_key) and RSA signing (jwt.encode RS256) are
+    # both blocking/CPU-bound — offload them like auth.py already does for
+    # bcrypt.checkpw, so this doesn't stall the event loop for every other
+    # in-flight request on this worker.
+    app_jwt = await asyncio.to_thread(_generate_app_jwt)
     if app_jwt is None:
         return None
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        try:
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
                 f"{GITHUB_API_URL}/app/installations/{github_installation_id}/access_tokens",
                 headers={
@@ -86,16 +91,20 @@ async def get_installation_token(github_installation_id: int) -> str | None:
                 },
             )
             resp.raise_for_status()
-        except httpx.HTTPError as e:
-            logger.warning(
-                "Failed to exchange installation access token for installation_id=%s: %s",
-                github_installation_id, e,
+            data = resp.json()
+            token = data["token"]
+            expires_at = (
+                datetime.strptime(data["expires_at"], "%Y-%m-%dT%H:%M:%SZ")
+                .replace(tzinfo=timezone.utc)
+                .timestamp()
             )
-            return None
+    except (httpx.HTTPError, ValueError, KeyError) as e:
+        logger.warning(
+            "Failed to exchange installation access token for installation_id=%s: %s",
+            github_installation_id, e,
+        )
+        return None
 
-    data = resp.json()
-    token = data["token"]
-    expires_at = datetime.strptime(data["expires_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
     _token_cache[github_installation_id] = (token, expires_at)
     logger.info(
         "Exchanged installation access token for installation_id=%s (expires %s)",

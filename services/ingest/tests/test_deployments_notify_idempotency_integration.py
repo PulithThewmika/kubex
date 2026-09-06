@@ -62,15 +62,19 @@ def pg():
             id SERIAL PRIMARY KEY,
             service_id INTEGER NOT NULL REFERENCES services(id),
             commit_sha TEXT,
+            workflow_run_id BIGINT,
             status TEXT NOT NULL DEFAULT 'pending',
             finished_at TIMESTAMPTZ
         );
     """)
-    # The exact index V021 adds.
+    # The exact index V021 adds — scoped to workflow_run_id IS NULL so it
+    # never collides with rows process_workflow_run creates/upserts on
+    # workflow_run_id (e.g. a manual GitHub Actions re-run of the same
+    # commit gets a new workflow_run_id but the same commit_sha).
     cur.execute("""
         CREATE UNIQUE INDEX uq_deployments_commit_service
             ON deployments (commit_sha, service_id)
-            WHERE commit_sha IS NOT NULL;
+            WHERE commit_sha IS NOT NULL AND workflow_run_id IS NULL;
     """)
     cur.execute("INSERT INTO services (name) VALUES ('orders') RETURNING id")
     service_id = cur.fetchone()[0]
@@ -132,6 +136,28 @@ def test_on_conflict_upsert_produces_exactly_one_row(pg):
     count, final_status = cur.fetchone()
     assert count == 1
     assert final_status == "deployed"
+
+
+def test_workflow_run_rows_are_exempt_from_the_index(pg):
+    """A row carrying workflow_run_id (created by webhooks_github.py's
+    process_workflow_run, which upserts on workflow_run_id instead) must
+    not collide with an orphan row sharing the same commit_sha — e.g. a
+    manual GitHub Actions re-run assigns a new workflow_run_id to the same
+    commit (/code-review high on PR #796)."""
+    conn, service_id = pg
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO deployments (service_id, commit_sha, workflow_run_id) VALUES (%s, %s, 111)",
+        (service_id, "ghi9012"),
+    )
+    cur.execute(
+        "INSERT INTO deployments (service_id, commit_sha, workflow_run_id) VALUES (%s, %s, 222)",
+        (service_id, "ghi9012"),
+    )
+    conn.commit()
+
+    cur.execute("SELECT count(*) FROM deployments WHERE commit_sha = 'ghi9012'")
+    assert cur.fetchone()[0] == 2
 
 
 def test_null_commit_sha_is_exempt_from_uniqueness(pg):
