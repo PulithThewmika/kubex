@@ -68,7 +68,7 @@ def client(mock_session):
     async def override_get_session():
         yield mock_session
 
-    async def override_get_current_user():
+    async def override_get_current_user() -> UserContext:
         return UserContext(user_id=TEST_USER_ID, org_id=TEST_ORG_ID)
 
     app.dependency_overrides[get_session] = override_get_session

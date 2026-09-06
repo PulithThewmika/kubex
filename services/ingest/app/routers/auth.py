@@ -40,6 +40,7 @@ from ..db import get_session
 from ..models.org_membership import OrgMembership
 from ..models.organization import Organization
 from ..models.user import User
+from ..schemas.auth import MeResponse, SwitchOrgRequest
 
 logger = logging.getLogger("kubex.auth.github")
 
@@ -356,17 +357,17 @@ async def github_callback(
 
 
 @router.post("/logout")
-async def logout():
+async def logout() -> JSONResponse:
     response = JSONResponse(content={"status": "ok"})
     response.delete_cookie(key="session", path="/")
     return response
 
 
-@router.get("/me")
+@router.get("/me", response_model=MeResponse)
 async def me(
     user: UserContext = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-):
+) -> MeResponse:
     result = await session.execute(
         select(User).where(User.id == user.user_id)
     )
@@ -379,33 +380,25 @@ async def me(
     )
     db_org = org_result.scalar_one_or_none()
 
-    return {
-        "user_id": str(user.user_id),
-        "login": db_user.login,
-        "email": db_user.email,
-        "avatar_url": db_user.avatar_url,
-        "org_id": str(user.org_id),
-        "org_name": db_org.name if db_org else None,
-        "org_slug": db_org.slug if db_org else None,
-    }
+    return MeResponse(
+        user_id=str(user.user_id),
+        login=db_user.login,
+        email=db_user.email,
+        avatar_url=db_user.avatar_url,
+        org_id=str(user.org_id),
+        org_name=db_org.name if db_org else None,
+        org_slug=db_org.slug if db_org else None,
+    )
 
 
 @router.post("/switch-org")
 async def switch_org(
-    request: Request,
+    body: SwitchOrgRequest,
     user: UserContext = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-):
+) -> JSONResponse:
     try:
-        body = await request.json()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Request body must be valid JSON") from None
-    target_org_id = body.get("org_id")
-    if not target_org_id:
-        raise HTTPException(status_code=400, detail="org_id is required")
-
-    try:
-        target_uuid = uuid.UUID(target_org_id)
+        target_uuid = uuid.UUID(body.org_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid org_id") from None
 
