@@ -113,11 +113,11 @@ async def list_deployments(
     status: str | None = Query(None, description="Filter by deployment status"),
     limit: int = Query(10, ge=1, le=50, description="Max results (default 10, max 50)"),
     session: AsyncSession = Depends(get_session),
-    _user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(get_current_user),
 ):
     """List deployments with optional service/status filters."""
-    conditions = []
-    params: dict = {"limit": limit}
+    conditions = ["d.org_id = :org_id"]
+    params: dict = {"limit": limit, "org_id": user.org_id}
 
     if service:
         conditions.append("s.name = :service")
@@ -127,9 +127,7 @@ async def list_deployments(
         conditions.append("d.status = :status")
         params["status"] = status
 
-    where_clause = ""
-    if conditions:
-        where_clause = "WHERE " + " AND ".join(conditions)
+    where_clause = "WHERE " + " AND ".join(conditions)
 
     result = await session.execute(
         text(f"""
