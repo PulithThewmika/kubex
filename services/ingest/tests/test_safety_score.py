@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -63,20 +64,55 @@ class TestDayAndTimeFactors:
 
 class TestFetchFilesChanged:
     @pytest.mark.asyncio
-    async def test_returns_none_without_token(self, monkeypatch):
-        monkeypatch.setattr(safety_score, "GITHUB_API_TOKEN", "")
-        result = await safety_score._fetch_files_changed("org/repo", "abc123")
+    async def test_returns_none_without_token(self):
+        result = await safety_score._fetch_files_changed("org/repo", "abc123", None)
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_returns_none_on_http_error(self, monkeypatch):
-        monkeypatch.setattr(safety_score, "GITHUB_API_TOKEN", "test-token")
+    async def test_returns_none_on_http_error(self):
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(side_effect=httpx.ConnectError("boom"))
             mock_client_cls.return_value.__aenter__.return_value = mock_client
-            result = await safety_score._fetch_files_changed("org/repo", "abc123")
+            result = await safety_score._fetch_files_changed("org/repo", "abc123", "test-token")
             assert result is None
+
+
+class TestResolveGithubToken:
+    @pytest.mark.asyncio
+    async def test_falls_back_to_static_token_when_no_installation(self, monkeypatch):
+        monkeypatch.setattr(safety_score, "GITHUB_API_TOKEN", "static-token")
+        session = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None
+        session.execute = AsyncMock(return_value=result)
+
+        token = await safety_score._resolve_github_token(session, uuid4(), "org/repo")
+        assert token == "static-token"
+
+    @pytest.mark.asyncio
+    async def test_prefers_installation_token_when_available(self, monkeypatch):
+        monkeypatch.setattr(safety_score, "GITHUB_API_TOKEN", "static-token")
+        session = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = 42
+        session.execute = AsyncMock(return_value=result)
+
+        with patch.object(safety_score, "get_installation_token", AsyncMock(return_value="ghs_installation")):
+            token = await safety_score._resolve_github_token(session, uuid4(), "org/repo")
+        assert token == "ghs_installation"
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_static_token_when_exchange_fails(self, monkeypatch):
+        monkeypatch.setattr(safety_score, "GITHUB_API_TOKEN", "static-token")
+        session = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = 42
+        session.execute = AsyncMock(return_value=result)
+
+        with patch.object(safety_score, "get_installation_token", AsyncMock(return_value=None)):
+            token = await safety_score._resolve_github_token(session, uuid4(), "org/repo")
+        assert token == "static-token"
 
 
 class TestComputeSafetyScore:
