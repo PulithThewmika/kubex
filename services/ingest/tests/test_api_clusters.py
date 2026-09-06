@@ -1,0 +1,86 @@
+"""Tests for cluster management (E22-T1, sub-issues #645-#656)."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timezone
+from typing import NamedTuple
+from unittest.mock import AsyncMock, MagicMock
+
+import bcrypt
+import pytest
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
+
+from app.models.cluster import Cluster
+from tests.conftest import TEST_ORG_ID, TEST_USER_ID
+
+OTHER_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000099")
+
+
+def _fake_cluster(
+    org_id: uuid.UUID,
+    token: str | None = None,
+    *,
+    cluster_id: uuid.UUID | None = None,
+    name: str = "prod-cluster",
+    status: str = "pending",
+    token_hash_old: str | None = None,
+    token_old_expires_at: datetime | None = None,
+    last_heartbeat: datetime | None = None,
+) -> Cluster:
+    return Cluster(
+        id=cluster_id or uuid.uuid4(),
+        org_id=org_id,
+        name=name,
+        token_hash=bcrypt.hashpw(token.encode(), bcrypt.gensalt()).decode() if token else "x",
+        token_hash_old=token_hash_old,
+        token_old_expires_at=token_old_expires_at,
+        agent_version=None,
+        argocd_version=None,
+        argocd_status=None,
+        prometheus_status=None,
+        last_heartbeat=last_heartbeat,
+        status=status,
+        created_at=datetime.now(timezone.utc),
+    )
+
+
+# ── S4: create returns the token exactly once ──────────────────────────
+
+
+class _CreatedRow(NamedTuple):
+    id: uuid.UUID
+    name: str
+    created_at: datetime
+
+
+@pytest.mark.asyncio
+async def test_create_cluster_returns_token_once(client: FastAPI, mock_session: AsyncMock) -> None:
+    cluster_id = uuid.uuid4()
+    created_at = datetime.now(timezone.utc)
+    mock_session.execute = AsyncMock(
+        return_value=MagicMock(
+            one=MagicMock(return_value=_CreatedRow(id=cluster_id, name="prod-cluster", created_at=created_at))
+        )
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.post("/api/clusters", json={"name": "prod-cluster"})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == str(cluster_id)
+    assert data["name"] == "prod-cluster"
+    assert data["token"].startswith("kbx_")
+
+
+@pytest.mark.asyncio
+async def test_create_cluster_requires_session(client: FastAPI) -> None:
+    from app.auth_middleware import get_current_user
+
+    client.dependency_overrides.pop(get_current_user, None)
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.post("/api/clusters", json={"name": "prod-cluster"})
+    assert resp.status_code == 401
