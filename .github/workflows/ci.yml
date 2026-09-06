@@ -24,6 +24,10 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
