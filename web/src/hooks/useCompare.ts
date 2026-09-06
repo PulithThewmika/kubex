@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
+import { apiFetch } from '../lib/apiFetch'
 import type { CompareResult } from '../types/compare'
 
 async function fetchCompare(idA: number, idB: number): Promise<CompareResult> {
-  const res = await fetch(`/api/compare?a=${idA}&b=${idB}`)
+  const res = await apiFetch(`/api/compare?a=${idA}&b=${idB}`)
   if (!res.ok) {
     throw new Error(`Failed to fetch comparison: ${res.status}`)
   }
