@@ -89,7 +89,10 @@ function buildTimeline(row: DeploymentDetailRow): TimelineStage[] {
 
 export async function getDeployment(input: {
   deployment_id: number;
-}): Promise<{ content: { type: "text"; text: string }[] }> {
+}, orgId: string | null): Promise<{ content: { type: "text"; text: string }[] }> {
+  const orgFilter = orgId !== null ? "AND s.org_id = $2" : "";
+  const params: unknown[] = orgId !== null ? [input.deployment_id, orgId] : [input.deployment_id];
+
   const row = await queryOne<DeploymentDetailRow>(
     `SELECT d.id, d.service_id, s.name AS service_name, s.namespace,
             s.repo, s.argocd_app,
@@ -103,8 +106,8 @@ export async function getDeployment(input: {
      FROM deployments d
      JOIN services s ON s.id = d.service_id
      LEFT JOIN health_assessments ha ON ha.deployment_id = d.id
-     WHERE d.id = $1`,
-    [input.deployment_id],
+     WHERE d.id = $1 ${orgFilter}`,
+    params,
   );
 
   if (!row) {

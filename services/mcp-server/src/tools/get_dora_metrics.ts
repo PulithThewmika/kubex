@@ -31,22 +31,23 @@ interface DoraResult {
 async function queryDora(
   service: string | undefined,
   days: number,
+  orgId: string | null,
 ): Promise<DoraResult> {
-  const svcFilter = service ? "AND service_name = $2" : "";
-  const params: unknown[] = [days];
+  const svcFilter = service ? "AND service_name = $3" : "";
+  const params: unknown[] = [days, orgId];
   if (service) params.push(service);
 
   const [freqRows, ltRows, cfrRows, mttrRows] = await Promise.all([
     query<{ freq: number | null }>(
       `SELECT COALESCE(SUM(deploy_count)::float / NULLIF($1, 0), NULL) AS freq
-       FROM dora_deploy_frequency
+       FROM dora_deploy_frequency($2)
        WHERE deploy_date >= CURRENT_DATE - $1 * interval '1 day'
        ${svcFilter}`,
       params,
     ),
     query<{ lt: number | null }>(
       `SELECT AVG(lead_time_seconds) AS lt
-       FROM dora_lead_time
+       FROM dora_lead_time($2)
        WHERE finished_at >= now() - $1 * interval '1 day'
        ${svcFilter}`,
       params,
@@ -57,14 +58,14 @@ async function queryDora(
          / NULLIF(COUNT(*), 0),
          4
        ) AS cfr
-       FROM dora_change_failure_rate
+       FROM dora_change_failure_rate($2)
        WHERE started_at >= now() - $1 * interval '1 day'
        ${svcFilter}`,
       params,
     ),
     query<{ mttr: number | null }>(
       `SELECT AVG(mttr_seconds) AS mttr
-       FROM dora_mttr
+       FROM dora_mttr($2)
        WHERE fired_at >= now() - $1 * interval '1 day'
        ${svcFilter}`,
       params,
@@ -117,12 +118,12 @@ export function buildSummary(
 export async function getDoraMetrics(input: {
   service?: string;
   period: string;
-}): Promise<{ content: { type: "text"; text: string }[] }> {
+}, orgId: string | null): Promise<{ content: { type: "text"; text: string }[] }> {
   const days = PERIOD_DAYS[input.period] ?? 30;
 
   let result: DoraResult;
   try {
-    result = await queryDora(input.service, days);
+    result = await queryDora(input.service, days, orgId);
   } catch (err) {
     return {
       content: [{
