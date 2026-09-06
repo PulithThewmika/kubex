@@ -34,6 +34,10 @@ BEGIN
         RETURNING id INTO default_org_id;
     END IF;
 
+    -- ── services ────────────────────────────────────────────────────────────
+    ALTER TABLE services ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES organizations(id);
+    UPDATE services SET org_id = default_org_id WHERE org_id IS NULL;
+
     INSERT INTO schema_versions (version, description)
     VALUES ('V014', 'Multi-tenancy: org_id on services, deployments, alerts, pipeline_events');
 END $$;
