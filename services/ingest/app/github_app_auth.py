@@ -49,7 +49,10 @@ def _generate_app_jwt() -> str | None:
     """
     try:
         private_key = _read_private_key()
-    except OSError as e:
+    except (OSError, UnicodeError) as e:
+        # UnicodeError (e.g. UnicodeDecodeError) covers a key file that
+        # isn't valid text under open()'s default encoding — a case
+        # OSError alone doesn't catch (CodeRabbit, PR #796).
         logger.warning("Failed to read GITHUB_APP_PRIVATE_KEY_PATH=%s: %s", GITHUB_APP_PRIVATE_KEY_PATH, e)
         return None
     if not private_key or not GITHUB_APP_ID:
