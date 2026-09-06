@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
+from typing import Awaitable, Callable
 
 import httpx
 
@@ -74,28 +75,58 @@ async def _discover() -> None:
 
 async def bootstrap() -> str:
     """Validate the cluster token, run initial discovery, return this
-    cluster's id."""
-    identity = await bootstrap_module.verify_identity()
+    cluster's id. Retries indefinitely (with backoff) on a connectivity
+    failure reaching DEPLOYLENS_ENDPOINT — bug found in review, E22-T3:
+    this previously had no retry at all, so the agent crashed if the
+    ingest endpoint wasn't reachable yet at Pod startup (a rolling
+    restart, DNS not yet resolvable), unlike every other network call in
+    this module. Config errors (RuntimeError from config.validate()) and
+    a rejected token (AuthError) still fail fast — retrying either just
+    delays a fix a human needs to make."""
+    backoff = Backoff()
+    while True:
+        try:
+            identity = await bootstrap_module.verify_identity()
+            break
+        except _CONNECTIVITY_ERRORS as e:
+            delay = backoff.next_delay()
+            logger.warning("bootstrap: connectivity error (%s), retrying in %.0fs", e, delay)
+            await asyncio.sleep(delay)
     await _discover()
     return identity["id"]
 
 
-async def _run_with_backoff(name: str, backoff: Backoff, fn) -> None:
-    """Run fn() once; on connectivity failure, sleep the next backoff delay
-    instead of propagating. Any other exception is logged and swallowed too
-    (matching services/agent's per-iteration isolation) so one bad tick
-    never kills the loop."""
+async def _run_with_backoff(name: str, backoff: Backoff, fn: Callable[[], Awaitable[None]]) -> bool:
+    """Run fn() once. Returns True if this call already slept a delay
+    itself (a connectivity backoff, or a fatal AuthError shutting the
+    agent down) — the caller should skip its own normal interval sleep in
+    that case rather than stacking both delays (bug found in review,
+    E22-T3: heartbeat_loop/query_relay_loop previously always slept the
+    fixed interval on top of any backoff delay already slept here, so a
+    connectivity failure's retry cadence was backoff+interval instead of
+    just backoff, the opposite of the intended "backs off, then resets on
+    success" behavior)."""
     try:
         await fn()
         backoff.reset()
+        return False
     except _CONNECTIVITY_ERRORS as e:
         delay = backoff.next_delay()
         logger.warning("%s: connectivity error (%s), retrying in %.0fs", name, e, delay)
         await asyncio.sleep(delay)
+        return True
     except ingest_client.AuthError:
-        logger.error("%s: cluster token rejected — check the Secret matches the current token", name)
+        # Not retryable — a rejected token stays rejected until a human
+        # fixes it. Shut the agent down (bug found in review, E22-T3: this
+        # previously just logged and let every loop keep retrying the same
+        # rejected token every interval forever) so the Pod restarts and
+        # picks up a corrected Secret rather than spinning uselessly.
+        logger.error("%s: cluster token rejected — shutting down (check the Secret matches the current token)", name)
+        _shutdown_event.set()
+        return True
     except Exception:
         logger.exception("%s: unexpected error", name)
+        return False
 
 
 async def _heartbeat_tick() -> None:
@@ -110,8 +141,9 @@ async def _heartbeat_tick() -> None:
 async def heartbeat_loop(cluster_id: str) -> None:
     backoff = Backoff()
     while not _shutdown_event.is_set():
-        await _run_with_backoff("heartbeat", backoff, _heartbeat_tick)
-        await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
+        already_waited = await _run_with_backoff("heartbeat", backoff, _heartbeat_tick)
+        if not already_waited:
+            await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
 
 
 async def _query_relay_tick(cluster_id: str) -> None:
@@ -134,22 +166,23 @@ async def _query_relay_tick(cluster_id: str) -> None:
 async def query_relay_loop(cluster_id: str) -> None:
     backoff = Backoff()
     while not _shutdown_event.is_set():
-        await _run_with_backoff("query_relay", backoff, lambda: _query_relay_tick(cluster_id))
-        await asyncio.sleep(QUERY_POLL_INTERVAL_SECONDS)
+        already_waited = await _run_with_backoff("query_relay", backoff, lambda: _query_relay_tick(cluster_id))
+        if not already_waited:
+            await asyncio.sleep(QUERY_POLL_INTERVAL_SECONDS)
 
 
 async def argocd_selfheal_loop() -> None:
     """Re-check discovery (ArgoCD + Prometheus) periodically (#671) — picks
     up a fresh install and re-patches the notifications ConfigMap if its
-    keys were reverted (e.g. by an ArgoCD self-sync of its own config)."""
+    keys were reverted (e.g. by an ArgoCD self-sync of its own config).
+    Routed through _run_with_backoff like the other two loops (bug found
+    in review, E22-T3: this previously had its own bespoke try/except with
+    no backoff, inconsistent with the rest of the module)."""
+    backoff = Backoff()
     while not _shutdown_event.is_set():
-        await asyncio.sleep(ARGOCD_RECHECK_INTERVAL_SECONDS)
-        if _shutdown_event.is_set():
-            break
-        try:
-            await _discover()
-        except Exception:
-            logger.exception("argocd_selfheal: discovery failed")
+        already_waited = await _run_with_backoff("argocd_selfheal", backoff, _discover)
+        if not already_waited:
+            await asyncio.sleep(ARGOCD_RECHECK_INTERVAL_SECONDS)
 
 
 async def shutdown() -> None:
