@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cluster-agent.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cluster-agent.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cluster-agent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cluster-agent.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "cluster-agent.fullname" . }}
+      containers:
+        - name: cluster-agent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: DEPLOYLENS_ENDPOINT
+              value: {{ required "endpoint is required — the central KubeX ingest URL" .Values.endpoint | quote }}
+            - name: CLUSTER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-agent.fullname" . }}-token
+                  key: CLUSTER_TOKEN
+            - name: HEARTBEAT_INTERVAL_SECONDS
+              value: {{ .Values.heartbeatIntervalSeconds | quote }}
+            - name: QUERY_POLL_INTERVAL_SECONDS
+              value: {{ .Values.queryPollIntervalSeconds | quote }}
+            - name: ARGOCD_RECHECK_INTERVAL_SECONDS
+              value: {{ .Values.argocdRecheckIntervalSeconds | quote }}
+            {{- if .Values.allowInsecureEndpoint }}
+            - name: ALLOW_INSECURE_ENDPOINT
+              value: "true"
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
