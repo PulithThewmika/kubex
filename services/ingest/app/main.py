@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 import os
 from contextlib import asynccontextmanager
 
@@ -9,8 +11,9 @@ from prometheus_fastapi_instrumentator.metrics import Info
 from sqlalchemy import text
 
 from .auth import validate_auth_tokens
+from .cluster_monitor import run_disconnect_sweep_loop
 from .db import async_session, engine
-from .routers import auth, webhooks_github, webhooks_github_app, webhooks_argocd, api, chat, grafana, settings
+from .routers import auth, webhooks_github, webhooks_github_app, webhooks_argocd, api, chat, clusters, grafana, settings
 
 
 @asynccontextmanager
@@ -18,7 +21,11 @@ async def lifespan(app: FastAPI):
     validate_auth_tokens()
     async with engine.begin() as conn:
         await conn.execute(text("SELECT 1"))
+    sweep_task = asyncio.create_task(run_disconnect_sweep_loop(async_session))
     yield
+    sweep_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await sweep_task
     await engine.dispose()
 
 
@@ -84,6 +91,7 @@ app.include_router(webhooks_github_app.router)
 app.include_router(webhooks_argocd.router)
 app.include_router(api.router)
 app.include_router(chat.router)
+app.include_router(clusters.router)
 app.include_router(grafana.router)
 app.include_router(settings.router)
 app.include_router(settings.installations_router)
