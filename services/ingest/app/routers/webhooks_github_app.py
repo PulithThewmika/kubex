@@ -224,14 +224,16 @@ async def _handle_deployment_status(session: AsyncSession, payload: dict) -> dic
     )
 
     if existing:
-        # Out-of-order/redelivered webhooks must not overwrite a deployment
+        # Out-of-order/redelivered webhooks must not touch a deployment
         # that's already reached a terminal state (deployed/sync_failed) —
-        # not just a regression back to "syncing", but also a stale event
-        # flipping between the two terminal states, since deployment_status
-        # events carry no ordering signal we can use to tell which is
-        # actually newer. Same class of bug the classic webhook's
-        # "completed" handler guards against for ArgoCD/build races.
-        if existing.status in ("deployed", "sync_failed") and new_status != existing.status:
+        # not a regression back to "syncing", not a flip between the two
+        # terminal states, and not even a same-state redelivery (which
+        # would otherwise bump finished_at to the redelivery time and
+        # change the recorded lifecycle duration). deployment_status
+        # carries no ordering signal to tell which event is actually
+        # newer. Same class of bug the classic webhook's "completed"
+        # handler guards against for ArgoCD/build races.
+        if existing.status in ("deployed", "sync_failed"):
             logger.info(
                 "Ignoring stale deployment_status '%s' for already-%s deployment_id=%d",
                 new_status, existing.status, existing.id,

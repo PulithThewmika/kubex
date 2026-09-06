@@ -213,6 +213,38 @@ async def test_deployment_status_does_not_flip_between_terminal_states(client, m
 
 
 @pytest.mark.asyncio
+async def test_deployment_status_same_state_redelivery_preserves_finished_at(
+    client, mock_session, sign_github_app_payload,
+):
+    """A redelivered 'success' for an already-deployed deployment must not
+    bump finished_at to the redelivery time — that would silently change
+    the recorded lifecycle duration."""
+    existing_service = MagicMock(id=5, org_id=TEST_ORG_ID)
+    original_finished_at = "2026-08-01T10:10:00Z"
+    existing_deployment = MagicMock(id=100, status="deployed", finished_at=original_finished_at)
+
+    async def mock_execute(stmt):
+        table = _table_of(stmt)
+        result = MagicMock()
+        if table == "installations":
+            result.scalar_one_or_none.return_value = TEST_ORG_ID
+        elif table == "services":
+            result.scalars.return_value.all.return_value = [existing_service]
+        elif table == "deployments":
+            result.scalar_one_or_none.return_value = existing_deployment
+        return result
+
+    mock_session.execute = mock_execute
+
+    resp = await _post_app_event(
+        client, _deployment_status_payload(state="success"), "deployment_status", sign_github_app_payload,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ignored"
+    assert existing_deployment.finished_at == original_finished_at
+
+
+@pytest.mark.asyncio
 async def test_workflow_run_creates_deployment_under_resolved_org(client, mock_session, sign_github_app_payload):
     """workflow_run delivered via the GitHub App must resolve org_id from
     installations (not the classic repo-based lookup) and still create a
