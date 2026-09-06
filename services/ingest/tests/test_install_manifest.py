@@ -80,10 +80,18 @@ async def test_install_manifest_returns_valid_kubernetes_yaml(client: FastAPI, m
     resources = {r for rule in role["rules"] for r in rule["resources"]}
     assert "configmaps" in resources
     assert "services" in resources
-    assert "endpoints" in resources
+    assert "deployments" in resources
+    assert "secrets" in resources
     for rule in role["rules"]:
         if rule["resources"] == ["configmaps"]:
-            assert set(rule["verbs"]) == {"get", "list", "watch", "patch"}
+            assert set(rule["verbs"]) == {"get", "list", "create", "patch"}
+        elif rule["resources"] == ["secrets"]:
+            # Scoped to exactly one Secret name, not a blanket cluster-wide
+            # grant — this is what lets the agent patch its own bearer
+            # token into argocd-notifications-secret without being able to
+            # read any other Secret in the cluster.
+            assert rule["resourceNames"] == ["argocd-notifications-secret"]
+            assert set(rule["verbs"]) == {"get", "patch"}
         else:
             assert set(rule["verbs"]) >= {"get", "list"}
 

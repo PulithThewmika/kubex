@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Callable, TypeVar
 
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
@@ -25,6 +26,9 @@ from kubernetes.client.rest import ApiException
 logger = logging.getLogger("kubex.cluster_agent.k8s")
 
 ARGOCD_NOTIFICATIONS_CM = "argocd-notifications-cm"
+ARGOCD_NOTIFICATIONS_SECRET = "argocd-notifications-secret"
+
+T = TypeVar("T")
 
 
 class RBACDeniedError(Exception):
@@ -32,6 +36,8 @@ class RBACDeniedError(Exception):
 
 
 _configured = False
+_apps_v1_client: client.AppsV1Api | None = None
+_core_v1_client: client.CoreV1Api | None = None
 
 
 def _ensure_config() -> None:
@@ -41,27 +47,45 @@ def _ensure_config() -> None:
     try:
         config.load_incluster_config()
     except config.ConfigException:
+        logger.warning(
+            "No in-cluster ServiceAccount mount found — falling back to the local kubeconfig. "
+            "Expected in local/CI runs, not in a deployed agent Pod."
+        )
         config.load_kube_config()
     _configured = True
 
 
 def _apps_v1() -> client.AppsV1Api:
+    global _apps_v1_client
     _ensure_config()
-    return client.AppsV1Api()
+    if _apps_v1_client is None:
+        _apps_v1_client = client.AppsV1Api()
+    return _apps_v1_client
 
 
 def _core_v1() -> client.CoreV1Api:
+    global _core_v1_client
     _ensure_config()
-    return client.CoreV1Api()
+    if _core_v1_client is None:
+        _core_v1_client = client.CoreV1Api()
+    return _core_v1_client
 
 
-def _find_deployment_sync(name_substrings: tuple[str, ...]) -> tuple[str, str] | None:
+def _call(fn: Callable[[], T], *, not_found_ok: bool = False) -> T | None:
+    """Run one K8s API call, translating 403 -> RBACDeniedError (and, if
+    not_found_ok, 404 -> None) in one place instead of at every call site."""
     try:
-        deployments = _apps_v1().list_deployment_for_all_namespaces()
+        return fn()
     except ApiException as e:
         if e.status == 403:
             raise RBACDeniedError(str(e)) from e
+        if not_found_ok and e.status == 404:
+            return None
         raise
+
+
+def _find_deployment_sync(name_substrings: tuple[str, ...]) -> tuple[str, str] | None:
+    deployments = _call(_apps_v1().list_deployment_for_all_namespaces)
     for dep in deployments.items:
         if any(sub in dep.metadata.name for sub in name_substrings):
             return dep.metadata.namespace, dep.metadata.name
@@ -69,30 +93,18 @@ def _find_deployment_sync(name_substrings: tuple[str, ...]) -> tuple[str, str] |
 
 
 def _find_service_sync(name_substrings: tuple[str, ...]) -> tuple[str, str] | None:
-    try:
-        services = _core_v1().list_service_for_all_namespaces()
-    except ApiException as e:
-        if e.status == 403:
-            raise RBACDeniedError(str(e)) from e
-        raise
+    services = _call(_core_v1().list_service_for_all_namespaces)
     for svc in services.items:
         if any(sub in svc.metadata.name for sub in name_substrings):
             return svc.metadata.namespace, svc.metadata.name
     return None
 
 
-def _get_deployment_sync(namespace: str, name: str):
-    try:
-        return _apps_v1().read_namespaced_deployment(name, namespace)
-    except ApiException as e:
-        if e.status == 403:
-            raise RBACDeniedError(str(e)) from e
-        if e.status == 404:
-            return None
-        raise
+def _get_deployment_sync(namespace: str, name: str) -> client.V1Deployment | None:
+    return _call(lambda: _apps_v1().read_namespaced_deployment(name, namespace), not_found_ok=True)
 
 
-async def get_deployment(namespace: str, name: str):
+async def get_deployment(namespace: str, name: str) -> client.V1Deployment | None:
     return await asyncio.to_thread(_get_deployment_sync, namespace, name)
 
 
@@ -110,29 +122,42 @@ async def find_prometheus() -> tuple[str, str] | None:
     )
 
 
-def _get_configmap_sync(namespace: str, name: str):
-    try:
-        return _core_v1().read_namespaced_config_map(name, namespace)
-    except ApiException as e:
-        if e.status == 403:
-            raise RBACDeniedError(str(e)) from e
-        if e.status == 404:
-            return None
-        raise
+def _get_configmap_sync(namespace: str, name: str) -> client.V1ConfigMap | None:
+    return _call(lambda: _core_v1().read_namespaced_config_map(name, namespace), not_found_ok=True)
 
 
 def _patch_configmap_sync(namespace: str, name: str, data: dict[str, str]) -> None:
-    try:
-        _core_v1().patch_namespaced_config_map(name, namespace, {"data": data})
-    except ApiException as e:
-        if e.status == 403:
-            raise RBACDeniedError(str(e)) from e
-        raise
+    _call(lambda: _core_v1().patch_namespaced_config_map(name, namespace, {"data": data}))
 
 
-async def get_configmap(namespace: str, name: str):
+def _create_configmap_sync(namespace: str, name: str, data: dict[str, str]) -> None:
+    body = client.V1ConfigMap(metadata=client.V1ObjectMeta(name=name, namespace=namespace), data=data)
+    _call(lambda: _core_v1().create_namespaced_config_map(namespace, body))
+
+
+async def get_configmap(namespace: str, name: str) -> client.V1ConfigMap | None:
     return await asyncio.to_thread(_get_configmap_sync, namespace, name)
 
 
 async def patch_configmap(namespace: str, name: str, data: dict[str, str]) -> None:
     await asyncio.to_thread(_patch_configmap_sync, namespace, name, data)
+
+
+async def create_configmap(namespace: str, name: str, data: dict[str, str]) -> None:
+    await asyncio.to_thread(_create_configmap_sync, namespace, name, data)
+
+
+def _get_secret_sync(namespace: str, name: str) -> client.V1Secret | None:
+    return _call(lambda: _core_v1().read_namespaced_secret(name, namespace), not_found_ok=True)
+
+
+def _patch_secret_sync(namespace: str, name: str, string_data: dict[str, str]) -> None:
+    _call(lambda: _core_v1().patch_namespaced_secret(name, namespace, {"stringData": string_data}))
+
+
+async def get_secret(namespace: str, name: str) -> client.V1Secret | None:
+    return await asyncio.to_thread(_get_secret_sync, namespace, name)
+
+
+async def patch_secret(namespace: str, name: str, string_data: dict[str, str]) -> None:
+    await asyncio.to_thread(_patch_secret_sync, namespace, name, string_data)
