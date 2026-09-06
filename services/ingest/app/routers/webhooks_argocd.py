@@ -10,6 +10,7 @@ from ..correlation.engine import (
     extract_image_tag,
     extract_image_tag_from_images,
     find_matching_deployment,
+    resolve_org_id,
     resolve_service,
     utcnow,
 )
@@ -37,8 +38,14 @@ async def argocd_webhook(
     operation_state = app_data.get("status", {}).get("operationState", {})
     event_type = payload.get("type", "unknown")
 
+    # Read-only lookup (no auto-registration) so an event for an unknown
+    # app doesn't create a service row before we even know whether this
+    # event has a usable revision.
+    org_id = await resolve_org_id(session, argocd_app=app_name or None)
+
     await session.execute(
         PipelineEvent.__table__.insert().values(
+            org_id=org_id,
             source="argocd",
             event_type=event_type,
             payload=payload,
@@ -49,7 +56,7 @@ async def argocd_webhook(
         await session.commit()
         return {"status": "ignored", "reason": "missing app.metadata.name"}
 
-    service_id = await resolve_service(session, argocd_app=app_name)
+    service_id, org_id = await resolve_service(session, argocd_app=app_name)
 
     if not revision:
         revision = operation_state.get("syncResult", {}).get("revision", "")
@@ -128,6 +135,7 @@ async def argocd_webhook(
             return {"status": "ok", "deployment_status": "syncing", "correlation": correlation_method}
 
         stmt = pg_insert(Deployment).values(
+            org_id=org_id,
             service_id=service_id,
             commit_sha=revision,
             status="syncing",
@@ -166,6 +174,7 @@ async def argocd_webhook(
             return {"status": "ok", "deployment_status": "deployed", "correlation": correlation_method}
 
         stmt = pg_insert(Deployment).values(
+            org_id=org_id,
             service_id=service_id,
             commit_sha=revision,
             status="deployed",
@@ -206,6 +215,7 @@ async def argocd_webhook(
             return {"status": "ok", "deployment_status": "sync_failed", "correlation": correlation_method}
 
         stmt = pg_insert(Deployment).values(
+            org_id=org_id,
             service_id=service_id,
             commit_sha=revision,
             status="sync_failed",

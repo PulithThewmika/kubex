@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ARRAY, DateTime, String, Text
+from sqlalchemy import ARRAY, DateTime, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -17,6 +19,9 @@ class Service(Base):
     __tablename__ = "services"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
+    )
     name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     repo: Mapped[str | None] = mapped_column(Text)
     argocd_app: Mapped[str | None] = mapped_column(Text)
