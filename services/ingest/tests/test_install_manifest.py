@@ -75,6 +75,17 @@ async def test_install_manifest_returns_valid_kubernetes_yaml(client: FastAPI, m
     assert "DEPLOYLENS_ENDPOINT" in env_names
     assert "CLUSTER_TOKEN" in env_names
 
+    role = by_kind["ClusterRole"]
+    resources = {r for rule in role["rules"] for r in rule["resources"]}
+    assert "configmaps" in resources
+    assert "services" in resources
+    assert "endpoints" in resources
+    for rule in role["rules"]:
+        if rule["resources"] == ["configmaps"]:
+            assert set(rule["verbs"]) == {"get", "list", "watch", "patch"}
+        else:
+            assert set(rule["verbs"]) >= {"get", "list"}
+
 
 @pytest.mark.asyncio
 async def test_install_manifest_404_for_unknown_token(client: FastAPI, mock_session: AsyncMock) -> None:

@@ -40,7 +40,16 @@ def build_install_manifest(token: str, endpoint: str) -> str:
         "apiVersion": "rbac.authorization.k8s.io/v1",
         "kind": "ClusterRole",
         "metadata": {"name": "kubex-agent"},
-        "rules": [],
+        "rules": [
+            # ponytail: configmaps access is cluster-wide rather than
+            # scoped to the argocd namespace as the issue names — scoping
+            # it would need a namespaced Role+RoleBinding in addition to
+            # this ClusterRole, which #658's fixed resource list doesn't
+            # include. Tighten with a Role/RoleBinding pair if that gap
+            # matters before this ships to real clusters.
+            {"apiGroups": [""], "resources": ["configmaps"], "verbs": ["get", "list", "watch", "patch"]},
+            {"apiGroups": [""], "resources": ["services", "endpoints"], "verbs": ["get", "list"]},
+        ],
     }
     cluster_role_binding = {
         "apiVersion": "rbac.authorization.k8s.io/v1",
