@@ -173,6 +173,7 @@ SHELL_URL=               # React shell origin the OAuth callback redirects back 
 GITHUB_APP_ID=           # GitHub App for automatic webhook provisioning (EPIC-021)
 GITHUB_APP_PRIVATE_KEY_PATH=  # e.g. secrets/github-app.pem — gitignored, never commit
 GITHUB_APP_WEBHOOK_SECRET=    # HMAC secret for GitHub App deliveries
+INGEST_PUBLIC_URL=       # externally reachable ingest address, embedded in cluster-agent install manifests (E22-T2)
 SAMPLE_APP_REPO=         # optional: path to a deploylens-sample-app checkout, for scripts/e2e_smoke_test.py (default: ../deploylens-sample-app)
 ```
 

@@ -13,7 +13,18 @@ from sqlalchemy import text
 from .auth import validate_auth_tokens
 from .cluster_monitor import run_disconnect_sweep_loop
 from .db import async_session, engine
-from .routers import auth, webhooks_github, webhooks_github_app, webhooks_argocd, api, chat, clusters, grafana, settings
+from .routers import (
+    auth,
+    webhooks_github,
+    webhooks_github_app,
+    webhooks_argocd,
+    api,
+    chat,
+    clusters,
+    grafana,
+    install,
+    settings,
+)
 
 
 @asynccontextmanager
@@ -92,6 +103,7 @@ app.include_router(webhooks_argocd.router)
 app.include_router(api.router)
 app.include_router(chat.router)
 app.include_router(clusters.router)
+app.include_router(install.router)
 app.include_router(grafana.router)
 app.include_router(settings.router)
 app.include_router(settings.installations_router)
