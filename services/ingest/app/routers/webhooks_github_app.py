@@ -241,18 +241,19 @@ async def _handle_deployment_status(session: AsyncSession, payload: dict) -> dic
         # carries no ordering signal to tell which event is actually
         # newer. Same class of bug the classic webhook's "completed"
         # handler guards against for ArgoCD/build races.
-        if not apply_terminal_guarded_status(existing, new_status):
+        applied, persisted_status = await apply_terminal_guarded_status(session, existing.id, new_status)
+        if not applied:
             logger.info(
                 "Ignoring stale deployment_status '%s' for already-%s deployment_id=%d",
-                new_status, existing.status, existing.id,
+                new_status, persisted_status, existing.id,
             )
-            return {"status": "ignored", "reason": f"deployment already {existing.status}"}
+            return {"status": "ignored", "reason": f"deployment already {persisted_status}"}
 
         logger.info(
             "Deployment %s (correlated via %s): service_id=%d deployment_id=%d sha=%s",
-            new_status, correlation_method, service_id, existing.id, commit_sha,
+            persisted_status, correlation_method, service_id, existing.id, commit_sha,
         )
-        return {"status": "ok", "deployment_status": new_status, "correlation": correlation_method}
+        return {"status": "ok", "deployment_status": persisted_status, "correlation": correlation_method}
 
     # V021 added a real ON CONFLICT target (commit_sha, service_id) scoped
     # to workflow_run_id IS NULL — this path never sets workflow_run_id, so
