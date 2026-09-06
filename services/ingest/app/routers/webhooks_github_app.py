@@ -7,12 +7,27 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import verify_github_app_signature
-from ..correlation.engine import resolve_service
+from ..correlation.engine import extract_image_tag, find_matching_deployment, resolve_service, utcnow
 from ..db import get_session
+from ..models.deployment import Deployment
 from ..models.installation import Installation
 from ..models.organization import Organization
 from ..models.pipeline_event import PipelineEvent
 from .webhooks_github import process_workflow_run
+
+# GitHub Deployments API states -> DeployLens lifecycle states. "queued" and
+# "pending" both mean the deploy hasn't started rolling out yet; DeployLens
+# has no separate state for that once the build is done, so both map to
+# "syncing" (the same state ArgoCD's on-sync-running maps to). "inactive"
+# means a later deployment superseded this one — nothing to record.
+_DEPLOYMENT_STATE_MAP = {
+    "queued": "syncing",
+    "pending": "syncing",
+    "in_progress": "syncing",
+    "success": "deployed",
+    "failure": "sync_failed",
+    "error": "sync_failed",
+}
 
 logger = logging.getLogger("kubex.webhooks.github_app")
 
@@ -177,7 +192,62 @@ async def _handle_workflow_run(session: AsyncSession, payload: dict) -> dict:
 
 
 async def _handle_deployment_status(session: AsyncSession, payload: dict) -> dict:
-    return {"status": "ignored", "reason": "deployment_status not yet handled"}
+    github_installation_id = payload.get("installation", {}).get("id")
+    repo_full_name = payload.get("repository", {}).get("full_name", "")
+    state = payload.get("deployment_status", {}).get("state")
+    commit_sha = payload.get("deployment", {}).get("sha")
+
+    org_id = await _resolve_org_by_installation_id(session, github_installation_id)
+    await _log_event(session, org_id, "github_app", "deployment_status", payload)
+
+    if org_id is None:
+        logger.warning(
+            "deployment_status via unknown installation (github_installation_id=%s), skipping",
+            github_installation_id,
+        )
+        return {"status": "ignored", "reason": "unknown installation"}
+
+    new_status = _DEPLOYMENT_STATE_MAP.get(state)
+    if new_status is None or not repo_full_name or not commit_sha:
+        return {"status": "ignored", "reason": f"deployment_status state '{state}' not handled"}
+
+    service_id, org_id = await resolve_service(session, org_id=org_id, repo=repo_full_name)
+    image_tag = extract_image_tag(commit_sha)
+    existing, correlation_method = await find_matching_deployment(
+        session, service_id, commit_sha=commit_sha, image_tag=image_tag,
+    )
+
+    if existing:
+        existing.status = new_status
+        if new_status in ("deployed", "sync_failed"):
+            existing.finished_at = utcnow()
+        logger.info(
+            "Deployment %s (correlated via %s): service_id=%d deployment_id=%d sha=%s",
+            new_status, correlation_method, service_id, existing.id, commit_sha,
+        )
+        return {"status": "ok", "deployment_status": new_status, "correlation": correlation_method}
+
+    # No unique index on commit_sha to upsert against (unlike ArgoCD's
+    # argocd_revision+service_id), so a redelivered deployment_status with
+    # no prior matching deployment can create a duplicate orphan row.
+    # ponytail: accepted duplicate-orphan risk on redelivery here; E21-T3's
+    # dedicated idempotent notify endpoint is where a real ON CONFLICT
+    # target belongs, upgrade this path if it proves to matter in practice.
+    deployment = Deployment(
+        org_id=org_id,
+        service_id=service_id,
+        commit_sha=commit_sha,
+        image_tag=image_tag,
+        status=new_status,
+        started_at=utcnow(),
+        finished_at=utcnow() if new_status in ("deployed", "sync_failed") else None,
+    )
+    session.add(deployment)
+    logger.info(
+        "Orphan deployment created (%s): service_id=%d sha=%s repo=%s",
+        new_status, service_id, commit_sha, repo_full_name,
+    )
+    return {"status": "ok", "deployment_status": new_status, "correlation": "orphan"}
 
 
 @router.post("/github/app")
