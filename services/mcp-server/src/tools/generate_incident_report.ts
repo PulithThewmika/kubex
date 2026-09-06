@@ -4,6 +4,7 @@ import { rangeQuery } from "../clients/prometheus.js";
 import { queryRange as lokiQueryRange, type LokiStream } from "../clients/loki.js";
 import { buildPromQL, autoStep, formatResults } from "./query_metrics.js";
 import { buildLogQL } from "./query_logs.js";
+import { orgFilter } from "./org-filter.js";
 
 export const generateIncidentReportSchema = {
   alert_id: z.number().int().describe("Alert ID to generate an incident report for"),
@@ -237,8 +238,7 @@ function buildMarkdownReport(row: IncidentRow, metricSeries: Record<string, { t:
 export async function generateIncidentReport(input: {
   alert_id: number;
 }, orgId: string | null): Promise<{ content: { type: "text"; text: string }[] }> {
-  const orgFilter = orgId !== null ? "AND a.org_id = $2" : "";
-  const params: unknown[] = orgId !== null ? [input.alert_id, orgId] : [input.alert_id];
+  const org = orgFilter(orgId, 2, "a.org_id");
 
   const row = await queryOne<IncidentRow>(
     `SELECT
@@ -254,8 +254,8 @@ export async function generateIncidentReport(input: {
      JOIN deployments d ON d.id = a.deployment_id
      JOIN services s ON s.id = d.service_id
      LEFT JOIN health_assessments ha ON ha.deployment_id = d.id
-     WHERE a.id = $1 ${orgFilter}`,
-    params,
+     WHERE a.id = $1 ${org.clause}`,
+    [input.alert_id, ...org.params],
   );
 
   if (!row) {
