@@ -1,5 +1,6 @@
 import json
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import case
@@ -55,12 +56,22 @@ async def github_webhook(
         logger.info("Received non-workflow_run event '%s', stored in pipeline_events only", event_type)
         return {"status": "ignored", "reason": f"event type '{event_type}' not handled"}
 
-    action = payload.get("action")
-    workflow_run = payload.get("workflow_run", {})
-
     if not repo_full_name:
         await session.commit()
         return {"status": "ignored", "reason": "missing repository.full_name"}
+
+    return await process_workflow_run(session, org_id, repo_full_name, payload)
+
+
+async def process_workflow_run(
+    session: AsyncSession, org_id: uuid.UUID, repo_full_name: str, payload: dict,
+) -> dict:
+    """Shared by the classic per-repo webhook and the GitHub App webhook
+    (E21-T2) — org_id is resolved differently by each caller (repo lookup
+    vs. installation_id -> installations table), everything after that is
+    identical."""
+    action = payload.get("action")
+    workflow_run = payload.get("workflow_run", {})
 
     service_id, org_id = await resolve_service(session, org_id=org_id, repo=repo_full_name)
     workflow_run_id = workflow_run.get("id")
