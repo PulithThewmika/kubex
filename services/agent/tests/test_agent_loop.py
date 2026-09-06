@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -9,18 +10,21 @@ import pytest
 
 from agent.run import _find_unassessed_deployments, _process_deployment, agent_loop
 
+TEST_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
+
 
 @pytest.fixture
 def mock_session():
     return AsyncMock()
 
 
-def _make_deploy_row(deploy_id=1, service_id=1, service_name="orders",
+def _make_deploy_row(deploy_id=1, service_id=1, org_id=TEST_ORG_ID, service_name="orders",
                      namespace="kubex", commit_sha="abc1234",
                      prom_components=None):
     row = MagicMock()
     row.id = deploy_id
     row.service_id = service_id
+    row.org_id = org_id
     row.service_name = service_name
     row.namespace = namespace
     row.commit_sha = commit_sha
