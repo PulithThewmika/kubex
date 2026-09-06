@@ -58,4 +58,14 @@ describe('RequireAuth', () => {
 
     expect(await screen.findByText('Protected content')).toBeInTheDocument()
   })
+
+  it('shows a retry state instead of redirecting on a 5xx from /auth/me', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 500 })))
+
+    renderWithAuth('/app')
+
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    expect(screen.queryByText('Login page')).not.toBeInTheDocument()
+    expect(screen.queryByText('Protected content')).not.toBeInTheDocument()
+  })
 })

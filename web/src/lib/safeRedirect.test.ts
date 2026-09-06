@@ -26,4 +26,12 @@ describe('safeRedirectPath', () => {
   it('rejects a path with no leading slash', () => {
     expect(safeRedirectPath('evil.com')).toBe('/app')
   })
+
+  it('rejects a tab-injected path the WHATWG URL parser strips into protocol-relative', () => {
+    // '/\t/evil.com' passes the naive startsWith('/') / !startsWith('//')
+    // string checks, but new URL() strips the tab before parsing, turning
+    // it into "//evil.com" — a different origin. It's the origin
+    // comparison, not the prefix checks, that catches this.
+    expect(safeRedirectPath('/\t/evil.com')).toBe('/app')
+  })
 })
