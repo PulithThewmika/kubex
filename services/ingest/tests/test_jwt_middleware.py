@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from collections.abc import AsyncGenerator, AsyncIterator, Iterator
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -65,8 +66,17 @@ def _tampered_token() -> str:
     )
 
 
+def _malformed_claim_token(user_id: object, org_id: object) -> str:
+    """Build a session JWT whose claims aren't the expected string UUIDs."""
+    return jwt.encode(
+        {"user_id": user_id, "org_id": org_id, "exp": datetime.now(timezone.utc) + timedelta(hours=24)},
+        JWT_SECRET,
+        algorithm="HS256",
+    )
+
+
 @pytest.fixture(autouse=True)
-def _no_real_safety_score():
+def _no_real_safety_score() -> Iterator[None]:
     with patch(
         "app.routers.webhooks_github.compute_safety_score",
         AsyncMock(return_value=(0, {})),
@@ -75,7 +85,7 @@ def _no_real_safety_score():
 
 
 @pytest.fixture
-def mock_session():
+def mock_session() -> AsyncMock:
     session = AsyncMock()
     session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
     session.commit = AsyncMock()
@@ -83,8 +93,8 @@ def mock_session():
 
 
 @pytest.fixture
-async def client(mock_session):
-    async def override_get_session():
+async def client(mock_session: AsyncMock) -> AsyncGenerator[AsyncClient, None]:
+    async def override_get_session() -> AsyncIterator[AsyncMock]:
         yield mock_session
 
     app.dependency_overrides[get_session] = override_get_session
@@ -100,14 +110,14 @@ async def client(mock_session):
 
 
 @pytest.mark.asyncio
-async def test_api_services_no_cookie_returns_401(client):
+async def test_api_services_no_cookie_returns_401(client: AsyncClient) -> None:
     resp = await client.get("/api/services")
     assert resp.status_code == 401
     assert "Authentication required" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio
-async def test_api_services_valid_jwt_returns_200(client, mock_session):
+async def test_api_services_valid_jwt_returns_200(client: AsyncClient, mock_session: AsyncMock) -> None:
     mock_session.execute = AsyncMock(return_value=MagicMock(fetchall=MagicMock(return_value=[])))
     token = _make_token()
     resp = await client.get("/api/services", cookies={"session": token})
@@ -115,31 +125,31 @@ async def test_api_services_valid_jwt_returns_200(client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_api_deployments_no_cookie_returns_401(client):
+async def test_api_deployments_no_cookie_returns_401(client: AsyncClient) -> None:
     resp = await client.get("/api/deployments")
     assert resp.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_api_dora_no_cookie_returns_401(client):
+async def test_api_dora_no_cookie_returns_401(client: AsyncClient) -> None:
     resp = await client.get("/api/dora")
     assert resp.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_api_alerts_no_cookie_returns_401(client):
+async def test_api_alerts_no_cookie_returns_401(client: AsyncClient) -> None:
     resp = await client.get("/api/alerts")
     assert resp.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_api_chat_no_cookie_returns_401(client):
+async def test_api_chat_no_cookie_returns_401(client: AsyncClient) -> None:
     resp = await client.post("/api/chat", json={"messages": [{"role": "user", "content": "hello"}]})
     assert resp.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_api_grafana_proxy_no_cookie_returns_401(client):
+async def test_api_grafana_proxy_no_cookie_returns_401(client: AsyncClient) -> None:
     resp = await client.get("/api/grafana/proxy", params={"uid": "deploy-timeline", "panelId": 1})
     assert resp.status_code == 401
 
@@ -148,20 +158,38 @@ async def test_api_grafana_proxy_no_cookie_returns_401(client):
 
 
 @pytest.mark.asyncio
-async def test_expired_jwt_returns_401(client):
+async def test_expired_jwt_returns_401(client: AsyncClient) -> None:
     resp = await client.get("/api/services", cookies={"session": _expired_token()})
     assert resp.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_tampered_jwt_returns_401(client):
+async def test_tampered_jwt_returns_401(client: AsyncClient) -> None:
     resp = await client.get("/api/services", cookies={"session": _tampered_token()})
     assert resp.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_malformed_jwt_returns_401(client):
+async def test_malformed_jwt_returns_401(client: AsyncClient) -> None:
     resp = await client.get("/api/services", cookies={"session": "not.a.jwt"})
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_null_claim_returns_401_not_500(client: AsyncClient) -> None:
+    """A session JWT with null user_id/org_id claims must not crash
+    uuid.UUID() into an unhandled TypeError."""
+    token = _malformed_claim_token(user_id=None, org_id=None)
+    resp = await client.get("/api/services", cookies={"session": token})
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_non_string_claim_returns_401_not_500(client: AsyncClient) -> None:
+    """A session JWT with numeric user_id/org_id claims must not crash
+    uuid.UUID() into an unhandled AttributeError."""
+    token = _malformed_claim_token(user_id=1, org_id=2)
+    resp = await client.get("/api/services", cookies={"session": token})
     assert resp.status_code == 401
 
 
@@ -169,7 +197,7 @@ async def test_malformed_jwt_returns_401(client):
 
 
 @pytest.mark.asyncio
-async def test_alerts_inbound_uses_bearer_not_jwt(client, mock_session):
+async def test_alerts_inbound_uses_bearer_not_jwt(client: AsyncClient, mock_session: AsyncMock) -> None:
     mock_session.execute = AsyncMock(return_value=MagicMock(rowcount=0))
     mock_session.commit = AsyncMock()
     resp = await client.post(
@@ -181,7 +209,7 @@ async def test_alerts_inbound_uses_bearer_not_jwt(client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_alerts_inbound_without_bearer_returns_401(client):
+async def test_alerts_inbound_without_bearer_returns_401(client: AsyncClient) -> None:
     resp = await client.post("/api/alerts/inbound", json={"alerts": []})
     assert resp.status_code == 401
 
@@ -190,7 +218,7 @@ async def test_alerts_inbound_without_bearer_returns_401(client):
 
 
 @pytest.mark.asyncio
-async def test_logout_clears_session_cookie(client):
+async def test_logout_clears_session_cookie(client: AsyncClient) -> None:
     token = _make_token()
     resp = await client.post("/auth/logout", cookies={"session": token})
     assert resp.status_code == 200
@@ -204,13 +232,13 @@ async def test_logout_clears_session_cookie(client):
 
 
 @pytest.mark.asyncio
-async def test_me_no_cookie_returns_401(client):
+async def test_me_no_cookie_returns_401(client: AsyncClient) -> None:
     resp = await client.get("/auth/me")
     assert resp.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_me_valid_jwt_returns_profile(client, mock_session):
+async def test_me_valid_jwt_returns_profile(client: AsyncClient, mock_session: AsyncMock) -> None:
     user_obj = MagicMock()
     user_obj.login = "testuser"
     user_obj.email = "test@example.com"
@@ -222,7 +250,7 @@ async def test_me_valid_jwt_returns_profile(client, mock_session):
 
     call_count = 0
 
-    async def _fake_execute(stmt):
+    async def _fake_execute(stmt: object) -> MagicMock:
         nonlocal call_count
         call_count += 1
         result = MagicMock()
@@ -250,13 +278,13 @@ async def test_me_valid_jwt_returns_profile(client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_switch_org_no_cookie_returns_401(client):
+async def test_switch_org_no_cookie_returns_401(client: AsyncClient) -> None:
     resp = await client.post("/auth/switch-org", json={"org_id": str(uuid.uuid4())})
     assert resp.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_switch_org_not_member_returns_403(client, mock_session):
+async def test_switch_org_not_member_returns_403(client: AsyncClient, mock_session: AsyncMock) -> None:
     mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
     token = _make_token()
     new_org = str(uuid.uuid4())
@@ -265,7 +293,7 @@ async def test_switch_org_not_member_returns_403(client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_switch_org_valid_reissues_jwt(client, mock_session):
+async def test_switch_org_valid_reissues_jwt(client: AsyncClient, mock_session: AsyncMock) -> None:
     membership = MagicMock()
     mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=membership)))
     token = _make_token()
@@ -289,21 +317,21 @@ async def test_switch_org_valid_reissues_jwt(client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_switch_org_invalid_org_id_returns_400(client):
+async def test_switch_org_invalid_org_id_returns_400(client: AsyncClient) -> None:
     token = _make_token()
     resp = await client.post("/auth/switch-org", json={"org_id": "not-a-uuid"}, cookies={"session": token})
     assert resp.status_code == 400
 
 
 @pytest.mark.asyncio
-async def test_switch_org_missing_org_id_returns_400(client):
+async def test_switch_org_missing_org_id_returns_422(client: AsyncClient) -> None:
     token = _make_token()
     resp = await client.post("/auth/switch-org", json={}, cookies={"session": token})
-    assert resp.status_code == 400
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_switch_org_empty_body_returns_400_not_500(client):
+async def test_switch_org_empty_body_returns_422_not_500(client: AsyncClient) -> None:
     token = _make_token()
     resp = await client.post(
         "/auth/switch-org",
@@ -311,4 +339,23 @@ async def test_switch_org_empty_body_returns_400_not_500(client):
         headers={"Content-Type": "application/json"},
         cookies={"session": token},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_switch_org_array_body_returns_422_not_500(client: AsyncClient) -> None:
+    token = _make_token()
+    resp = await client.post(
+        "/auth/switch-org",
+        content=b"[]",
+        headers={"Content-Type": "application/json"},
+        cookies={"session": token},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_switch_org_non_string_org_id_returns_422_not_500(client: AsyncClient) -> None:
+    token = _make_token()
+    resp = await client.post("/auth/switch-org", json={"org_id": 1}, cookies={"session": token})
+    assert resp.status_code == 422
