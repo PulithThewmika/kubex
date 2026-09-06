@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import get_session
 from .models.api_key import ApiKey
+from .models.cluster import Cluster
 
 logger = logging.getLogger("kubex.ingest.auth")
 
@@ -119,3 +120,34 @@ async def verify_api_key(
             return key.org_id
 
     raise HTTPException(status_code=401, detail="Invalid API key")
+
+
+async def verify_cluster_token(
+    authorization: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> Cluster:
+    """Authenticate a remote cluster agent (E22-T1) and return its Cluster row.
+
+    Same O(n) bcrypt-walk as verify_api_key. Each cluster also gets a
+    second check against token_hash_old while its rotation grace period
+    (E22-T1-S10) hasn't expired, so an agent that hasn't picked up a
+    freshly rotated token yet still authenticates for up to 10 minutes.
+    """
+    if authorization is None or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    token = authorization.removeprefix("Bearer ").encode()
+
+    result = await session.execute(select(Cluster))
+    now = datetime.now(timezone.utc)
+    for cluster in result.scalars().all():
+        if await asyncio.to_thread(bcrypt.checkpw, token, cluster.token_hash.encode()):
+            return cluster
+        if (
+            cluster.token_hash_old
+            and cluster.token_old_expires_at
+            and cluster.token_old_expires_at > now
+            and await asyncio.to_thread(bcrypt.checkpw, token, cluster.token_hash_old.encode())
+        ):
+            return cluster
+
+    raise HTTPException(status_code=401, detail="Invalid cluster token")
