@@ -88,6 +88,20 @@ async def test_create_cluster_requires_session(client: FastAPI) -> None:
     assert resp.status_code == 401
 
 
+@pytest.mark.asyncio
+async def test_create_cluster_rejects_duplicate_name_with_409(client: FastAPI, mock_session: AsyncMock) -> None:
+    from sqlalchemy.exc import IntegrityError
+
+    mock_session.execute = AsyncMock(side_effect=IntegrityError("stmt", {}, Exception("duplicate key")))
+    mock_session.rollback = AsyncMock()
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.post("/api/clusters", json={"name": "prod-cluster"})
+
+    assert resp.status_code == 409
+    mock_session.rollback.assert_awaited_once()
+
+
 # ── S5: list scopes to the caller's org, never leaks token/hash ────────
 
 

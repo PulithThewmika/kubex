@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import bcrypt
@@ -86,8 +87,12 @@ async def create_cluster(
         .values(org_id=user.org_id, name=body.name, token_hash=token_hash)
         .returning(Cluster.id, Cluster.name, Cluster.created_at)
     )
-    row = (await session.execute(stmt)).one()
-    await session.commit()
+    try:
+        row = (await session.execute(stmt)).one()
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail="A cluster with this name already exists") from None
 
     return ClusterCreateResponse(id=str(row.id), name=row.name, token=token, created_at=row.created_at)
 
