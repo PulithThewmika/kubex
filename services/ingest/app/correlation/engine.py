@@ -280,7 +280,12 @@ async def resolve_service(
         # it instead of erroring. Most likely to bite the generic notify
         # endpoint (E21-T3), which can register a brand-new service name
         # from a burst of concurrent first deliveries.
-        session.expunge(service)
+        #
+        # No session.expunge(service) here: rolling back to the savepoint
+        # on this IntegrityError already evicts `service` back to the
+        # transient state (it never became persistent), so expunging it
+        # again would raise InvalidRequestError instead of letting this
+        # recovery path run (CodeRabbit, PR #796).
         result = await session.execute(
             select(Service).where(Service.name == name, Service.org_id == org_id)
         )
