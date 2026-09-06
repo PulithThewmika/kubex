@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import os
 from contextlib import asynccontextmanager
 
@@ -23,6 +24,8 @@ async def lifespan(app: FastAPI):
     sweep_task = asyncio.create_task(run_disconnect_sweep_loop(async_session))
     yield
     sweep_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await sweep_task
     await engine.dispose()
 
 
