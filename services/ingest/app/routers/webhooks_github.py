@@ -10,6 +10,7 @@ from ..auth import verify_github_signature
 from ..correlation.engine import (
     extract_image_tag,
     parse_iso_timestamp,
+    resolve_org_id,
     resolve_service,
     utcnow,
 )
@@ -33,9 +34,16 @@ async def github_webhook(
     payload = json.loads(body)
 
     event_type = request.headers.get("X-GitHub-Event", "unknown")
+    repo_full_name = payload.get("repository", {}).get("full_name", "")
+
+    # Read-only lookup (no auto-registration) so a non-workflow_run event
+    # for an unknown repo doesn't create a service row before we even know
+    # whether this event type is one we act on.
+    org_id = await resolve_org_id(session, repo=repo_full_name or None)
 
     await session.execute(
         PipelineEvent.__table__.insert().values(
+            org_id=org_id,
             source="github_actions",
             event_type=event_type,
             payload=payload,
@@ -49,13 +57,12 @@ async def github_webhook(
 
     action = payload.get("action")
     workflow_run = payload.get("workflow_run", {})
-    repo_full_name = payload.get("repository", {}).get("full_name", "")
 
     if not repo_full_name:
         await session.commit()
         return {"status": "ignored", "reason": "missing repository.full_name"}
 
-    service_id = await resolve_service(session, repo=repo_full_name)
+    service_id, org_id = await resolve_service(session, repo=repo_full_name)
     workflow_run_id = workflow_run.get("id")
     commit_sha = workflow_run.get("head_sha")
     branch = workflow_run.get("head_branch")
@@ -69,6 +76,7 @@ async def github_webhook(
 
     if action == "requested":
         stmt = pg_insert(Deployment).values(
+            org_id=org_id,
             service_id=service_id,
             commit_sha=commit_sha,
             branch=branch,
@@ -148,6 +156,7 @@ async def github_webhook(
             new_build_status = conclusion or "failure"
 
         stmt = pg_insert(Deployment).values(
+            org_id=org_id,
             service_id=service_id,
             commit_sha=commit_sha,
             branch=branch,
