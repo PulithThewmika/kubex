@@ -2,10 +2,14 @@ import json
 import logging
 
 from fastapi import APIRouter, Depends, Request
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import verify_github_app_signature
 from ..db import get_session
+from ..models.installation import Installation
+from ..models.organization import Organization
 from ..models.pipeline_event import PipelineEvent
 
 logger = logging.getLogger("kubex.webhooks.github_app")
@@ -21,7 +25,55 @@ async def _log_event(session: AsyncSession, org_id, source: str, event_type: str
     )
 
 
+async def _resolve_org_by_github_org_id(session: AsyncSession, github_org_id: int | None):
+    if github_org_id is None:
+        return None
+    result = await session.execute(select(Organization.id).where(Organization.github_org_id == github_org_id))
+    return result.scalar_one_or_none()
+
+
 async def _handle_installation(session: AsyncSession, action: str, payload: dict) -> dict:
+    installation_data = payload.get("installation", {})
+    github_installation_id = installation_data.get("id")
+    account = installation_data.get("account", {})
+    account_login = account.get("login", "")
+
+    org_id = await _resolve_org_by_github_org_id(session, account.get("id"))
+    await _log_event(session, org_id, "github_app", "installation", payload)
+
+    if org_id is None:
+        logger.warning(
+            "installation.%s for unknown account (github_account_id=%s, login=%s) — "
+            "no organization has logged in with this GitHub account yet, skipping",
+            action, account.get("id"), account_login,
+        )
+        return {"status": "ignored", "reason": "no organization matches this GitHub account"}
+
+    if action == "created":
+        repos = [r["full_name"] for r in payload.get("repositories", []) if r.get("full_name")]
+        stmt = pg_insert(Installation).values(
+            org_id=org_id,
+            github_installation_id=github_installation_id,
+            account_login=account_login,
+            repos=repos,
+            status="active",
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["github_installation_id"],
+            set_={
+                "org_id": stmt.excluded.org_id,
+                "account_login": stmt.excluded.account_login,
+                "repos": stmt.excluded.repos,
+                "status": "active",
+            },
+        )
+        await session.execute(stmt)
+        logger.info(
+            "Installation created: github_installation_id=%s org_id=%s account=%s repos=%s",
+            github_installation_id, org_id, account_login, repos,
+        )
+        return {"status": "ok", "installation": "created"}
+
     return {"status": "ignored", "reason": f"installation action '{action}' not handled"}
 
 
