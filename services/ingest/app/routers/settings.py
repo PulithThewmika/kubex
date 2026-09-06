@@ -104,6 +104,7 @@ async def list_installations(
     return [
         InstallationResponse(
             id=str(i.id),
+            github_installation_id=i.github_installation_id,
             account_login=i.account_login,
             repos=i.repos,
             status=i.status,
