@@ -75,6 +75,7 @@ export function makeDeploymentDetail(overrides: Partial<DeploymentDetail> = {}):
 export function makeInstallation(overrides: Partial<Installation> = {}): Installation {
   return {
     id: '1',
+    github_installation_id: 12345,
     account_login: 'acme-corp',
     repos: ['acme-corp/kubex'],
     status: 'active',

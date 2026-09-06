@@ -48,7 +48,7 @@ export function Settings() {
   const [searchParams] = useSearchParams()
   const installationId = searchParams.get('installation_id')
   const { data: installations, isLoading, isError } = useInstallations({
-    pollWhileEmpty: Boolean(installationId),
+    pollForInstallationId: installationId,
   })
 
   return (
