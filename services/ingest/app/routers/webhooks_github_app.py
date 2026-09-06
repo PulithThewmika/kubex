@@ -12,6 +12,7 @@ from ..db import get_session
 from ..models.installation import Installation
 from ..models.organization import Organization
 from ..models.pipeline_event import PipelineEvent
+from .webhooks_github import process_workflow_run
 
 logger = logging.getLogger("kubex.webhooks.github_app")
 
@@ -146,8 +147,33 @@ async def _handle_installation_repositories(session: AsyncSession, action: str, 
     return {"status": "ignored", "reason": f"installation_repositories action '{action}' not handled"}
 
 
+async def _resolve_org_by_installation_id(session: AsyncSession, github_installation_id: int | None):
+    if github_installation_id is None:
+        return None
+    result = await session.execute(
+        select(Installation.org_id).where(Installation.github_installation_id == github_installation_id)
+    )
+    return result.scalar_one_or_none()
+
+
 async def _handle_workflow_run(session: AsyncSession, payload: dict) -> dict:
-    return {"status": "ignored", "reason": "workflow_run via GitHub App not yet handled"}
+    github_installation_id = payload.get("installation", {}).get("id")
+    repo_full_name = payload.get("repository", {}).get("full_name", "")
+
+    org_id = await _resolve_org_by_installation_id(session, github_installation_id)
+    await _log_event(session, org_id, "github_app", "workflow_run", payload)
+
+    if org_id is None:
+        logger.warning(
+            "workflow_run via unknown installation (github_installation_id=%s), skipping",
+            github_installation_id,
+        )
+        return {"status": "ignored", "reason": "unknown installation"}
+
+    if not repo_full_name:
+        return {"status": "ignored", "reason": "missing repository.full_name"}
+
+    return await process_workflow_run(session, org_id, repo_full_name, payload)
 
 
 async def _handle_deployment_status(session: AsyncSession, payload: dict) -> dict:
