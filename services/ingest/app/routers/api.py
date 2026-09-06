@@ -361,11 +361,11 @@ _PERIOD_DAYS = {"7d": 7, "30d": 30, "90d": 90}
 
 @router.get("/dora", response_model=DORAMetricsResponse)
 async def get_dora_metrics(
-    service: str | None = Query(None, description="Service name (omit for platform-wide)"),
+    service: str | None = Query(None, description="Service name (omit for organization-wide)"),
     period: str = Query("30d", description="Period: 7d, 30d, or 90d"),
     session: AsyncSession = Depends(get_session),
     user: UserContext = Depends(get_current_user),
-):
+) -> DORAMetricsResponse:
     """Return all four DORA metrics for a service and period.
 
     Calls the org-parameterized dora_* SQL functions (V017) directly —
