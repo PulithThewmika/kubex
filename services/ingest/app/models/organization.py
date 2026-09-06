@@ -12,6 +12,7 @@ from .base import Base
 
 if TYPE_CHECKING:
     from .api_key import ApiKey
+    from .cluster import Cluster
     from .installation import Installation
     from .org_membership import OrgMembership
 
@@ -32,5 +33,8 @@ class Organization(Base):
         back_populates="organization", cascade="all, delete", passive_deletes=True
     )
     installations: Mapped[list[Installation]] = relationship(
+        back_populates="organization", cascade="all, delete", passive_deletes=True
+    )
+    clusters: Mapped[list[Cluster]] = relationship(
         back_populates="organization", cascade="all, delete", passive_deletes=True
     )

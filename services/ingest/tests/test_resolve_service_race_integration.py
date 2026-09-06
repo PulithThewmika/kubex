@@ -89,6 +89,7 @@ def pg():
             argocd_app TEXT,
             namespace TEXT NOT NULL DEFAULT 'default',
             prom_components TEXT[],
+            cluster_id UUID,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             CONSTRAINT uq_services_org_name UNIQUE (org_id, name)
         );
