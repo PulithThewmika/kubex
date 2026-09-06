@@ -2,7 +2,11 @@ import { useSearchParams } from 'react-router-dom'
 import { useInstallations } from '../hooks/useInstallations'
 import type { Installation } from '../types/installation'
 
-const GITHUB_APP_INSTALL_URL = 'https://github.com/apps/deploylens/installations/new'
+// The GitHub App's slug is a separate identity from this repo's name (set at
+// app registration, not touched by EPIC-025's DeployLens -> KubeX rename) —
+// override via VITE_GITHUB_APP_SLUG if the registered app isn't "deploylens".
+const GITHUB_APP_SLUG = import.meta.env.VITE_GITHUB_APP_SLUG ?? 'deploylens'
+const GITHUB_APP_INSTALL_URL = `https://github.com/apps/${GITHUB_APP_SLUG}/installations/new`
 
 const STATUS_STYLES: Record<Installation['status'], string> = {
   active: 'bg-healthy/10 text-healthy',
@@ -43,7 +47,9 @@ function InstallationRow({ installation }: { installation: Installation }) {
 export function Settings() {
   const [searchParams] = useSearchParams()
   const installationId = searchParams.get('installation_id')
-  const { data: installations, isLoading, isError } = useInstallations()
+  const { data: installations, isLoading, isError } = useInstallations({
+    pollWhileEmpty: Boolean(installationId),
+  })
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
@@ -75,7 +81,7 @@ export function Settings() {
         <div className="mt-6">
           {isLoading && <p className="text-sm text-text-muted">Loading installations…</p>}
           {isError && <p className="text-sm text-failed">Failed to load installations.</p>}
-          {!isLoading && !isError && installations && installations.length === 0 && (
+          {!isLoading && !isError && installations && installations.length === 0 && !installationId && (
             <p className="text-sm text-text-muted">No GitHub App installations yet.</p>
           )}
           {installations && installations.length > 0 && (

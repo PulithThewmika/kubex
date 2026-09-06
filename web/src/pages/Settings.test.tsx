@@ -70,4 +70,13 @@ describe('Settings page', () => {
 
     expect(await screen.findByRole('status')).toHaveTextContent('installation #999 connected successfully')
   })
+
+  it('does not show the empty state while the redirect banner is up and the list is still empty', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify([]), { status: 200 })))
+
+    renderSettings('/app/settings?installation_id=999')
+
+    await screen.findByRole('status')
+    expect(screen.queryByText(/no github app installations yet/i)).not.toBeInTheDocument()
+  })
 })
