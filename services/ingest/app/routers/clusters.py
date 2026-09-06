@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import secrets
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -25,6 +26,8 @@ from ..models.cluster import Cluster
 from ..schemas.cluster import (
     ClusterCreateRequest,
     ClusterCreateResponse,
+    ClusterHeartbeatRequest,
+    ClusterHeartbeatResponse,
     ClusterResponse,
     ClusterVerifyResponse,
 )
@@ -84,3 +87,23 @@ async def list_clusters(
 @router.post("/verify", response_model=ClusterVerifyResponse)
 async def verify_cluster(cluster: Cluster = Depends(verify_cluster_token)) -> ClusterVerifyResponse:
     return ClusterVerifyResponse(id=str(cluster.id), name=cluster.name, org_id=str(cluster.org_id))
+
+
+@router.post("/heartbeat", response_model=ClusterHeartbeatResponse)
+async def cluster_heartbeat(
+    body: ClusterHeartbeatRequest,
+    cluster: Cluster = Depends(verify_cluster_token),
+    session: AsyncSession = Depends(get_session),
+) -> ClusterHeartbeatResponse:
+    now = datetime.now(timezone.utc)
+    cluster.last_heartbeat = now
+    cluster.status = "connected"
+    if body.agent_version is not None:
+        cluster.agent_version = body.agent_version
+    if body.argocd_status is not None:
+        cluster.argocd_status = body.argocd_status
+    if body.prometheus_status is not None:
+        cluster.prometheus_status = body.prometheus_status
+    await session.commit()
+
+    return ClusterHeartbeatResponse(status=cluster.status, last_heartbeat=now)
