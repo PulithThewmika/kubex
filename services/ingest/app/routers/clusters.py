@@ -18,10 +18,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import bcrypt
 
+from ..auth import verify_cluster_token
 from ..auth_middleware import UserContext, get_current_user
 from ..db import get_session
 from ..models.cluster import Cluster
-from ..schemas.cluster import ClusterCreateRequest, ClusterCreateResponse, ClusterResponse
+from ..schemas.cluster import (
+    ClusterCreateRequest,
+    ClusterCreateResponse,
+    ClusterResponse,
+    ClusterVerifyResponse,
+)
 
 router = APIRouter(prefix="/api/clusters", tags=["clusters"])
 
@@ -73,3 +79,8 @@ async def list_clusters(
         select(Cluster).where(Cluster.org_id == user.org_id).order_by(Cluster.created_at.desc())
     )
     return [_to_response(c) for c in result.scalars().all()]
+
+
+@router.post("/verify", response_model=ClusterVerifyResponse)
+async def verify_cluster(cluster: Cluster = Depends(verify_cluster_token)) -> ClusterVerifyResponse:
+    return ClusterVerifyResponse(id=str(cluster.id), name=cluster.name, org_id=str(cluster.org_id))
