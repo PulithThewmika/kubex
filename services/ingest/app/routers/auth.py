@@ -396,7 +396,10 @@ async def switch_org(
     user: UserContext = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    body = await request.json()
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Request body must be valid JSON") from None
     target_org_id = body.get("org_id")
     if not target_org_id:
         raise HTTPException(status_code=400, detail="org_id is required")
