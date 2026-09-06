@@ -117,12 +117,25 @@ async def resolve_org_id(
 async def resolve_service(
     session: AsyncSession,
     *,
+    org_id: uuid.UUID,
     repo: str | None = None,
     argocd_app: str | None = None,
 ) -> tuple[int, uuid.UUID]:
+    # org_id is the caller's already-resolved org for this event (today,
+    # always resolve_org_id()'s result — the default org, since webhooks
+    # share one secret; once EPIC-021 identifies the org per GitHub App
+    # installation, callers pass that instead). Every lookup below is
+    # scoped to it: repo and argocd_app are effectively globally unique
+    # (GitHub owner/repo, one ArgoCD app name per cluster) so matching on
+    # them without the scope would still be safe, but the name fallback is
+    # not — two orgs can derive the same `name` from different repos, and
+    # without this scope it would match (and mis-attribute to) another
+    # org's row. See #792.
     if repo:
         result = await session.execute(
-            select(Service).where(Service.repo == repo).order_by(Service.id)
+            select(Service)
+            .where(Service.repo == repo, Service.org_id == org_id)
+            .order_by(Service.id)
         )
         services = result.scalars().all()
         if services:
@@ -141,7 +154,9 @@ async def resolve_service(
 
     if argocd_app:
         result = await session.execute(
-            select(Service).where(Service.argocd_app == argocd_app).order_by(Service.id)
+            select(Service)
+            .where(Service.argocd_app == argocd_app, Service.org_id == org_id)
+            .order_by(Service.id)
         )
         services = result.scalars().all()
         if services:
@@ -160,7 +175,7 @@ async def resolve_service(
     )
 
     result = await session.execute(
-        select(Service).where(Service.name == name)
+        select(Service).where(Service.name == name, Service.org_id == org_id)
     )
     existing = result.scalar_one_or_none()
     if existing is not None:
@@ -173,7 +188,6 @@ async def resolve_service(
         await session.flush()
         return existing.id, existing.org_id
 
-    org_id = await get_default_org_id(session)
     service = Service(name=name, repo=repo, argocd_app=argocd_app, org_id=org_id)
     session.add(service)
     await session.flush()

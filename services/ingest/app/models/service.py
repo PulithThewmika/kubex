@@ -22,7 +22,7 @@ class Service(Base):
     org_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
     )
-    name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
     repo: Mapped[str | None] = mapped_column(Text)
     argocd_app: Mapped[str | None] = mapped_column(Text)
     namespace: Mapped[str] = mapped_column(String, nullable=False, server_default="default")
