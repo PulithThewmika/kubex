@@ -7,6 +7,7 @@ since bcrypt hashes can't be looked up by index.
 
 from __future__ import annotations
 
+import asyncio
 import secrets
 import uuid
 
@@ -33,7 +34,10 @@ async def create_api_key(
     session: AsyncSession = Depends(get_session),
 ) -> ApiKeyCreateResponse:
     token = TOKEN_PREFIX + secrets.token_urlsafe(32)
-    token_hash = bcrypt.hashpw(token.encode(), bcrypt.gensalt()).decode()
+    # bcrypt.hashpw is CPU-bound and has no async form — run it off the
+    # event loop so one key creation doesn't stall every other in-flight
+    # request on this worker.
+    token_hash = (await asyncio.to_thread(bcrypt.hashpw, token.encode(), bcrypt.gensalt())).decode()
 
     stmt = (
         pg_insert(ApiKey)

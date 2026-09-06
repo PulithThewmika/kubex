@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import hmac
 import logging
@@ -96,7 +97,10 @@ async def verify_api_key(
 
     result = await session.execute(select(ApiKey))
     for key in result.scalars().all():
-        if bcrypt.checkpw(token, key.token_hash.encode()):
+        # bcrypt.checkpw is CPU-bound and has no async form — running it
+        # inline would block the event loop for every other in-flight
+        # request on this worker.
+        if await asyncio.to_thread(bcrypt.checkpw, token, key.token_hash.encode()):
             try:
                 key.last_used = datetime.now(timezone.utc)
                 await session.commit()
