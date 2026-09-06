@@ -34,7 +34,7 @@ CLUSTER_CPU_THRESHOLD_PCT = 75.0
 CLUSTER_MEM_THRESHOLD_PCT = 80.0
 
 
-async def _query_cfr_30d(session: AsyncSession, service_name: str) -> float | None:
+async def _query_cfr_30d(session: AsyncSession, service_name: str, org_id) -> float | None:
     result = await session.execute(
         text("""
             SELECT ROUND(
@@ -42,11 +42,11 @@ async def _query_cfr_30d(session: AsyncSession, service_name: str) -> float | No
                 / NULLIF(COUNT(*), 0),
                 4
             )
-            FROM dora_change_failure_rate
+            FROM dora_change_failure_rate(:org_id)
             WHERE started_at >= now() - 30 * interval '1 day'
             AND service_name = :service
         """),
-        {"service": service_name},
+        {"service": service_name, "org_id": org_id},
     )
     value = result.scalar_one_or_none()
     return float(value) if value is not None else None
@@ -121,7 +121,7 @@ async def compute_safety_score(
     score = 0
     factors: dict = {}
 
-    cfr = await _query_cfr_30d(session, service_name) if service_name else None
+    cfr = await _query_cfr_30d(session, service_name, service.org_id) if service else None
     cfr_points = 25 if (cfr is not None and cfr > CFR_THRESHOLD) else 0
     score += cfr_points
     factors["cfr_30d"] = {"value": cfr, "threshold": CFR_THRESHOLD, "points": cfr_points}
