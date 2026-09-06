@@ -73,6 +73,16 @@ describe("getDeployment", () => {
     });
   });
 
+  it("scopes the query to the given org_id", async () => {
+    mockedQueryOne.mockResolvedValue(makeRow());
+
+    await getDeployment({ deployment_id: 5 }, "org-a");
+
+    const [sql, params] = mockedQueryOne.mock.calls[0];
+    expect(sql).toContain("s.org_id = $2");
+    expect(params).toEqual([5, "org-a"]);
+  });
+
   it("shows null health_assessment and reflects status in the summary when not yet assessed", async () => {
     mockedQueryOne.mockResolvedValue(
       makeRow({ health_score: null, health_verdict: null, assessed_at: null, status: "syncing" }),

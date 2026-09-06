@@ -89,6 +89,18 @@ describe("generateIncidentReport", () => {
     expect(report).toContain("35/100");
   });
 
+  it("scopes the query to the given org_id", async () => {
+    mockedQueryOne.mockResolvedValue(makeRow());
+    mockedRangeQuery.mockResolvedValue([]);
+    mockedLokiQueryRange.mockResolvedValue([]);
+
+    await generateIncidentReport({ alert_id: 42 }, "org-a");
+
+    const [sql, params] = mockedQueryOne.mock.calls[0];
+    expect(sql).toContain("a.org_id = $2");
+    expect(params).toEqual([42, "org-a"]);
+  });
+
   it("returns an error when the alert ID does not exist", async () => {
     mockedQueryOne.mockResolvedValue(null);
 
