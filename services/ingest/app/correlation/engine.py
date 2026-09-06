@@ -3,7 +3,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.deployment import Deployment
@@ -12,9 +12,47 @@ from ..models.service import Service
 
 logger = logging.getLogger("kubex.correlation")
 
+# Once a deployment reaches one of these, no further event for it should
+# regress it back to an in-progress state or flip it to the other terminal
+# state — the event sources that report status here (GitHub Deployments
+# API, the generic notify endpoint) carry no ordering signal to tell which
+# delivery is actually the newer one.
+TERMINAL_STATUSES = ("deployed", "sync_failed")
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def apply_terminal_guarded_status(existing: Deployment, new_status: str) -> bool:
+    """Update `existing`'s status (and finished_at, if newly terminal)
+    unless it's already terminal. Returns False if skipped as stale."""
+    if existing.status in TERMINAL_STATUSES:
+        return False
+    existing.status = new_status
+    if new_status in TERMINAL_STATUSES:
+        existing.finished_at = utcnow()
+    return True
+
+
+def terminal_guarded_upsert_set(new_status: str, extra: dict | None = None) -> dict:
+    """The `set_` dict for an ON CONFLICT DO UPDATE that must not regress a
+    row already in a terminal state — same guard as
+    apply_terminal_guarded_status, expressed as SQL CASE so it holds even
+    under a race between two concurrent first-time deliveries."""
+    set_ = {
+        "status": case(
+            (Deployment.status.in_(TERMINAL_STATUSES), Deployment.status),
+            else_=new_status,
+        ),
+        "finished_at": case(
+            (Deployment.status.in_(TERMINAL_STATUSES), Deployment.finished_at),
+            else_=(utcnow() if new_status in TERMINAL_STATUSES else Deployment.finished_at),
+        ),
+    }
+    if extra:
+        set_.update(extra)
+    return set_
 
 
 def parse_iso_timestamp(ts: str | None) -> datetime | None:

@@ -3,12 +3,20 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, Request
-from sqlalchemy import case, select, update
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import verify_github_app_signature
-from ..correlation.engine import extract_image_tag, find_matching_deployment, resolve_service, utcnow
+from ..correlation.engine import (
+    TERMINAL_STATUSES,
+    apply_terminal_guarded_status,
+    extract_image_tag,
+    find_matching_deployment,
+    resolve_service,
+    terminal_guarded_upsert_set,
+    utcnow,
+)
 from ..db import get_session
 from ..models.deployment import Deployment
 from ..models.installation import Installation
@@ -233,24 +241,22 @@ async def _handle_deployment_status(session: AsyncSession, payload: dict) -> dic
         # carries no ordering signal to tell which event is actually
         # newer. Same class of bug the classic webhook's "completed"
         # handler guards against for ArgoCD/build races.
-        if existing.status in ("deployed", "sync_failed"):
+        if not apply_terminal_guarded_status(existing, new_status):
             logger.info(
                 "Ignoring stale deployment_status '%s' for already-%s deployment_id=%d",
                 new_status, existing.status, existing.id,
             )
             return {"status": "ignored", "reason": f"deployment already {existing.status}"}
 
-        existing.status = new_status
-        if new_status in ("deployed", "sync_failed"):
-            existing.finished_at = utcnow()
         logger.info(
             "Deployment %s (correlated via %s): service_id=%d deployment_id=%d sha=%s",
             new_status, correlation_method, service_id, existing.id, commit_sha,
         )
         return {"status": "ok", "deployment_status": new_status, "correlation": correlation_method}
 
-    # V021 added a real ON CONFLICT target (commit_sha, service_id), so a
-    # redelivered deployment_status with no prior matching deployment
+    # V021 added a real ON CONFLICT target (commit_sha, service_id) scoped
+    # to workflow_run_id IS NULL — this path never sets workflow_run_id, so
+    # a redelivered deployment_status with no prior matching deployment
     # upserts instead of creating a duplicate orphan row.
     stmt = pg_insert(Deployment).values(
         org_id=org_id,
@@ -259,24 +265,12 @@ async def _handle_deployment_status(session: AsyncSession, payload: dict) -> dic
         image_tag=image_tag,
         status=new_status,
         started_at=utcnow(),
-        finished_at=utcnow() if new_status in ("deployed", "sync_failed") else None,
+        finished_at=utcnow() if new_status in TERMINAL_STATUSES else None,
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=["commit_sha", "service_id"],
-        index_where=Deployment.commit_sha.is_not(None),
-        set_={
-            # Same terminal-state guard as the `existing` branch above —
-            # a race between two concurrent first-time deliveries must not
-            # let a stale one flip an already-terminal row.
-            "status": case(
-                (Deployment.status.in_(("deployed", "sync_failed")), Deployment.status),
-                else_=new_status,
-            ),
-            "finished_at": case(
-                (Deployment.status.in_(("deployed", "sync_failed")), Deployment.finished_at),
-                else_=(utcnow() if new_status in ("deployed", "sync_failed") else Deployment.finished_at),
-            ),
-        },
+        index_where=Deployment.commit_sha.is_not(None) & Deployment.workflow_run_id.is_(None),
+        set_=terminal_guarded_upsert_set(new_status),
     )
     await session.execute(stmt)
     logger.info(

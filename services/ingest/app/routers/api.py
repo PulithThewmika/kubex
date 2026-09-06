@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import case, text
+from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +11,15 @@ logger = logging.getLogger("kubex.api")
 
 from ..auth import verify_alertmanager_token, verify_api_key
 from ..auth_middleware import UserContext, get_current_user
-from ..correlation.engine import extract_image_tag, find_matching_deployment, resolve_service, utcnow
+from ..correlation.engine import (
+    TERMINAL_STATUSES,
+    apply_terminal_guarded_status,
+    extract_image_tag,
+    find_matching_deployment,
+    resolve_service,
+    terminal_guarded_upsert_set,
+    utcnow,
+)
 from ..db import get_session
 from ..models.deployment import Deployment
 from ..models.pipeline_event import PipelineEvent
@@ -683,7 +691,7 @@ async def notify_deployment(
     )
 
     if existing:
-        if existing.status in ("deployed", "sync_failed"):
+        if not apply_terminal_guarded_status(existing, new_status):
             logger.info(
                 "Ignoring stale deploy notification '%s' for already-%s deployment_id=%d",
                 new_status, existing.status, existing.id,
@@ -694,10 +702,7 @@ async def notify_deployment(
                 deployment_status=existing.status, correlation=correlation_method,
             )
 
-        existing.status = new_status
         existing.image_tag = image_tag
-        if new_status in ("deployed", "sync_failed"):
-            existing.finished_at = utcnow()
         await session.commit()
         logger.info(
             "Deploy notification %s (correlated via %s): service_id=%d deployment_id=%d sha=%s",
@@ -710,6 +715,8 @@ async def notify_deployment(
 
     # No prior CI/CD event correlated this commit — orphan case, same
     # ON CONFLICT-upsert pattern as webhooks_argocd.py/webhooks_github_app.py.
+    # index_where must match V021's partial index predicate exactly
+    # (workflow_run_id IS NULL) — this path never sets workflow_run_id.
     stmt = pg_insert(Deployment).values(
         org_id=org_id,
         service_id=service_id,
@@ -717,22 +724,12 @@ async def notify_deployment(
         image_tag=image_tag,
         status=new_status,
         started_at=utcnow(),
-        finished_at=utcnow() if new_status in ("deployed", "sync_failed") else None,
+        finished_at=utcnow() if new_status in TERMINAL_STATUSES else None,
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=["commit_sha", "service_id"],
-        index_where=Deployment.commit_sha.is_not(None),
-        set_={
-            "status": case(
-                (Deployment.status.in_(("deployed", "sync_failed")), Deployment.status),
-                else_=new_status,
-            ),
-            "image_tag": stmt.excluded.image_tag,
-            "finished_at": case(
-                (Deployment.status.in_(("deployed", "sync_failed")), Deployment.finished_at),
-                else_=(utcnow() if new_status in ("deployed", "sync_failed") else Deployment.finished_at),
-            ),
-        },
+        index_where=Deployment.commit_sha.is_not(None) & Deployment.workflow_run_id.is_(None),
+        set_=terminal_guarded_upsert_set(new_status, extra={"image_tag": stmt.excluded.image_tag}),
     ).returning(Deployment.id)
     deployment_id = (await session.execute(stmt)).scalar_one()
     await session.commit()
