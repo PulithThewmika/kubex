@@ -113,3 +113,27 @@ describe('App routing', () => {
     expect(container).toBeInTheDocument()
   })
 })
+
+describe('Auth redirect flow', () => {
+  it('preserves the deep-linked path through /login and honors it once authenticated', async () => {
+    // Step 1: visiting a protected deep link while unauthenticated lands on
+    // /login with that path preserved as ?redirect=.
+    stubRoutedFetch({ '/auth/me': () => new Response(null, { status: 401 }) })
+    window.history.pushState({}, '', '/app/services/orders')
+
+    await renderApp()
+
+    const githubLink = await screen.findByRole('link', { name: /sign in with github/i })
+    expect(githubLink).toHaveAttribute('href', '/auth/github?redirect=%2Fapp%2Fservices%2Forders')
+
+    // Step 2: the real OAuth round trip happens outside the SPA (GitHub,
+    // then the backend callback), which 302s the browser to exactly that
+    // redirect target. Simulate landing back on it now authenticated.
+    stubRoutedFetch(AUTHENTICATED_ROUTES)
+    window.history.pushState({}, '', '/app/services/orders')
+
+    await renderApp()
+
+    expect(await screen.findByRole('heading', { name: 'orders' })).toBeInTheDocument()
+  })
+})
