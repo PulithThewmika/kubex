@@ -59,6 +59,12 @@ BEGIN
     ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES organizations(id);
     UPDATE pipeline_events SET org_id = default_org_id WHERE org_id IS NULL;
 
+    -- ── NOT NULL (after backfill) ───────────────────────────────────────────
+    ALTER TABLE services ALTER COLUMN org_id SET NOT NULL;
+    ALTER TABLE deployments ALTER COLUMN org_id SET NOT NULL;
+    ALTER TABLE alerts ALTER COLUMN org_id SET NOT NULL;
+    ALTER TABLE pipeline_events ALTER COLUMN org_id SET NOT NULL;
+
     INSERT INTO schema_versions (version, description)
     VALUES ('V014', 'Multi-tenancy: org_id on services, deployments, alerts, pipeline_events');
 END $$;
