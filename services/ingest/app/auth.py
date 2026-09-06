@@ -10,10 +10,16 @@ logger = logging.getLogger("kubex.ingest.auth")
 GITHUB_WEBHOOK_SECRET = os.environ.get("GITHUB_WEBHOOK_SECRET", "")
 ARGOCD_WEBHOOK_TOKEN = os.environ.get("ARGOCD_WEBHOOK_TOKEN", "")
 ALERTMANAGER_WEBHOOK_TOKEN = os.environ.get("ALERTMANAGER_WEBHOOK_TOKEN", "")
+GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
+GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
+JWT_SECRET = os.environ.get("JWT_SECRET", "")
+# Where the OAuth callback sends the browser after login — the React
+# shell's own origin, not this API's (it has no UI routes of its own).
+SHELL_URL = os.environ.get("SHELL_URL", "http://localhost:5173")
 
 
 def validate_auth_tokens() -> None:
-    """Reject startup if any webhook auth token is empty or unset."""
+    """Reject startup if any webhook/OAuth auth secret is empty or unset."""
     missing = []
     if not GITHUB_WEBHOOK_SECRET:
         missing.append("GITHUB_WEBHOOK_SECRET")
@@ -21,9 +27,15 @@ def validate_auth_tokens() -> None:
         missing.append("ARGOCD_WEBHOOK_TOKEN")
     if not ALERTMANAGER_WEBHOOK_TOKEN:
         missing.append("ALERTMANAGER_WEBHOOK_TOKEN")
+    if not GITHUB_CLIENT_ID:
+        missing.append("GITHUB_CLIENT_ID")
+    if not GITHUB_CLIENT_SECRET:
+        missing.append("GITHUB_CLIENT_SECRET")
+    if not JWT_SECRET:
+        missing.append("JWT_SECRET")
     if missing:
         raise RuntimeError(
-            f"Webhook auth tokens must not be empty: {', '.join(missing)}. "
+            f"Webhook/OAuth auth secrets must not be empty: {', '.join(missing)}. "
             "Set them in .env before starting the service."
         )
 
