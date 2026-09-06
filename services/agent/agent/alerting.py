@@ -95,6 +95,7 @@ async def fire_alert(
     score: int,
     verdict: str,
     details: dict,
+    org_id,
 ) -> int | None:
     """Fire a DeployDegradation alert to Alertmanager and insert alerts row.
 
@@ -114,14 +115,19 @@ async def fire_alert(
         evidence_parts.append(f"restarts: {raw.get('restarts_base')} → {raw.get('restarts_post')}")
     description = "; ".join(evidence_parts) if evidence_parts else "Health degradation detected"
 
-    # Insert alert row into PostgreSQL
+    # Insert alert row into PostgreSQL. org_id is set explicitly (from the
+    # deployment this alert belongs to) rather than relying on V014's
+    # column DEFAULT — that default silently misattributes every agent-
+    # fired alert to the default org regardless of which org the
+    # deployment actually belongs to (E20-T2 code review finding).
     result = await session.execute(
         text("""
-            INSERT INTO alerts (deployment_id, service_id, severity, title, description, fired_at)
-            VALUES (:deployment_id, :service_id, :severity, :title, :description, now())
+            INSERT INTO alerts (org_id, deployment_id, service_id, severity, title, description, fired_at)
+            VALUES (:org_id, :deployment_id, :service_id, :severity, :title, :description, now())
             RETURNING id
         """),
         {
+            "org_id": org_id,
             "deployment_id": deployment_id,
             "service_id": service_id,
             "severity": severity,
