@@ -12,6 +12,7 @@ import asyncio
 import secrets
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,11 +21,25 @@ import bcrypt
 from ..auth_middleware import UserContext, get_current_user
 from ..db import get_session
 from ..models.cluster import Cluster
-from ..schemas.cluster import ClusterCreateRequest, ClusterCreateResponse
+from ..schemas.cluster import ClusterCreateRequest, ClusterCreateResponse, ClusterResponse
 
 router = APIRouter(prefix="/api/clusters", tags=["clusters"])
 
 TOKEN_PREFIX = "kbx_"
+
+
+def _to_response(cluster: Cluster) -> ClusterResponse:
+    return ClusterResponse(
+        id=str(cluster.id),
+        name=cluster.name,
+        status=cluster.status,
+        agent_version=cluster.agent_version,
+        argocd_version=cluster.argocd_version,
+        argocd_status=cluster.argocd_status,
+        prometheus_status=cluster.prometheus_status,
+        last_heartbeat=cluster.last_heartbeat,
+        created_at=cluster.created_at,
+    )
 
 
 @router.post("", response_model=ClusterCreateResponse)
@@ -47,3 +62,14 @@ async def create_cluster(
     await session.commit()
 
     return ClusterCreateResponse(id=str(row.id), name=row.name, token=token, created_at=row.created_at)
+
+
+@router.get("", response_model=list[ClusterResponse])
+async def list_clusters(
+    user: UserContext = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[ClusterResponse]:
+    result = await session.execute(
+        select(Cluster).where(Cluster.org_id == user.org_id).order_by(Cluster.created_at.desc())
+    )
+    return [_to_response(c) for c in result.scalars().all()]

@@ -84,3 +84,37 @@ async def test_create_cluster_requires_session(client: FastAPI) -> None:
     async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
         resp = await ac.post("/api/clusters", json={"name": "prod-cluster"})
     assert resp.status_code == 401
+
+
+# ── S5: list scopes to the caller's org, never leaks token/hash ────────
+
+
+@pytest.mark.asyncio
+async def test_list_clusters_never_leaks_token_hash(client: FastAPI, mock_session: AsyncMock) -> None:
+    cluster = _fake_cluster(TEST_ORG_ID, "kbx_secret-token-value", status="connected")
+    mock_session.execute = AsyncMock(
+        return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[cluster]))))
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get("/api/clusters")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["name"] == "prod-cluster"
+    assert data[0]["status"] == "connected"
+    body_str = resp.text
+    assert "token" not in data[0]
+    assert cluster.token_hash not in body_str
+
+
+@pytest.mark.asyncio
+async def test_list_clusters_requires_session(client: FastAPI) -> None:
+    from app.auth_middleware import get_current_user
+
+    client.dependency_overrides.pop(get_current_user, None)
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get("/api/clusters")
+    assert resp.status_code == 401
