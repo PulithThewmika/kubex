@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import os
+import uuid
 from collections.abc import AsyncIterator
 
 import anthropic
@@ -31,9 +32,9 @@ def sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-async def list_anthropic_tools() -> list[dict]:
+async def list_anthropic_tools(org_id: uuid.UUID) -> list[dict]:
     """Fetch the MCP tool list and convert it to Anthropic's tool schema."""
-    async with mcp_session() as session:
+    async with mcp_session(org_id) as session:
         result = await session.list_tools()
         return [
             {
@@ -45,8 +46,8 @@ async def list_anthropic_tools() -> list[dict]:
         ]
 
 
-async def _call_mcp_tool(name: str, arguments: dict) -> tuple[str, bool]:
-    async with mcp_session() as session:
+async def _call_mcp_tool(org_id: uuid.UUID, name: str, arguments: dict) -> tuple[str, bool]:
+    async with mcp_session(org_id) as session:
         result = await session.call_tool(name, arguments)
         text = "".join(
             block.text for block in result.content if getattr(block, "text", None)
@@ -59,7 +60,7 @@ def _to_anthropic_messages(messages: list[ChatMessage]) -> list[dict]:
 
 
 async def run_chat_turn(
-    messages: list[ChatMessage], tools: list[dict]
+    messages: list[ChatMessage], tools: list[dict], org_id: uuid.UUID
 ) -> AsyncIterator[str]:
     """Run one agentic chat turn, yielding SSE frames.
 
@@ -109,7 +110,7 @@ async def run_chat_turn(
         # Claude can request several independent tools in one turn — run
         # them concurrently rather than one round trip at a time.
         outcomes = await asyncio.gather(
-            *(_call_mcp_tool(b.name, b.input) for b in tool_use_blocks),
+            *(_call_mcp_tool(org_id, b.name, b.input) for b in tool_use_blocks),
             return_exceptions=True,
         )
 
