@@ -12,11 +12,9 @@ type MetricsStepProps = {
   value: MetricsMethod | null
   onChange: (value: MetricsMethod) => void
   onAddCluster: () => void
-  healthCheckUrl: string
-  onHealthCheckUrlChange: (url: string) => void
 }
 
-export function MetricsStep({ value, onChange, onAddCluster, healthCheckUrl, onHealthCheckUrlChange }: MetricsStepProps) {
+export function MetricsStep({ value, onChange, onAddCluster }: MetricsStepProps) {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
@@ -44,21 +42,10 @@ export function MetricsStep({ value, onChange, onAddCluster, healthCheckUrl, onH
           </button>
         )}
         {value === 'healthcheck' && (
-          <label className="flex flex-col gap-1.5 text-xs">
-            <span className="font-medium text-text">Health check URL (optional)</span>
-            <input
-              type="url"
-              inputMode="url"
-              value={healthCheckUrl}
-              onChange={(e) => onHealthCheckUrlChange(e.target.value)}
-              placeholder="https://my-service.example.com/healthz"
-              className="rounded-md border border-border bg-background px-3 py-2 text-sm text-text"
-            />
-            <span className="text-text-muted">
-              You'll assign a check URL per service once your first deployment lands — this is just a note for
-              now.
-            </span>
-          </label>
+          <p className="text-xs text-text-muted">
+            You'll set a check URL per service under Settings › Services once your first deployment lands —
+            there's no service to attach one to yet.
+          </p>
         )}
       </RadioCards>
     </div>

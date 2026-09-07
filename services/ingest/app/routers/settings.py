@@ -125,7 +125,11 @@ async def complete_onboarding(
     wizard (E24-T2-S6). Idempotent — re-running it is a no-op. The wizard
     stays reachable from Settings regardless of this flag; it only controls
     the first-login auto-redirect."""
-    await session.execute(
+    result = await session.execute(
         update(Organization).where(Organization.id == user.org_id).values(onboarding_completed=True)
     )
     await session.commit()
+    # A valid JWT outlives its org (deletion cascades memberships, not
+    # tokens) — 0 rows means the org is gone, so don't report success.
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Organization not found")
