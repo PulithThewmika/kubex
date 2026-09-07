@@ -36,6 +36,12 @@ export function makeService(overrides: Partial<Service> = {}): Service {
     },
     health: { score: 92, verdict: 'healthy' },
     active_alert_count: 0,
+    integration_status: {
+      ci: true,
+      cd: 'argocd',
+      metrics: 'prometheus',
+      available_features: [],
+    },
     ...overrides,
   }
 }
