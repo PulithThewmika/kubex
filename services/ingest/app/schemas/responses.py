@@ -48,6 +48,9 @@ class ServiceWithStatusResponse(BaseModel):
     latest_deploy: LatestDeployInfo | None = None
     health: HealthSummary | None = None
     active_alert_count: int = 0
+    deploy_count_30d: int = 0
+    cluster_id: str | None = None
+    cluster_name: str | None = None
     integration_status: IntegrationStatusResponse
 
 
@@ -100,6 +103,7 @@ class AlertResponse(BaseModel):
     id: int
     deployment_id: int
     service_id: int
+    service_name: str
     severity: str
     title: str
     description: str | None = None
