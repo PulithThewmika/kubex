@@ -33,17 +33,35 @@ cluster-status:
 up:
 	docker compose -f deploy/docker-compose.yml --env-file .env up -d
 
+# Escape hatch: also brings up the local kubex-postgres container instead
+# of relying solely on Supabase (DATABASE_URL in .env must then point at
+# it — see deploy/docker-compose.yml's postgres service comment).
+up-local-db:
+	docker compose -f deploy/docker-compose.yml --env-file .env --profile local-db up -d
+
 down:
 	docker compose -f deploy/docker-compose.yml down
 
 logs:
 	docker compose -f deploy/docker-compose.yml logs -f
 
+# Connects to the platform DB (Supabase by default via DATABASE_URL in
+# .env). For the local-db profile container instead, use db-shell-local.
 db-shell:
+	set -a; [ -f ./.env ] && . ./.env; set +a; \
+	psql "$${DATABASE_URL}"
+
+db-shell-local:
 	docker compose -f deploy/docker-compose.yml exec postgres psql -U kubex -d kubex
 
 # --- Migrations ---
+# Runs against the platform DB (Supabase by default via DATABASE_URL in
+# .env). For the local-db profile container instead, use migrate-local.
 migrate:
+	set -a; [ -f ./.env ] && . ./.env; set +a; \
+	python services/ingest/migrations/run.py --url "$${DATABASE_URL}"
+
+migrate-local:
 	set -a; [ -f ./.env ] && . ./.env; set +a; \
 	python services/ingest/migrations/run.py --url "postgresql://kubex:$${POSTGRES_PASSWORD:-kubex}@localhost:5432/kubex"
 
