@@ -179,7 +179,7 @@ async def test_agent_loop_error_one_deployment_continues() -> None:
     call_count = 0
 
     async def mock_assess(
-        session: AsyncMock, deploy: MagicMock, service_name: list[str], namespace: str, **kwargs: object,
+        _session: AsyncMock, _deploy: MagicMock, _components: list[str], _namespace: str, **_kwargs: object,
     ) -> tuple[int, str, dict]:
         nonlocal call_count
         call_count += 1
