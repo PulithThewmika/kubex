@@ -50,4 +50,21 @@ describe('ErrorBoundary', () => {
     screen.getByRole('button', { name: /try again/i }).click()
     expect(screen.getByRole('heading', { name: /something went wrong/i })).toBeInTheDocument()
   })
+
+  it('clears the error when resetKey changes', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { rerender } = render(
+      <ErrorBoundary resetKey="/a">
+        <Boom />
+      </ErrorBoundary>,
+    )
+    expect(screen.getByRole('heading', { name: /something went wrong/i })).toBeInTheDocument()
+
+    rerender(
+      <ErrorBoundary resetKey="/b">
+        <p>recovered</p>
+      </ErrorBoundary>,
+    )
+    expect(screen.getByText('recovered')).toBeInTheDocument()
+  })
 })

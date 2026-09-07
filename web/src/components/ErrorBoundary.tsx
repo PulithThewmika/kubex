@@ -2,6 +2,10 @@ import { Component, type ErrorInfo, type ReactNode } from 'react'
 
 type ErrorBoundaryProps = {
   children: ReactNode
+  // When this value changes, a caught error is cleared so children reconcile
+  // normally. Pass the route path so navigating away from a crashed page
+  // recovers — without remounting children on every same-route render.
+  resetKey?: unknown
 }
 
 type ErrorBoundaryState = {
@@ -13,6 +17,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { error }
+  }
+
+  componentDidUpdate(prevProps: ErrorBoundaryProps) {
+    if (this.state.error && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ error: null })
+    }
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
