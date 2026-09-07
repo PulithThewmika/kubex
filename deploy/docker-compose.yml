@@ -137,6 +137,7 @@ services:
     volumes:
       - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./certs/supabase-root-2021-ca.pem:/etc/grafana/certs/supabase-root-2021-ca.pem:ro
       - grafana_data:/var/lib/grafana
     depends_on:
       postgres:

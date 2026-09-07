@@ -1,6 +1,7 @@
 import os
 import re
 import ssl
+from pathlib import Path
 
 
 def _parse_duration(value: str) -> int:
@@ -13,24 +14,41 @@ def _parse_duration(value: str) -> int:
     return amount * multipliers[unit]
 
 
+# Supabase signs its pooler certs with its own private CA (not a public
+# one), so full verification needs this root explicitly trusted.
+_SUPABASE_CA_PATH = Path(__file__).parent / "certs" / "supabase-root-2021-ca.pem"
+
+
+def _supabase_ssl_context() -> ssl.SSLContext:
+    """Build a fully-verifying (chain + hostname) SSLContext for Supabase.
+
+    See services/ingest/app/db.py's identical helper for why this is a
+    plain SSLContext rather than ssl.create_default_context(): the latter
+    enables OpenSSL's strict X.509 mode, which rejects Supabase's own
+    intermediate CA cert (a real defect on their side — it's missing the
+    Key Usage extension). A non-strict context with the root CA loaded
+    verifies the full chain and hostname correctly.
+    """
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.load_verify_locations(cafile=str(_SUPABASE_CA_PATH))
+    context.verify_mode = ssl.CERT_REQUIRED
+    context.check_hostname = True
+    return context
+
+
 def prepare_database_url(url: str) -> tuple[str, dict]:
     """Normalize a DATABASE_URL to the asyncpg dialect and work out the
     connect_args a Supabase host needs (TLS, and disabled statement
     caching if pointed at the transaction-mode pooler on :6543). The
     local-dev compose Postgres (--profile local-db) has no TLS listener,
     so this is a no-op for it.
-
-    Uses an unverified context (encrypt, don't verify the chain) — see
-    services/ingest/app/db.py's prepare_database_url for why full
-    chain/hostname verification failed in live testing against Supabase's
-    session pooler.
     """
     if url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
     connect_args: dict = {}
     if "supabase" in url:
-        connect_args["ssl"] = ssl._create_unverified_context()
+        connect_args["ssl"] = _supabase_ssl_context()
         if ":6543" in url:
             connect_args["statement_cache_size"] = 0
     return url, connect_args

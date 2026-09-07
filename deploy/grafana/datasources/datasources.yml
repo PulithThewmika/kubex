@@ -36,7 +36,11 @@ datasources:
     editable: false
     jsonData:
       database: $__env{SUPABASE_DB_NAME}
-      sslmode: require
+      # verify-full: Supabase signs its pooler certs with its own private
+      # CA, mounted read-only into this container (see docker-compose.yml)
+      # — full chain + hostname verification, not just encryption.
+      sslmode: verify-full
+      sslRootCertFile: /etc/grafana/certs/supabase-root-2021-ca.pem
       # Supabase's free/small-tier connection limits are tight —
       # keep this datasource's pool small.
       maxOpenConns: 5

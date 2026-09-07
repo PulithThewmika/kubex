@@ -16,16 +16,23 @@ import argparse
 
 import psycopg2
 
+# Supabase signs its pooler certs with its own private CA — needed for
+# sslmode=verify-full to actually verify the chain rather than just
+# encrypting. (Unlike asyncpg, psycopg2/libpq doesn't hit the strict-mode
+# issue documented in services/ingest/app/db.py, so verify-full works
+# directly with just the root CA loaded.)
+_SUPABASE_CA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "app", "certs", "supabase-root-2021-ca.pem")
+
 
 def get_connection(url: str):
     sync_url = url.replace("+asyncpg", "").replace("postgresql+asyncpg", "postgresql")
-    # Supabase requires TLS. libpq's default sslmode ("prefer") usually
-    # negotiates it anyway, but migrations run unattended in CI/DX
-    # scripts too, so make it explicit rather than relying on the
-    # negotiation succeeding silently. Local-dev compose Postgres
-    # (--profile local-db) has no TLS listener, so don't force this
-    # for it.
-    kwargs = {"sslmode": "require"} if "supabase" in sync_url else {}
+    # Local-dev compose Postgres (--profile local-db) has no TLS listener,
+    # so only force verify-full for a Supabase host.
+    kwargs = (
+        {"sslmode": "verify-full", "sslrootcert": _SUPABASE_CA_PATH}
+        if "supabase" in sync_url
+        else {}
+    )
     return psycopg2.connect(sync_url, **kwargs)
 
 
