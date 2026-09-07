@@ -25,8 +25,9 @@ os.environ.setdefault("JWT_SECRET", "test-jwt-secret-at-least-32-bytes-long")
 # time, so a mistake in one test file can't slip past this file — this is
 # the one place every test run passes through.
 for _name, _value in os.environ.items():
+    _value_lower = (_value or "").lower()
     if _name.endswith("_TEST_DATABASE_URL") and _value and (
-        "supabase.co" in _value or "supabase.com" in _value
+        "supabase.co" in _value_lower or "supabase.com" in _value_lower
     ):
         raise RuntimeError(
             f"{_name} points at a Supabase host — its fixture teardown runs "
