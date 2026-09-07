@@ -26,7 +26,13 @@ from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .db import get_session
+
 logger = logging.getLogger("kubex.agent.notifications")
+
+# Hard cap on how long Slack fan-out may hold up the agent's batch loop for
+# one deploy. Each channel already self-limits (one 429 retry, 10s timeouts).
+_DELIVERY_BUDGET_SECONDS = 25
 
 INTEGRATION_ENC_KEY = os.environ.get("INTEGRATION_ENC_KEY", "")
 SHELL_URL = os.environ.get("SHELL_URL", "http://localhost:5173")
@@ -120,6 +126,11 @@ def _evidence_lines(details: dict) -> list[str]:
         lines.append(
             f"• p99 latency: {raw.get('latency_p99_base_ms')}ms → {raw.get('latency_p99_post_ms')}ms"
         )
+    # health-check-scored deploys (no Prometheus) use these keys instead
+    if penalties.get("response_time", 0) > 0:
+        lines.append(
+            f"• response time: {raw.get('response_time_base_ms')}ms → {raw.get('response_time_post_ms')}ms"
+        )
     if penalties.get("restarts", 0) > 0:
         lines.append(f"• restarts: {raw.get('restarts_base')} → {raw.get('restarts_post')}")
     return lines
@@ -195,34 +206,36 @@ async def _deliver(session: AsyncSession, channels: list, message: str, blocks: 
     await session.commit()
 
 
-async def notify_deploy_alert(
-    session: AsyncSession, *, org_id, service_id: int, service_name: str,
-    deployment_id: int, score, verdict: str, details: dict,
-) -> None:
-    """Fire a deploy-degradation notification to the org's Slack channels.
-    Never raises — logs and returns on any failure."""
+async def _notify(org_id, service_id: int, deployment_id: int, message: str, blocks: list) -> None:
+    """Run delivery on its own session (so it never commits a caller's
+    in-flight transaction — e.g. reconcile_active_alerts' single-commit
+    batch) and under a time budget (so a rate-limited channel can't stall
+    the agent loop). Never raises."""
     if not INTEGRATION_ENC_KEY:
         return
     try:
-        channels = await _channels_for(session, org_id, service_id, "deploy_health")
-        if not channels:
-            return
-        message, blocks = _build_alert_message(service_name, deployment_id, score, verdict, details)
-        await _deliver(session, channels, message, blocks)
-    except Exception:
-        logger.exception("Slack deploy-alert delivery failed for deployment %d", deployment_id)
+        session = await get_session()
+        async with session:
+            channels = await _channels_for(session, org_id, service_id, "deploy_health")
+            if not channels:
+                return
+            await asyncio.wait_for(
+                _deliver(session, channels, message, blocks), timeout=_DELIVERY_BUDGET_SECONDS
+            )
+    except (Exception, asyncio.TimeoutError):
+        logger.exception("Slack delivery failed for deployment %d", deployment_id)
+
+
+async def notify_deploy_alert(
+    *, org_id, service_id: int, service_name: str,
+    deployment_id: int, score, verdict: str, details: dict,
+) -> None:
+    message, blocks = _build_alert_message(service_name, deployment_id, score, verdict, details)
+    await _notify(org_id, service_id, deployment_id, message, blocks)
 
 
 async def notify_deploy_recovered(
-    session: AsyncSession, *, org_id, service_id: int, service_name: str, deployment_id: int,
+    *, org_id, service_id: int, service_name: str, deployment_id: int,
 ) -> None:
-    if not INTEGRATION_ENC_KEY:
-        return
-    try:
-        channels = await _channels_for(session, org_id, service_id, "deploy_health")
-        if not channels:
-            return
-        message, blocks = _build_recovery_message(service_name, deployment_id)
-        await _deliver(session, channels, message, blocks)
-    except Exception:
-        logger.exception("Slack recovery delivery failed for deployment %d", deployment_id)
+    message, blocks = _build_recovery_message(service_name, deployment_id)
+    await _notify(org_id, service_id, deployment_id, message, blocks)

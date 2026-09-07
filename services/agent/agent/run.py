@@ -184,14 +184,13 @@ async def _process_deployment(session, row) -> None:
                     org_id,
                 )
                 await alert_session.commit()
-                # Per-org Slack fan-out (E23-T5). Separate from Alertmanager,
-                # which stays the platform/infra path. notify_deploy_alert
-                # never raises.
-                await notify_deploy_alert(
-                    alert_session,
-                    org_id=org_id, service_id=service_id, service_name=service_name,
-                    deployment_id=deploy_id, score=score, verdict=verdict, details=details,
-                )
+            # Per-org Slack fan-out (E23-T5). Separate from Alertmanager,
+            # which stays the platform/infra path. Runs on its own session
+            # under a time budget and never raises.
+            await notify_deploy_alert(
+                org_id=org_id, service_id=service_id, service_name=service_name,
+                deployment_id=deploy_id, score=score, verdict=verdict, details=details,
+            )
         except Exception:
             logger.exception("Failed to fire alert for deployment %d", deploy_id)
 

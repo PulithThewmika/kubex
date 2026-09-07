@@ -100,8 +100,17 @@ def _require_enabled() -> None:
 async def slack_install(
     request: Request,
     user: UserContext = Depends(get_current_owner),
+    session: AsyncSession = Depends(get_session),
 ) -> RedirectResponse:
     _require_enabled()
+    # One workspace per org. Re-authing the *same* workspace goes through the
+    # callback's upsert fine; connecting a *different* one must disconnect
+    # first, otherwise _active_workspace / disconnect become ambiguous.
+    if await _active_workspace(session, user.org_id) is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="A Slack workspace is already connected. Disconnect it first.",
+        )
     nonce = secrets.token_urlsafe(16)
     state = jwt.encode(
         {
@@ -210,11 +219,16 @@ async def slack_oauth_callback(
 
 
 async def _active_workspace(session: AsyncSession, org_id: uuid.UUID) -> SlackWorkspace | None:
+    # slack_install blocks a second active connection, but order + limit here
+    # keeps the pick deterministic even if one slips through (e.g. a race).
     return await session.scalar(
-        select(SlackWorkspace).where(
+        select(SlackWorkspace)
+        .where(
             SlackWorkspace.org_id == org_id,
             SlackWorkspace.uninstalled_at.is_(None),
         )
+        .order_by(SlackWorkspace.installed_at.desc())
+        .limit(1)
     )
 
 
@@ -362,13 +376,13 @@ async def add_channel(
         stmt = stmt.on_conflict_do_update(
             index_elements=["workspace_id", "slack_channel_id"],
             index_where=NotificationChannel.service_id.is_(None),
-            set_={"slack_channel_name": body.slack_channel_name, "enabled": True},
+            set_={"slack_channel_name": body.slack_channel_name, "enabled": True, "last_delivery_error": None},
         )
     else:
         stmt = stmt.on_conflict_do_update(
             index_elements=["workspace_id", "slack_channel_id", "service_id"],
             index_where=NotificationChannel.service_id.is_not(None),
-            set_={"slack_channel_name": body.slack_channel_name, "enabled": True},
+            set_={"slack_channel_name": body.slack_channel_name, "enabled": True, "last_delivery_error": None},
         )
     channel_id = (await session.execute(stmt.returning(NotificationChannel.id))).scalar_one()
     await session.commit()
