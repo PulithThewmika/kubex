@@ -29,6 +29,9 @@ except ImportError:
     HAS_TESTCONTAINERS = False
 
 ORG_ISOLATION_TEST_DATABASE_URL = os.environ.get("ORG_ISOLATION_TEST_DATABASE_URL")
+# Refused at collection time if pointed at Supabase — see conftest.py's
+# generic *_TEST_DATABASE_URL guard (this fixture's teardown TRUNCATEs
+# CASCADE; see CLAUDE.md's memory: feedback-test-db-safety).
 
 pytestmark = pytest.mark.skipif(
     not (ORG_ISOLATION_TEST_DATABASE_URL or HAS_TESTCONTAINERS),
