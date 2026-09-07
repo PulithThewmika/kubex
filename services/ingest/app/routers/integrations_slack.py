@@ -26,6 +26,7 @@ from urllib.parse import urlencode, urljoin
 
 import httpx
 import jwt
+from cryptography.fernet import InvalidToken
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, select, update
@@ -262,7 +263,7 @@ async def disconnect_slack(
     if workspace is None:
         raise HTTPException(status_code=404, detail="No Slack workspace connected")
     try:
-        await slack_client.revoke(decrypt(workspace.bot_token_encrypted))
+        await slack_client.revoke(_bot_token(workspace))
     except Exception:  # noqa: BLE001 — revoke is best-effort, disconnect proceeds
         logger.warning("Slack auth.revoke failed during disconnect for org_id=%s", user.org_id)
     await session.execute(
@@ -280,6 +281,16 @@ async def _owned_active_workspace(session: AsyncSession, org_id: uuid.UUID) -> S
     return workspace
 
 
+def _bot_token(workspace: SlackWorkspace) -> str:
+    """Decrypt the stored bot token, or 502 if the key can't open it
+    (e.g. INTEGRATION_ENC_KEY was rotated) — never surfaces the cause."""
+    try:
+        return decrypt(workspace.bot_token_encrypted)
+    except InvalidToken:
+        logger.error("Cannot decrypt Slack bot token for org_id=%s", workspace.org_id)
+        raise HTTPException(status_code=502, detail="Stored Slack credentials are unreadable") from None
+
+
 @api_router.get("/channels/available", response_model=list[SlackPickerChannel])
 async def list_available_channels(
     user: UserContext = Depends(get_current_owner),
@@ -289,7 +300,7 @@ async def list_available_channels(
     channels only appear once the bot has been /invite'd."""
     workspace = await _owned_active_workspace(session, user.org_id)
     try:
-        channels = await slack_client.list_channels(decrypt(workspace.bot_token_encrypted))
+        channels = await slack_client.list_channels(_bot_token(workspace))
     except (httpx.HTTPError, slack_client.SlackError) as exc:
         logger.warning("Slack conversations.list failed for org_id=%s: %s", user.org_id, exc)
         raise HTTPException(status_code=502, detail="Could not list Slack channels") from None
@@ -325,7 +336,7 @@ async def add_channel(
     # edge cases; private channels must already have the bot invited.
     try:
         await slack_client.join_channel(
-            decrypt(workspace.bot_token_encrypted), body.slack_channel_id
+            _bot_token(workspace), body.slack_channel_id
         )
     except slack_client.SlackError as exc:
         # method_not_supported_for_channel_type = private channel; that's
@@ -413,7 +424,7 @@ async def test_channel(
     now = datetime.now(timezone.utc)
     try:
         await slack_client.post_message(
-            decrypt(workspace.bot_token_encrypted), channel.slack_channel_id, text, blocks
+            _bot_token(workspace), channel.slack_channel_id, text, blocks
         )
     except slack_client.SlackError as exc:
         channel.last_delivery_error = exc.code
@@ -456,7 +467,10 @@ async def slack_events(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     body = await verify_slack_signature(request)
-    payload = json.loads(body)
+    try:
+        payload = json.loads(body)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid JSON") from None
 
     if payload.get("type") == "url_verification":
         return {"challenge": payload.get("challenge", "")}
