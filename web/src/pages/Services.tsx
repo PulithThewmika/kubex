@@ -132,7 +132,19 @@ export function Services() {
           <EmptyState
             title="No matching services"
             description="No service matches the current search and filters."
-            action={{ label: 'Clear filters', onClick: () => setSearchParams({}, { replace: true }) }}
+            action={{
+              label: 'Clear filters',
+              onClick: () =>
+                setSearchParams(
+                  (prev) => {
+                    const next = new URLSearchParams(prev)
+                    next.delete('q')
+                    next.delete('cluster')
+                    return next
+                  },
+                  { replace: true },
+                ),
+            }}
           />
         ) : (
           <EmptyState
