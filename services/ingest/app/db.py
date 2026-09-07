@@ -16,13 +16,23 @@ def prepare_database_url(url: str) -> tuple[str, dict]:
     alone across asyncpg versions, so pass it explicitly. The local-dev
     compose Postgres (--profile local-db) has no TLS listener at all, so
     only do this for a Supabase host.
+
+    Uses an unverified context (encrypt, don't verify the chain) to match
+    psycopg2's sslmode=require and node pg's rejectUnauthorized:false used
+    elsewhere for the same pooler — ssl.create_default_context() does full
+    chain+hostname verification, which failed in live testing against
+    Supabase's session pooler even though psycopg2's "require" mode (no
+    verification) connected fine seconds earlier against the same host.
     """
     if url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
     connect_args: dict = {}
     if "supabase" in url:
-        connect_args["ssl"] = ssl.create_default_context()
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        connect_args["ssl"] = ssl_context
         # Transaction-mode pooler (port 6543) doesn't support asyncpg's
         # server-side prepared statements. We default to the session
         # pooler (5432), but disable statement caching unconditionally
