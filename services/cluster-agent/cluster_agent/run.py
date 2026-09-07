@@ -152,14 +152,17 @@ async def _heartbeat_tick() -> None:
     )
     if event_buffer.size():
         # Reaching here means the heartbeat POST above just succeeded, so
-        # any buffered ArgoCD status transitions accumulated during a prior
-        # outage are now safe to report and drop — nothing to send them to
-        # (ingest's heartbeat endpoint carries current state only, not
-        # history), but logging them keeps the outage's transition history
-        # visible to whoever's reading the agent's logs.
+        # any buffered transitions are safe to report and drop. Not
+        # necessarily from an outage, though: argocd_selfheal_loop runs on
+        # its own schedule independent of heartbeat's, so a transition can
+        # land in the buffer moments before a heartbeat that was going to
+        # succeed anyway — don't assert a connectivity outage occurred,
+        # just report what transitioned. Nothing to send them to besides
+        # this log (ingest's heartbeat endpoint carries current state only,
+        # not history).
         buffered = event_buffer.drain()
         logger.warning(
-            "Flushing %d buffered ArgoCD status transition(s) from a connectivity outage: %s",
+            "Reporting %d buffered ArgoCD status transition(s): %s",
             len(buffered), buffered,
         )
 

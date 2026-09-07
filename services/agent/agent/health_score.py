@@ -169,6 +169,7 @@ def compute_health_score(metrics: dict) -> tuple[int, str, dict]:
         "weights": WEIGHTS,
         "weighted_sum": round(weighted_sum, 2),
         "low_traffic": low_traffic,
+        "data_gap": data_gap,
         "low_confidence": low_traffic or data_gap,
         "coverage": {"base": round(coverage_base, 2), "post": round(coverage_post, 2)},
         "raw_metrics": {
@@ -188,11 +189,19 @@ def compute_health_score(metrics: dict) -> tuple[int, str, dict]:
     return score, verdict, details
 
 
+def _ping_failed(result) -> bool:
+    """A single health check ping counts as failed: unreachable, or an
+    HTTP error status. Shared by _http_error_rate and
+    _trailing_consecutive_failures so the two stay in sync — they're
+    supposed to measure the same "failed" concept."""
+    return result.status_code is None or result.status_code >= 400
+
+
 def _http_error_rate(results: list) -> float | None:
     """Fraction of health check pings that failed (status >= 400 or unreachable)."""
     if not results:
         return None
-    errors = sum(1 for r in results if r.status_code is None or r.status_code >= 400)
+    errors = sum(1 for r in results if _ping_failed(r))
     return errors / len(results)
 
 
@@ -203,11 +212,11 @@ def _avg_response_time(results: list) -> float | None:
 
 
 def _trailing_consecutive_failures(results: list) -> int:
-    """Count failed pings (unreachable or >=400) at the tail of results
-    (oldest-first), i.e. the most recent run of consecutive failures."""
+    """Count failed pings at the tail of results (oldest-first), i.e. the
+    most recent run of consecutive failures."""
     count = 0
     for r in reversed(results):
-        if r.status_code is None or r.status_code >= 400:
+        if _ping_failed(r):
             count += 1
         else:
             break
@@ -238,10 +247,17 @@ def compute_health_check_score(
 
     # A target that's gone fully unreachable is worse than its raw
     # error_rate over the window implies (it may have died partway through)
-    # — score it as 100% failed for the rest of the window instead.
-    unreachable = _trailing_consecutive_failures(post_results) >= UNREACHABLE_THRESHOLD
-    if unreachable:
+    # — score it as 100% failed for the rest of the window instead. Checked
+    # in both windows: a target already dead for the tail of baseline must
+    # not keep a partial baseline error_rate that understates how broken it
+    # already was pre-deploy.
+    unreachable_base = _trailing_consecutive_failures(base_results) >= UNREACHABLE_THRESHOLD
+    unreachable_post = _trailing_consecutive_failures(post_results) >= UNREACHABLE_THRESHOLD
+    if unreachable_base:
+        error_rate_base = 1.0
+    if unreachable_post:
         error_rate_post = 1.0
+    unreachable = unreachable_base or unreachable_post
 
     penalties = {
         "response_time": penalty(response_time_base, response_time_post, "latency_p99"),
@@ -264,6 +280,8 @@ def compute_health_check_score(
         "weighted_sum": round(weighted_sum, 2),
         "low_confidence": low_confidence,
         "unreachable": unreachable,
+        "unreachable_base": unreachable_base,
+        "unreachable_post": unreachable_post,
         "coverage": {"base": round(coverage_base, 2), "post": round(coverage_post, 2)},
         "raw_metrics": {
             "response_time_base_ms": response_time_base,
@@ -308,20 +326,21 @@ async def _query_component(
 
 
 def _coverage(results: list[dict]) -> float:
-    """Fraction of the 4 per-component queries that returned actual data
-    (E23-T4-S10). A None here is a real Prometheus gap (scrape failure,
-    Prometheus restart, target down) — distinct from a genuine 0 value,
-    which is real data and stays non-None."""
+    """Fraction of components whose "restarts" query returned actual data
+    (E23-T4-S10) — the one metric here that isn't itself ambiguous with
+    "no data": error_rate (0/0 division) and latency_p99
+    (histogram_quantile over no buckets) both legitimately return None on
+    a genuinely quiet window per the project's own
+    Prometheus-unreachable-vs-low-traffic gotcha, and request_rate can
+    equally be None the first time a component has never taken traffic.
+    restarts comes from kube_pod_container_status_restarts_total via
+    kube-state-metrics, unrelated to application traffic, so a None there
+    reflects a real scrape gap (Prometheus down, target unreachable) rather
+    than the service simply being idle."""
     if not results:
         return 0.0
-    total = len(results) * 4
-    present = sum(
-        1
-        for r in results
-        for v in (r["error_rate"], r["latency_p99"], r["restarts"], r["request_rate"])
-        if v is not None
-    )
-    return present / total
+    present = sum(1 for r in results if r["restarts"] is not None)
+    return present / len(results)
 
 
 async def _aggregate_metrics(
