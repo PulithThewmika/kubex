@@ -46,7 +46,10 @@ def _is_supabase_host(url: str) -> bool:
     substring check (case-sensitivity and false-positive/negative risk).
     """
     hostname = urlsplit(url).hostname
-    return hostname is not None and hostname.endswith(_SUPABASE_HOST_SUFFIXES)
+    if hostname is None:
+        return False
+    hostname = hostname.rstrip(".")  # a fully-qualified DNS name may have a trailing root dot
+    return hostname.endswith(_SUPABASE_HOST_SUFFIXES)
 
 
 def prepare_database_url(url: str) -> tuple[str, dict]:

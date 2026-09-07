@@ -31,8 +31,15 @@ def test_supabase_transaction_pooler_is_rejected() -> None:
 
 
 def test_mixed_case_supabase_host_still_detected() -> None:
-    url, connect_args = prepare_database_url(
+    _, connect_args = prepare_database_url(
         "postgresql://postgres.ref:pw@AWS-0-US-EAST-1.POOLER.SUPABASE.COM:5432/postgres"
+    )
+    assert "ssl" in connect_args
+
+
+def test_trailing_dot_fqdn_still_detected() -> None:
+    _, connect_args = prepare_database_url(
+        "postgresql://postgres.ref:pw@aws-0-us-east-1.pooler.supabase.com.:5432/postgres"
     )
     assert "ssl" in connect_args
 
@@ -47,7 +54,7 @@ def test_mixed_case_supabase_host_still_rejects_transaction_pooler() -> None:
 def test_non_port_6543_in_url_does_not_trigger_rejection() -> None:
     # ":6543" appearing somewhere other than the port (e.g. in a path or
     # password) must not be mistaken for the transaction-mode pooler.
-    url, connect_args = prepare_database_url(
+    _, connect_args = prepare_database_url(
         "postgresql://postgres.ref:my6543pass@aws-0-us-east-1.pooler.supabase.com:5432/postgres"
     )
     assert "ssl" in connect_args
