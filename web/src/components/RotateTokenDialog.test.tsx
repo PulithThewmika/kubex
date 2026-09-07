@@ -68,4 +68,25 @@ describe('RotateTokenDialog', () => {
     expect(onClose).toHaveBeenCalledOnce()
     expect(fetchSpy).not.toHaveBeenCalled()
   })
+
+  it('ignores Cancel and backdrop clicks while a rotation is in flight', async () => {
+    let resolveRotate: (r: Response) => void = () => {}
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockReturnValue(new Promise<Response>((resolve) => (resolveRotate = resolve))),
+    )
+    const onClose = vi.fn()
+
+    renderDialog(onClose)
+    fireEvent.click(screen.getByRole('button', { name: /^rotate token$/i }))
+    // useMutation's isPending flip is batched via a microtask — wait for it
+    // to actually reach the DOM before asserting the close guard sees it.
+    await screen.findByRole('button', { name: /rotating/i })
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
+
+    expect(onClose).not.toHaveBeenCalled()
+
+    resolveRotate(jsonResponse({ token: 'kbx_new_token', grace_period_expires_at: '2026-08-29T10:10:00Z' }))
+    expect(await screen.findByText('kbx_new_token')).toBeInTheDocument()
+  })
 })
