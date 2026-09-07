@@ -43,8 +43,8 @@ export function MetricsStep({ value, onChange, onAddCluster }: MetricsStepProps)
         )}
         {value === 'healthcheck' && (
           <p className="text-xs text-text-muted">
-            You'll set a check URL per service under Settings › Services once your first deployment lands —
-            there's no service to attach one to yet.
+            You'll set a check URL from each service's page once your first deployment lands — there's no
+            service to attach one to yet.
           </p>
         )}
       </RadioCards>
