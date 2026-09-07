@@ -21,6 +21,7 @@ from ..correlation.engine import (
     utcnow,
 )
 from ..db import get_session
+from ..schemas.health_check import HealthCheckConfigRequest, HealthCheckConfigResponse
 from ..models.deployment import Deployment
 from ..models.pipeline_event import PipelineEvent
 from ..schemas.deployment_notify import DeploymentNotifyRequest, DeploymentNotifyResponse
@@ -120,6 +121,45 @@ async def list_services(session: AsyncSession = Depends(get_session), user: User
         ))
 
     return services
+
+
+@router.put("/services/{name}/health-check", response_model=HealthCheckConfigResponse)
+async def configure_health_check(
+    name: str,
+    body: HealthCheckConfigRequest,
+    session: AsyncSession = Depends(get_session),
+    user: UserContext = Depends(get_current_user),
+):
+    """Configure the HTTP health check fallback for a service (E23-T1-S2).
+
+    Fallback path for services with no Prometheus — the detection agent
+    polls this URL instead. Scoped to the caller's org like every other
+    services query (CLAUDE.md decision 9).
+    """
+    result = await session.execute(
+        text("""
+            UPDATE services
+            SET health_check_url = :url, health_check_interval_s = :interval
+            WHERE org_id = :org_id AND name = :name
+            RETURNING name, health_check_url, health_check_interval_s
+        """),
+        {
+            "url": str(body.health_check_url),
+            "interval": body.health_check_interval_s,
+            "org_id": user.org_id,
+            "name": name,
+        },
+    )
+    row = result.first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Service not found")
+    await session.commit()
+
+    return HealthCheckConfigResponse(
+        name=row.name,
+        health_check_url=row.health_check_url,
+        health_check_interval_s=row.health_check_interval_s,
+    )
 
 
 @router.get("/deployments", response_model=list[DeploymentListItem])
