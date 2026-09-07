@@ -15,6 +15,27 @@ os.environ.setdefault("GITHUB_CLIENT_ID", "test-client-id")
 os.environ.setdefault("GITHUB_CLIENT_SECRET", "test-client-secret")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-at-least-32-bytes-long")
 
+# Several integration tests (test_org_isolation.py, test_dora_integration.py
+# and its siblings, test_auth_github_oauth.py) accept a "real Postgres" env
+# var (*_TEST_DATABASE_URL) whose fixture teardown TRUNCATEs tables CASCADE.
+# A prior session pointed one of these at the live dev database and wiped
+# real org/deployment history with no backup (see CLAUDE.md's memory:
+# feedback-test-db-safety). Now that #817 moved the platform DB to
+# Supabase, refuse ANY such var pointed at a Supabase host, at collection
+# time, so a mistake in one test file can't slip past this file — this is
+# the one place every test run passes through.
+for _name, _value in os.environ.items():
+    _value_lower = (_value or "").lower()
+    if _name.endswith("_TEST_DATABASE_URL") and _value and (
+        "supabase.co" in _value_lower or "supabase.com" in _value_lower
+    ):
+        raise RuntimeError(
+            f"{_name} points at a Supabase host — its fixture teardown runs "
+            "TRUNCATE ... CASCADE and must never run against the shared "
+            "platform database. Point it at a disposable Postgres instance "
+            "you started yourself, or unset it to fall back to testcontainers."
+        )
+
 from app.main import app  # noqa: E402
 from app.db import get_session  # noqa: E402
 from app.auth_middleware import UserContext, get_current_user  # noqa: E402
