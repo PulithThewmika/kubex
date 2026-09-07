@@ -200,6 +200,24 @@ async def test_install_manifest_500_for_non_https_non_loopback_url(client: FastA
 
 
 @pytest.mark.asyncio
+@patch("app.routers.install.INGEST_PUBLIC_URL", "not-a-valid-url")
+@patch("app.routers.install.ALLOW_INSECURE_INGEST_PUBLIC_URL", True)
+async def test_install_manifest_500_for_hostless_url_even_with_insecure_allowed(
+    client: FastAPI, mock_session: AsyncMock
+) -> None:
+    """A malformed INGEST_PUBLIC_URL with no hostname parses with scheme=''
+    (not "https"), which the https check alone would already reject — but
+    ALLOW_INSECURE_INGEST_PUBLIC_URL=True bypasses that one, and
+    _is_loopback(None) returns False, so nothing else would catch it
+    (CodeRabbit, PR #804)."""
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get("/install/kbx_anything.yaml")
+
+    assert resp.status_code == 500
+    mock_session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 @patch("app.routers.install.INGEST_PUBLIC_URL", "http://ingest.example.com")
 @patch("app.routers.install.ALLOW_INSECURE_INGEST_PUBLIC_URL", True)
 async def test_install_manifest_allows_non_https_when_explicitly_opted_in(

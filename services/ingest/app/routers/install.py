@@ -47,7 +47,7 @@ def _reject_unreachable_ingest_public_url() -> None:
     cluster_agent/config.py already enforces agent-side, with the same
     ALLOW_INSECURE_* escape hatch for local/dev testing)."""
     parsed = urlparse(INGEST_PUBLIC_URL)
-    if _is_loopback(parsed.hostname):
+    if parsed.hostname is None or _is_loopback(parsed.hostname):
         raise HTTPException(
             status_code=500,
             detail="INGEST_PUBLIC_URL is not configured to an externally reachable address",
