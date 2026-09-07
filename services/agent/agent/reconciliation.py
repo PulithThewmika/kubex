@@ -82,7 +82,7 @@ async def reconcile_active_alerts(session: AsyncSession) -> int:
             "coverage_post": post["coverage"],
         }
 
-        score, verdict, details = compute_health_score(metrics)
+        score, _verdict, details = compute_health_score(metrics)
         # A low-confidence cycle (Prometheus data gap, E23-T4-S10) must not
         # count toward recovery — a service still failing behind a scrape
         # gap would otherwise look "healthy" for two cycles just because
