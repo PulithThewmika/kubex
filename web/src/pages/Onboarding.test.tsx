@@ -21,6 +21,7 @@ function renderWizard() {
 
 const BASE_ROUTES = {
   '/api/settings/installations': () => jsonResponse([]),
+  '/api/settings/slack': () => jsonResponse({ connected: false, workspace_id: null, team_name: null, channels: [] }),
   '/api/clusters': () => jsonResponse([]),
   '/api/install-info': () =>
     jsonResponse({ ingest_public_url: 'https://kubex.example', agent_namespace: 'kubex-agent', chart_repo_url: 'x', chart_path: 'y' }),
@@ -32,7 +33,7 @@ afterEach(() => {
 })
 
 describe('Onboarding wizard', () => {
-  it('steps forward through all four steps', async () => {
+  it('steps forward through all five steps', async () => {
     stubRoutedFetch(BASE_ROUTES)
     renderWizard()
 
@@ -43,6 +44,9 @@ describe('Onboarding wizard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
     expect(screen.getByRole('heading', { name: 'Connect your metrics' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(screen.getByRole('heading', { name: 'Get deploy alerts in Slack' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
     expect(screen.getByRole('heading', { name: "You're set" })).toBeInTheDocument()
@@ -78,6 +82,7 @@ describe('Onboarding wizard', () => {
     fireEvent.click(screen.getByText('GitHub Deployments'))
     fireEvent.click(screen.getByRole('button', { name: 'Skip this step' }))
     fireEvent.click(screen.getByRole('button', { name: 'Skip this step' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
 
     expect(screen.getByRole('heading', { name: "You're set" })).toBeInTheDocument()
     expect(screen.getAllByText('Not configured yet')).toHaveLength(2)
@@ -94,6 +99,7 @@ describe('Onboarding wizard', () => {
     renderWizard()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
 

@@ -31,6 +31,7 @@ from .db import get_session, dispose_engine, engine
 from .health_score import assess_deployment
 from .health_check import run_health_checks, close_health_check_client
 from .alerting import fire_alert, close_alertmanager_client
+from .notifications import notify_deploy_alert
 from .promql import close_prom_client
 from .reconciliation import reconcile_active_alerts
 from .blast_radius import run_discovery, get_monitored_namespaces
@@ -183,6 +184,13 @@ async def _process_deployment(session, row) -> None:
                     org_id,
                 )
                 await alert_session.commit()
+            # Per-org Slack fan-out (E23-T5). Separate from Alertmanager,
+            # which stays the platform/infra path. Runs on its own session
+            # under a time budget and never raises.
+            await notify_deploy_alert(
+                org_id=org_id, service_id=service_id, service_name=service_name,
+                deployment_id=deploy_id, score=score, verdict=verdict, details=details,
+            )
         except Exception:
             logger.exception("Failed to fire alert for deployment %d", deploy_id)
 

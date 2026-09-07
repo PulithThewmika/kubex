@@ -44,6 +44,7 @@ function stubSettingsFetch(overrides: Record<string, () => Response> = {}) {
     '/api/settings/installations': () => jsonResponse([]),
     '/api/settings/api-keys': () => jsonResponse([]),
     '/api/settings/members': () => jsonResponse([{ user_id: 'u1', login: 'alice', avatar_url: null, role: 'owner', joined_at: '2026-08-01T00:00:00Z' }]),
+    '/api/settings/slack': () => jsonResponse({ connected: false, workspace_id: null, team_name: null, channels: [] }),
     '/api/clusters': () => jsonResponse([]),
     ...overrides,
   })
