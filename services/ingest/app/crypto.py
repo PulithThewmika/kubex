@@ -20,8 +20,11 @@ INTEGRATION_ENC_KEY = os.environ.get("INTEGRATION_ENC_KEY", "")
 
 _fernet: Fernet | None = None
 
-# xoxb- (bot), xoxp- (user), xapp- (app-level), xoxe- (refresh) Slack tokens.
-_SLACK_TOKEN_RE = re.compile(r"xox[bpear]-[A-Za-z0-9-]+")
+# Slack token shapes: xoxb-/xoxp-/xoxa-/xoxr-/xoxe- (legacy + granular),
+# xapp-/xwfp- (app-level / workflow), and xoxe.xoxb-/xoxe.xoxp- (rotating).
+_SLACK_TOKEN_RE = re.compile(
+    r"(?:xoxe\.(?:xoxb|xoxp)-[A-Za-z0-9-]+|x(?:ox[bparoe]|app|wfp)-[A-Za-z0-9-]+)"
+)
 
 
 def _get_fernet() -> Fernet:
@@ -70,10 +73,19 @@ class _SlackTokenRedactionFilter(logging.Filter):
     # extra= are left alone; nothing in this codebase logs a token that way.
     """
 
+    @staticmethod
+    def _looks_tokenish(s: str) -> bool:
+        return "xox" in s or "xapp-" in s or "xwfp-" in s
+
     def filter(self, record: logging.LogRecord) -> bool:
-        if isinstance(record.msg, str) and "xox" in record.msg:
+        if isinstance(record.msg, str) and self._looks_tokenish(record.msg):
             record.msg = redact_slack_tokens(record.msg)
-        if isinstance(record.args, tuple) and any("xox" in a for a in record.args if isinstance(a, str)):
+        # Only positional (tuple) args are rewritten; a mapping (%(name)s
+        # style) is left structurally intact — nothing here logs a token
+        # that way, and converting it would break record.getMessage().
+        if isinstance(record.args, tuple) and any(
+            isinstance(a, str) and self._looks_tokenish(a) for a in record.args
+        ):
             record.args = tuple(
                 redact_slack_tokens(a) if isinstance(a, str) else a for a in record.args
             )
@@ -87,7 +99,7 @@ def install_log_redaction() -> None:
     under a bare ``uvicorn app.main:app``."""
     redactor = _SlackTokenRedactionFilter()
 
-    def _attach(target) -> None:
+    def _attach(target: logging.Handler | None) -> None:
         if target is not None and not any(
             isinstance(f, _SlackTokenRedactionFilter) for f in target.filters
         ):

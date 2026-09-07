@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import uuid
 from datetime import datetime, timezone
 from urllib.parse import urljoin
 
@@ -48,6 +49,8 @@ _FATAL_SLACK_ERRORS = {
     "account_inactive",
     "invalid_auth",
     "no_permission",
+    "missing_scope",       # app is misconfigured — retrying won't help
+    "not_authed",
 }
 
 _fernet: Fernet | None = None
@@ -61,7 +64,7 @@ def _get_fernet() -> Fernet | None:
 
 
 async def _channels_for(
-    session: AsyncSession, org_id, service_id: int, event_type: str
+    session: AsyncSession, org_id: uuid.UUID | str, service_id: int, event_type: str
 ) -> list:
     """Enabled channels for this org whose routing scope covers the
     service. Org-scoped — never a cross-tenant read (CLAUDE.md decision 9)."""
@@ -137,7 +140,7 @@ def _evidence_lines(details: dict) -> list[str]:
 
 
 def _build_alert_message(
-    service_name: str, deployment_id: int, score, verdict: str, details: dict
+    service_name: str, deployment_id: int, score: int | None, verdict: str, details: dict
 ) -> tuple[str, list]:
     emoji = ":rotating_light:" if verdict == "failed" else ":warning:"
     score_str = f"{score}/100" if score is not None else "n/a"
@@ -206,7 +209,9 @@ async def _deliver(session: AsyncSession, channels: list, message: str, blocks: 
     await session.commit()
 
 
-async def _notify(org_id, service_id: int, deployment_id: int, message: str, blocks: list) -> None:
+async def _notify(
+    org_id: uuid.UUID | str, service_id: int, deployment_id: int, message: str, blocks: list
+) -> None:
     """Run delivery on its own session (so it never commits a caller's
     in-flight transaction — e.g. reconcile_active_alerts' single-commit
     batch) and under a time budget (so a rate-limited channel can't stall
@@ -227,15 +232,15 @@ async def _notify(org_id, service_id: int, deployment_id: int, message: str, blo
 
 
 async def notify_deploy_alert(
-    *, org_id, service_id: int, service_name: str,
-    deployment_id: int, score, verdict: str, details: dict,
+    *, org_id: uuid.UUID | str, service_id: int, service_name: str,
+    deployment_id: int, score: int | None, verdict: str, details: dict,
 ) -> None:
     message, blocks = _build_alert_message(service_name, deployment_id, score, verdict, details)
     await _notify(org_id, service_id, deployment_id, message, blocks)
 
 
 async def notify_deploy_recovered(
-    *, org_id, service_id: int, service_name: str, deployment_id: int,
+    *, org_id: uuid.UUID | str, service_id: int, service_name: str, deployment_id: int,
 ) -> None:
     message, blocks = _build_recovery_message(service_name, deployment_id)
     await _notify(org_id, service_id, deployment_id, message, blocks)

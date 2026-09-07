@@ -10,6 +10,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_fastapi_instrumentator.metrics import Info
 from sqlalchemy import text
 
+from . import slack_client
 from .auth import validate_auth_tokens
 from .cluster_monitor import run_disconnect_sweep_loop
 from .crypto import install_log_redaction
@@ -41,6 +42,7 @@ async def lifespan(app: FastAPI):
     sweep_task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await sweep_task
+    await slack_client.close_client()
     await engine.dispose()
 
 

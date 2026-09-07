@@ -65,9 +65,9 @@ function ChannelRow({ channel }: { channel: SlackChannel }) {
           Remove
         </button>
       </div>
-      {test.isError && (
+      {(test.isError || remove.isError) && (
         <p className="text-xs text-failed sm:w-full" role="alert">
-          {(test.error as Error).message}
+          {((test.error ?? remove.error) as Error).message}
         </p>
       )}
     </li>
@@ -165,6 +165,11 @@ export function SlackSection() {
           Slack authorization was cancelled.
         </div>
       )}
+      {slackParam === 'exists' && (
+        <div role="status" className="mt-4 rounded-md border border-degraded/30 bg-degraded/10 px-4 py-3 text-sm text-degraded">
+          A Slack workspace is already connected. Disconnect it before connecting a different one.
+        </div>
+      )}
 
       {isLoading && <p className="mt-4 text-sm text-text-muted">Loading…</p>}
       {isError && (
@@ -196,6 +201,12 @@ export function SlackSection() {
               Disconnect
             </button>
           </div>
+
+          {disconnect.isError && (
+            <p className="text-xs text-failed" role="alert">
+              {(disconnect.error as Error).message}
+            </p>
+          )}
 
           {data.channels.length > 0 && (
             <ul className="flex flex-col gap-2">

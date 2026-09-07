@@ -7,6 +7,7 @@ service and can't import this package).
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import httpx
@@ -38,14 +39,26 @@ class SlackError(Exception):
         super().__init__(f"Slack API error: {code}")
 
 
+_RETRY_AFTER_CAP_SECONDS = 30
+
+
 async def _call(method: str, token: str | None = None, **params: str) -> dict:
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    resp = await _get_client().post(f"/{method}", data=params, headers=headers)
-    resp.raise_for_status()
-    body = resp.json()
-    if not body.get("ok"):
-        raise SlackError(body.get("error", "unknown"))
-    return body
+    for attempt in (1, 2):
+        resp = await _get_client().post(f"/{method}", data=params, headers=headers)
+        if resp.status_code == 429 and attempt == 1:
+            try:
+                delay = int(resp.headers.get("Retry-After", "1"))
+            except ValueError:
+                delay = 1
+            await asyncio.sleep(min(delay, _RETRY_AFTER_CAP_SECONDS))
+            continue
+        resp.raise_for_status()
+        body = resp.json()
+        if not body.get("ok"):
+            raise SlackError(body.get("error", "unknown"))
+        return body
+    raise SlackError("ratelimited")
 
 
 async def oauth_exchange(
