@@ -6,7 +6,7 @@ import { jsonResponse, stubRoutedFetch } from '../test/fixtures'
 import { Onboarding } from './Onboarding'
 
 function renderWizard() {
-  const queryClient = new QueryClient()
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/app/onboarding']}>
@@ -59,11 +59,14 @@ describe('Onboarding wizard', () => {
     expect(completeCall).toHaveBeenCalled()
   })
 
-  it('lets each step be skipped individually', async () => {
+  it('lets a step be skipped individually', async () => {
     stubRoutedFetch(BASE_ROUTES)
     renderWizard()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Skip this step' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
     expect(screen.getByRole('heading', { name: 'How do you deploy?' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Skip this step' }))
+    expect(screen.getByRole('heading', { name: 'Connect your metrics' })).toBeInTheDocument()
   })
 })

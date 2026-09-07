@@ -39,10 +39,22 @@ type DeployMethodStepProps = {
   onChange: (value: DeployMethod) => void
   onAddCluster: () => void
   ingestPublicUrl: string | undefined
+  // Lifted to the page: this step unmounts on navigation, and the token is
+  // shown exactly once — losing it would strand a real (unusable) API key on
+  // the org and let repeat visits pile up more.
+  apiKey: string | null
+  onApiKeyCreated: (token: string) => void
 }
 
-export function DeployMethodStep({ value, onChange, onAddCluster, ingestPublicUrl }: DeployMethodStepProps) {
-  const keyMutation = useMutation({ mutationFn: createApiKey })
+export function DeployMethodStep({
+  value,
+  onChange,
+  onAddCluster,
+  ingestPublicUrl,
+  apiKey,
+  onApiKeyCreated,
+}: DeployMethodStepProps) {
+  const keyMutation = useMutation({ mutationFn: createApiKey, onSuccess: (data) => onApiKeyCreated(data.token) })
 
   return (
     <div className="flex flex-col gap-5">
@@ -76,7 +88,7 @@ export function DeployMethodStep({ value, onChange, onAddCluster, ingestPublicUr
         )}
         {value === 'webhook' && (
           <div className="flex flex-col gap-2">
-            {!keyMutation.data ? (
+            {!apiKey ? (
               <>
                 <button
                   type="button"
@@ -95,8 +107,8 @@ export function DeployMethodStep({ value, onChange, onAddCluster, ingestPublicUr
                 <p className="text-xs text-text-muted">
                   Copy this key now — it's shown only once. Then call the API from your pipeline:
                 </p>
-                <CodeBlock code={keyMutation.data.token} />
-                <CodeBlock code={curlExample(ingestPublicUrl ?? 'https://your-kubex-host', keyMutation.data.token)} />
+                <CodeBlock code={apiKey} />
+                <CodeBlock code={curlExample(ingestPublicUrl ?? 'https://your-kubex-host', apiKey)} />
               </>
             )}
           </div>
