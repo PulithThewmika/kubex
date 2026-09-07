@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import logging
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -21,6 +22,7 @@ GITHUB_WEBHOOK_SECRET = os.environ.get("GITHUB_WEBHOOK_SECRET", "")
 GITHUB_APP_WEBHOOK_SECRET = os.environ.get("GITHUB_APP_WEBHOOK_SECRET", "")
 ARGOCD_WEBHOOK_TOKEN = os.environ.get("ARGOCD_WEBHOOK_TOKEN", "")
 ALERTMANAGER_WEBHOOK_TOKEN = os.environ.get("ALERTMANAGER_WEBHOOK_TOKEN", "")
+SLACK_SIGNING_SECRET = os.environ.get("SLACK_SIGNING_SECRET", "")
 GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
 GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
 JWT_SECRET = os.environ.get("JWT_SECRET", "")
@@ -83,6 +85,37 @@ async def _verify_hmac_signature(request: Request, secret: str) -> bytes:
     if not hmac.compare_digest(expected, signature_header):
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
+    return body
+
+
+SLACK_SIGNATURE_MAX_SKEW_SECONDS = 60 * 5
+
+
+async def verify_slack_signature(request: Request) -> bytes:
+    """Verify an inbound Slack Events API request (E23-T5).
+
+    Slack signs ``v0:{timestamp}:{raw_body}`` with the app signing secret.
+    Rejecting a stale timestamp blocks replay of a captured request.
+    """
+    if not SLACK_SIGNING_SECRET:
+        raise HTTPException(status_code=503, detail="Slack integration is not configured")
+
+    timestamp = request.headers.get("X-Slack-Request-Timestamp", "")
+    signature = request.headers.get("X-Slack-Signature", "")
+    if not timestamp or not signature:
+        raise HTTPException(status_code=401, detail="Missing Slack signature headers")
+    try:
+        skew = abs(time.time() - int(timestamp))
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid Slack timestamp") from None
+    if skew > SLACK_SIGNATURE_MAX_SKEW_SECONDS:
+        raise HTTPException(status_code=401, detail="Stale Slack request")
+
+    body = await request.body()
+    basestring = b"v0:" + timestamp.encode() + b":" + body
+    expected = "v0=" + hmac.new(SLACK_SIGNING_SECRET.encode(), basestring, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(status_code=401, detail="Invalid Slack signature")
     return body
 
 
