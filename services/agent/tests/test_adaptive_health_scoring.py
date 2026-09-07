@@ -8,7 +8,7 @@ import pytest
 
 from agent import health_check as hc
 from agent.health_check import HealthCheckResult
-from agent.health_score import compute_health_check_score, no_metrics_score, compute_health_score
+from agent.health_score import compute_health_check_score, no_metrics_score, compute_health_score, _coverage
 
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -48,6 +48,22 @@ class TestPrometheusSource:
         _, _, details = compute_health_score(metrics)
         assert details["low_confidence"] is True
         assert details["coverage"]["post"] == 0.25
+
+    def test_coverage_ignores_traffic_dependent_none_values(self) -> None:
+        """_coverage() must not flag a genuinely quiet component (zero
+        traffic -> error_rate/latency_p99/request_rate legitimately None)
+        as a data gap -- only "restarts" (kube-state-metrics, unrelated to
+        app traffic) is used as the scrape-presence signal."""
+        quiet_component = {
+            "error_rate": None, "latency_p99": None, "restarts": 0.0, "request_rate": None,
+        }
+        assert _coverage([quiet_component]) == 1.0
+
+    def test_coverage_flags_real_scrape_gap(self) -> None:
+        gapped_component = {
+            "error_rate": None, "latency_p99": None, "restarts": None, "request_rate": None,
+        }
+        assert _coverage([gapped_component]) == 0.0
 
 
 class TestHealthCheckSource:
