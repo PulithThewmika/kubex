@@ -1,5 +1,6 @@
 import { formatDistanceToNow } from 'date-fns'
 import { HealthRing } from './HealthRing'
+import { ConnectionBadge } from './ConnectionBadge'
 import type { Service } from '../types/service'
 
 type ServiceCardProps = {
@@ -7,7 +8,7 @@ type ServiceCardProps = {
 }
 
 export function ServiceCard({ service }: ServiceCardProps) {
-  const { name, namespace, latest_deploy, health, active_alert_count } = service
+  const { name, namespace, latest_deploy, health, active_alert_count, integration_status } = service
   const shortSha = latest_deploy?.commit_sha ? latest_deploy.commit_sha.slice(0, 7) : null
 
   return (
@@ -45,6 +46,8 @@ export function ServiceCard({ service }: ServiceCardProps) {
           <span>No deploys yet</span>
         )}
       </div>
+
+      {integration_status && <ConnectionBadge status={integration_status} />}
     </div>
   )
 }
