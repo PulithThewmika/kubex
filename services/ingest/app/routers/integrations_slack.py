@@ -346,21 +346,14 @@ async def add_channel(
         if owns_service is None:
             raise HTTPException(status_code=404, detail="Service not found")
 
-    # Join public channels so chat.postMessage works without chat:write.public
-    # edge cases; private channels must already have the bot invited.
+    # Best-effort join. The bot posts to public channels via chat:write.public
+    # without being a member, so a failure here (missing channels:join scope,
+    # private channel, already a member) is non-fatal — delivery problems
+    # surface later as last_delivery_error.
     try:
-        await slack_client.join_channel(
-            _bot_token(workspace), body.slack_channel_id
-        )
-    except slack_client.SlackError as exc:
-        # method_not_supported_for_channel_type = private channel; that's
-        # fine as long as the bot is already a member (it'll fail at
-        # delivery otherwise, and last_delivery_error will say so).
-        if exc.code not in ("method_not_supported_for_channel_type", "already_in_channel"):
-            logger.warning("conversations.join failed for %s: %s", body.slack_channel_id, exc.code)
-            raise HTTPException(status_code=502, detail=f"Could not join channel: {exc.code}") from None
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="Could not reach Slack") from None
+        await slack_client.join_channel(_bot_token(workspace), body.slack_channel_id)
+    except (slack_client.SlackError, httpx.HTTPError) as exc:
+        logger.info("conversations.join skipped for %s: %s", body.slack_channel_id, exc)
 
     stmt = pg_insert(NotificationChannel).values(
         org_id=user.org_id,
