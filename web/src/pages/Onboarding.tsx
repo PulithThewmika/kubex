@@ -18,6 +18,7 @@ export function Onboarding() {
   const [step, setStep] = useState(0)
   const [deployMethod, setDeployMethod] = useState<DeployMethod | null>(null)
   const [metricsMethod, setMetricsMethod] = useState<MetricsMethod | null>(null)
+  const [webhookApiKey, setWebhookApiKey] = useState<string | null>(null)
   // ponytail: the health-check URL is captured but not persisted — there's
   // no service to attach it to during onboarding. Wire it to
   // PUT /api/services/:name/health-check once the org's first deployment
@@ -31,9 +32,23 @@ export function Onboarding() {
   const complete = useCompleteOnboarding()
 
   const isLast = step === STEP_LABELS.length - 1
+  const finishError = complete.isError ? (complete.error as Error).message : null
 
   function finish() {
     complete.mutate(undefined, { onSuccess: () => navigate('/app', { replace: true }) })
+  }
+
+  function next() {
+    setStep((s) => Math.min(STEP_LABELS.length - 1, s + 1))
+  }
+
+  // "Skip this step" records an explicit skip for the step's choice (so the
+  // summary shows "not configured" rather than a half-answered state), then
+  // advances — distinct from "Continue", which keeps whatever's selected.
+  function skipStep() {
+    if (step === 1 && !deployMethod) setDeployMethod('skip')
+    if (step === 2 && !metricsMethod) setMetricsMethod('skip')
+    next()
   }
 
   return (
@@ -62,6 +77,8 @@ export function Onboarding() {
             onChange={setDeployMethod}
             onAddCluster={() => setShowAddCluster(true)}
             ingestPublicUrl={installInfo?.ingest_public_url}
+            apiKey={webhookApiKey}
+            onApiKeyCreated={setWebhookApiKey}
           />
         )}
         {step === 2 && (
@@ -81,10 +98,16 @@ export function Onboarding() {
             metricsMethod={metricsMethod}
             onFinish={finish}
             finishing={complete.isPending}
-            finishError={complete.isError ? (complete.error as Error).message : null}
+            finishError={finishError}
           />
         )}
       </div>
+
+      {!isLast && finishError && (
+        <p className="mt-4 text-sm text-failed" role="alert">
+          {finishError}
+        </p>
+      )}
 
       <div className="mt-8 flex items-center justify-between border-t border-border pt-5">
         <button
@@ -98,16 +121,18 @@ export function Onboarding() {
 
         {!isLast && (
           <div className="flex items-center gap-2">
+            {step > 0 && (
+              <button
+                type="button"
+                onClick={skipStep}
+                className="rounded-md px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:text-text"
+              >
+                Skip this step
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => setStep((s) => s + 1)}
-              className="rounded-md px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:text-text"
-            >
-              Skip this step
-            </button>
-            <button
-              type="button"
-              onClick={() => setStep((s) => s + 1)}
+              onClick={next}
               className="rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90"
             >
               Continue

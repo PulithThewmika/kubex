@@ -19,7 +19,7 @@ const ME = {
 
 function renderGate(routes: Record<string, () => Response>) {
   stubRoutedFetch(routes)
-  const queryClient = new QueryClient()
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
@@ -79,6 +79,15 @@ describe('OnboardingGate', () => {
       '/auth/me': () => jsonResponse(ME),
       '/api/settings/installations': () => jsonResponse([]),
       '/api/clusters': () => jsonResponse([makeCluster()]),
+    })
+    expect(await screen.findByText('Dashboard')).toBeInTheDocument()
+  })
+
+  it('fails open to the dashboard when a connection query errors', async () => {
+    renderGate({
+      '/auth/me': () => jsonResponse(ME),
+      '/api/settings/installations': () => jsonResponse({ detail: 'boom' }, 500),
+      '/api/clusters': () => jsonResponse([]),
     })
     expect(await screen.findByText('Dashboard')).toBeInTheDocument()
   })
