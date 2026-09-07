@@ -2,6 +2,7 @@ import os
 import ssl
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -36,6 +37,22 @@ def _supabase_ssl_context() -> ssl.SSLContext:
     return context
 
 
+_SUPABASE_HOST_SUFFIXES = (".supabase.co", ".supabase.com")
+
+
+def _is_supabase_host(url: str) -> bool:
+    """Parse the URL and check its hostname against Supabase's actual
+    domain suffixes, case-insensitively — urlsplit().hostname is already
+    lowercased per RFC, but a raw "supabase" in url substring check (the
+    original approach here) would both miss a mixed-case host some
+    clients might still normalize differently and, in principle, match
+    the substring anywhere in the URL (a password, a path segment) that
+    isn't actually the host.
+    """
+    hostname = urlsplit(url).hostname
+    return hostname is not None and hostname.endswith(_SUPABASE_HOST_SUFFIXES)
+
+
 def prepare_database_url(url: str) -> tuple[str, dict]:
     """Normalize a DATABASE_URL to the asyncpg dialect and work out the
     connect_args a Supabase host needs.
@@ -49,7 +66,7 @@ def prepare_database_url(url: str) -> tuple[str, dict]:
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
     connect_args: dict = {}
-    if "supabase" in url:
+    if _is_supabase_host(url):
         connect_args["ssl"] = _supabase_ssl_context()
         # Transaction-mode pooler (port 6543) doesn't support prepared
         # statements at the pooler level. Disabling asyncpg's own
@@ -60,7 +77,7 @@ def prepare_database_url(url: str) -> tuple[str, dict]:
         # asyncpg's cache setting. Rather than half-support 6543 with a
         # fix that's still incomplete, reject it outright — the session
         # pooler (5432) is the only mode this codebase supports.
-        if ":6543" in url:
+        if urlsplit(url).port == 6543:
             raise ValueError(
                 "DATABASE_URL points at Supabase's transaction-mode pooler "
                 "(port 6543), which this codebase does not support — "
