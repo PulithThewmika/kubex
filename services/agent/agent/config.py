@@ -38,3 +38,10 @@ K8S_TOKEN = os.environ.get("K8S_TOKEN", "")
 K8S_CA_CERT_B64 = os.environ.get("K8S_CA_CERT_B64", "")
 
 BLAST_RADIUS_INTERVAL_SECONDS = int(os.environ.get("BLAST_RADIUS_INTERVAL_SECONDS", "300"))
+
+# ── HTTP health check fallback (E23-T1) ──────────────────────────────
+# For services without Prometheus. Ticks on a short fixed interval and
+# pings each configured service only once its own health_check_interval_s
+# has elapsed, since that's per-service and configurable via the API.
+HEALTH_CHECK_TICK_SECONDS = int(os.environ.get("HEALTH_CHECK_TICK_SECONDS", "15"))
+HEALTH_CHECK_RING_BUFFER_SIZE = int(os.environ.get("HEALTH_CHECK_RING_BUFFER_SIZE", "20"))
