@@ -26,7 +26,6 @@ const AUTHENTICATED_ROUTES = {
   '/auth/memberships': () => jsonResponse([{ org_id: '2', org_name: 'Acme', org_slug: 'acme' }]),
   '/auth/me': () => jsonResponse(ME_RESPONSE),
   '/api/services': () => jsonResponse([]),
-  '/api/alerts': () => jsonResponse([]),
   '/api/deployments/': () => jsonResponse(makeDeploymentDetail()),
   '/api/deployments': () => jsonResponse([]),
   '/api/dora': () => jsonResponse({ deploy_frequency_per_day: null, lead_time_avg_s: null, change_failure_rate: null, mttr_s: null, period: '30d', service: null }),
