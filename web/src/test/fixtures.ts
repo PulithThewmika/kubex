@@ -3,6 +3,7 @@ import type { Service } from '../types/service'
 import type { DeploymentDetail } from '../types/deploymentDetail'
 import type { Installation } from '../types/installation'
 import type { Cluster } from '../types/cluster'
+import type { Alert } from '../types/alert'
 
 export function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status })
@@ -36,6 +37,15 @@ export function makeService(overrides: Partial<Service> = {}): Service {
     },
     health: { score: 92, verdict: 'healthy' },
     active_alert_count: 0,
+    deploy_count_30d: 4,
+    cluster_id: null,
+    cluster_name: null,
+    integration_status: {
+      ci: true,
+      cd: 'argocd',
+      metrics: 'prometheus',
+      available_features: [],
+    },
     ...overrides,
   }
 }
@@ -69,6 +79,22 @@ export function makeDeploymentDetail(overrides: Partial<DeploymentDetail> = {}):
     },
     timeline: [],
     health_evidence: [],
+    ...overrides,
+  }
+}
+
+export function makeAlert(overrides: Partial<Alert> = {}): Alert {
+  return {
+    id: 1,
+    deployment_id: 42,
+    service_id: 1,
+    service_name: 'orders',
+    severity: 'critical',
+    title: 'Error rate spike on orders',
+    description: 'error_rate 0.12 over 5m',
+    fired_at: '2026-08-29T10:00:00Z',
+    resolved_at: null,
+    alertmanager_id: 'am-1',
     ...overrides,
   }
 }
