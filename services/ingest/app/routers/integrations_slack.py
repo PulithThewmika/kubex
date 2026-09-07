@@ -186,29 +186,18 @@ async def slack_oauth_callback(
         logger.warning("Slack oauth.v2.access response missing access_token/team")
         raise HTTPException(status_code=502, detail="Slack token exchange returned an unexpected response")
 
+    row = {
+        "slack_team_name": team.get("name"),
+        "bot_token_encrypted": encrypt(access_token),
+        "bot_user_id": data.get("bot_user_id"),
+        "connected_by": connected_by,
+        "installed_at": datetime.now(timezone.utc),
+        "uninstalled_at": None,
+    }
     stmt = (
         pg_insert(SlackWorkspace)
-        .values(
-            org_id=org_id,
-            slack_team_id=team_id,
-            slack_team_name=team.get("name"),
-            bot_token_encrypted=encrypt(access_token),
-            bot_user_id=data.get("bot_user_id"),
-            connected_by=connected_by,
-            installed_at=datetime.now(timezone.utc),
-            uninstalled_at=None,
-        )
-        .on_conflict_do_update(
-            index_elements=["org_id", "slack_team_id"],
-            set_={
-                "slack_team_name": team.get("name"),
-                "bot_token_encrypted": encrypt(access_token),
-                "bot_user_id": data.get("bot_user_id"),
-                "connected_by": connected_by,
-                "installed_at": datetime.now(timezone.utc),
-                "uninstalled_at": None,
-            },
-        )
+        .values(org_id=org_id, slack_team_id=team_id, **row)
+        .on_conflict_do_update(index_elements=["org_id", "slack_team_id"], set_=row)
     )
     await session.execute(stmt)
     await session.commit()
@@ -370,11 +359,14 @@ async def add_channel(
             index_where=NotificationChannel.service_id.is_not(None),
             set_={"slack_channel_name": body.slack_channel_name, "enabled": True},
         )
-    row = (await session.execute(stmt.returning(NotificationChannel))).scalar_one()
+    channel_id = (await session.execute(stmt.returning(NotificationChannel.id))).scalar_one()
     await session.commit()
     logger.info(
         "Slack channel added: org_id=%s channel=%s service_id=%s",
         user.org_id, body.slack_channel_id, body.service_id,
+    )
+    row = await session.scalar(
+        select(NotificationChannel).where(NotificationChannel.id == channel_id)
     )
     return _channel_response(row)
 
