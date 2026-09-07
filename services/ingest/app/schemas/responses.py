@@ -103,6 +103,7 @@ class AlertResponse(BaseModel):
     id: int
     deployment_id: int
     service_id: int
+    service_name: str
     severity: str
     title: str
     description: str | None = None

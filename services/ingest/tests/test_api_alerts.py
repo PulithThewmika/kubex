@@ -11,11 +11,13 @@ def _mock_alert_row(
     id=1, deployment_id=10, service_id=1, severity="warning",
     title="DeployDegradation", description="Score 65/100",
     fired_at=None, resolved_at=None, alertmanager_id=None,
+    service_name="orders",
 ):
     row = MagicMock()
     row.id = id
     row.deployment_id = deployment_id
     row.service_id = service_id
+    row.service_name = service_name
     row.severity = severity
     row.title = title
     row.description = description
