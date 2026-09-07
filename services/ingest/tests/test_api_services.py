@@ -1,5 +1,6 @@
 """Tests for GET /api/services endpoint."""
 
+from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -7,13 +8,14 @@ from httpx import ASGITransport, AsyncClient
 
 
 def _mock_row(
-    id=1, name="orders", namespace="kubex", repo="org/orders",
-    argocd_app="orders", latest_commit_sha="abc1234",
-    latest_author="dev", latest_status="deployed",
-    latest_finished_at=None, health_score=95,
-    health_verdict="healthy", active_alert_count=0,
-    deploy_count_30d=0, cluster_id=None, cluster_name=None,
-):
+    id: int = 1, name: str = "orders", namespace: str = "kubex",
+    repo: str | None = "org/orders", argocd_app: str | None = "orders",
+    latest_commit_sha: str | None = "abc1234", latest_author: str | None = "dev",
+    latest_status: str | None = "deployed", latest_finished_at: datetime | None = None,
+    health_score: int | None = 95, health_verdict: str | None = "healthy",
+    active_alert_count: int = 0, deploy_count_30d: int = 0,
+    cluster_id: str | None = None, cluster_name: str | None = None,
+) -> MagicMock:
     row = MagicMock()
     row.id = id
     row.name = name
