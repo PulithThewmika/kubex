@@ -1,6 +1,7 @@
 import logging
 import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import text
@@ -21,6 +22,7 @@ from ..correlation.engine import (
     utcnow,
 )
 from ..db import get_session
+from ..integration_status import get_service_integration_status, load_integration_context
 from ..schemas.health_check import HealthCheckConfigRequest, HealthCheckConfigResponse
 from ..models.deployment import Deployment
 from ..models.pipeline_event import PipelineEvent
@@ -29,6 +31,7 @@ from ..schemas.responses import (
     ServiceWithStatusResponse,
     LatestDeployInfo,
     HealthSummary,
+    IntegrationStatusResponse,
     DORAMetricsResponse,
     AlertResponse,
     DeploymentListItem,
@@ -47,13 +50,16 @@ from .webhooks_github_app import DEPLOYMENT_STATE_MAP
 router = APIRouter(prefix="/api", tags=["api"])
 
 
-@router.get("/services", response_model=list[ServiceWithStatusResponse])
-async def list_services(session: AsyncSession = Depends(get_session), user: UserContext = Depends(get_current_user)):
-    """List all services with latest deployment, health, and active alert count."""
+async def _fetch_services_with_status(
+    session: AsyncSession, org_id: uuid.UUID, name: str | None = None,
+) -> list[ServiceWithStatusResponse]:
+    """Shared query behind GET /api/services and GET /api/services/{name} —
+    latest deployment, health, active alert count, and integration tier."""
     result = await session.execute(
         text("""
             SELECT
                 s.id, s.name, s.namespace, s.repo, s.argocd_app,
+                s.org_id, s.cluster_id, s.health_check_url,
                 d.commit_sha     AS latest_commit_sha,
                 d.author         AS latest_author,
                 d.status         AS latest_status,
@@ -84,12 +90,16 @@ async def list_services(session: AsyncSession = Depends(get_session), user: User
                 FROM alerts
                 WHERE service_id = s.id AND resolved_at IS NULL
             ) ac ON true
-            WHERE s.org_id = :org_id
+            WHERE s.org_id = :org_id AND (CAST(:name AS text) IS NULL OR s.name = CAST(:name AS text))
             ORDER BY s.name
         """),
-        {"org_id": user.org_id},
+        {"org_id": org_id, "name": name},
     )
     rows = result.fetchall()
+
+    # One batch of org-wide queries backs every row's integration_status,
+    # rather than resolving each service independently (CodeRabbit, PR #809).
+    context = await load_integration_context(session, org_id)
 
     services = []
     for row in rows:
@@ -109,6 +119,12 @@ async def list_services(session: AsyncSession = Depends(get_session), user: User
                 verdict=row.health_verdict,
             )
 
+        service_for_status = SimpleNamespace(
+            org_id=row.org_id, name=row.name, repo=row.repo, argocd_app=row.argocd_app,
+            cluster_id=row.cluster_id, health_check_url=row.health_check_url,
+        )
+        integration_status = get_service_integration_status(context, service_for_status)
+
         services.append(ServiceWithStatusResponse(
             id=row.id,
             name=row.name,
@@ -118,9 +134,29 @@ async def list_services(session: AsyncSession = Depends(get_session), user: User
             latest_deploy=latest_deploy,
             health=health,
             active_alert_count=row.active_alert_count,
+            integration_status=IntegrationStatusResponse(**integration_status),
         ))
 
     return services
+
+
+@router.get("/services", response_model=list[ServiceWithStatusResponse])
+async def list_services(
+    session: AsyncSession = Depends(get_session), user: UserContext = Depends(get_current_user),
+) -> list[ServiceWithStatusResponse]:
+    """List all services with latest deployment, health, and active alert count."""
+    return await _fetch_services_with_status(session, user.org_id)
+
+
+@router.get("/services/{name}", response_model=ServiceWithStatusResponse)
+async def get_service(
+    name: str, session: AsyncSession = Depends(get_session), user: UserContext = Depends(get_current_user),
+) -> ServiceWithStatusResponse:
+    """Single service with latest deployment, health, and integration status."""
+    services = await _fetch_services_with_status(session, user.org_id, name=name)
+    if not services:
+        raise HTTPException(status_code=404, detail="Service not found")
+    return services[0]
 
 
 @router.put("/services/{name}/health-check", response_model=HealthCheckConfigResponse)
