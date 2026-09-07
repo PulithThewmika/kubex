@@ -61,4 +61,20 @@ describe('useReveal', () => {
     expect(screen.getByTestId('probe')).toHaveTextContent('visible')
     expect(io.observe).not.toHaveBeenCalled()
   })
+
+  it('renders visible immediately when IntersectionObserver is unavailable', () => {
+    stubReducedMotion(false)
+    vi.stubGlobal('IntersectionObserver', undefined)
+    render(<Probe />)
+
+    expect(screen.getByTestId('probe')).toHaveTextContent('visible')
+  })
+
+  it('renders visible immediately when matchMedia is unavailable', () => {
+    vi.stubGlobal('matchMedia', undefined)
+    stubIntersectionObserver()
+    render(<Probe />)
+
+    expect(screen.getByTestId('probe')).toHaveTextContent('visible')
+  })
 })
