@@ -96,6 +96,36 @@ async def test_run_health_checks_skips_service_not_yet_due():
     mock_ping.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_run_health_checks_pings_due_services_concurrently():
+    """A slow/unreachable endpoint must not serialize the whole tick —
+    max_instances=1 on the scheduler job means an overrun tick is silently
+    dropped, not queued (run.py)."""
+    import asyncio
+
+    session = AsyncMock()
+    result = MagicMock()
+    result.fetchall.return_value = [
+        _mock_service_row(id=1, name="orders"),
+        _mock_service_row(id=2, name="payments"),
+    ]
+    session.execute = AsyncMock(return_value=result)
+
+    async def slow_ping(url):
+        await asyncio.sleep(0.2)
+        return hc.HealthCheckResult(
+            checked_at=datetime.now(timezone.utc), status_code=200, response_time_ms=200,
+        )
+
+    with patch("agent.health_check.ping", slow_ping):
+        started = asyncio.get_event_loop().time()
+        checked = await hc.run_health_checks(session)
+        elapsed = asyncio.get_event_loop().time() - started
+
+    assert checked == 2
+    assert elapsed < 0.35  # would be >=0.4s if pinged sequentially
+
+
 def test_ring_buffer_caps_at_configured_size():
     for i in range(hc.HEALTH_CHECK_RING_BUFFER_SIZE + 5):
         hc.record_result(3, hc.HealthCheckResult(

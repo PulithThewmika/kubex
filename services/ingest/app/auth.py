@@ -39,6 +39,14 @@ INGEST_PUBLIC_URL = os.environ.get("INGEST_PUBLIC_URL", "http://localhost:8000")
 # cluster) doesn't need a real TLS cert just to test the install flow.
 ALLOW_INSECURE_INGEST_PUBLIC_URL = os.environ.get("ALLOW_INSECURE_INGEST_PUBLIC_URL", "").lower() in ("1", "true")
 
+# health_check_url (E23-T1) is pinged periodically by the always-on
+# detection agent, so a loopback/link-local target lets an org member turn
+# it into an SSRF probe against the agent's own host or cloud metadata
+# (169.254.169.254) — same class of risk as INGEST_PUBLIC_URL above, same
+# escape hatch for local/dev (e.g. pointing it at the compose network's
+# ingest:8000 to test the feature itself).
+ALLOW_INSECURE_HEALTH_CHECK_URL = os.environ.get("ALLOW_INSECURE_HEALTH_CHECK_URL", "").lower() in ("1", "true")
+
 
 def validate_auth_tokens() -> None:
     """Reject startup if any webhook/OAuth auth secret is empty or unset."""
