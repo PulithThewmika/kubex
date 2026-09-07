@@ -10,6 +10,11 @@ export function useReveal<T extends HTMLElement>() {
     const node = ref.current
     if (!node) return
 
+    if (typeof window.matchMedia !== 'function' || typeof IntersectionObserver === 'undefined') {
+      setVisible(true)
+      return
+    }
+
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       setVisible(true)
       return
