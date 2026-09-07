@@ -20,7 +20,8 @@ def mock_session():
 
 def _make_deploy_row(deploy_id=1, service_id=1, org_id=TEST_ORG_ID, service_name="orders",
                      namespace="kubex", commit_sha="abc1234",
-                     prom_components=None):
+                     prom_components=None, cluster_id=None, prometheus_status=None,
+                     health_check_url=None, health_check_interval_s=30):
     row = MagicMock()
     row.id = deploy_id
     row.service_id = service_id
@@ -29,6 +30,10 @@ def _make_deploy_row(deploy_id=1, service_id=1, org_id=TEST_ORG_ID, service_name
     row.namespace = namespace
     row.commit_sha = commit_sha
     row.prom_components = prom_components
+    row.cluster_id = cluster_id
+    row.prometheus_status = prometheus_status
+    row.health_check_url = health_check_url
+    row.health_check_interval_s = health_check_interval_s
     row.finished_at = datetime(2026, 8, 3, 12, 0, 0, tzinfo=timezone.utc)
     return row
 
@@ -48,6 +53,56 @@ async def test_find_unassessed_deployments(mock_session):
     assert "status = 'deployed'" in sql
     assert "finished_at IS NOT NULL" in sql
     assert "NOT EXISTS" in sql
+    assert "LEFT JOIN clusters" in sql
+    assert "prometheus_status" in sql
+    assert "health_check_url" in sql
+
+
+@pytest.mark.asyncio
+async def test_process_deployment_passes_prometheus_available_true_when_no_cluster(mock_session):
+    """No cluster_id (local/legacy service) -> prometheus_available=True regardless of prometheus_status."""
+    row = _make_deploy_row(cluster_id=None, prometheus_status=None)
+
+    with patch("agent.run.assess_deployment", new_callable=AsyncMock) as mock_assess, \
+         patch("agent.run.fire_alert", new_callable=AsyncMock), \
+         patch("agent.run.get_session", new_callable=AsyncMock):
+
+        mock_assess.return_value = (95, "healthy", {"penalties": {}, "raw_metrics": {}})
+        await _process_deployment(mock_session, row)
+
+        assert mock_assess.call_args.kwargs["prometheus_available"] is True
+
+
+@pytest.mark.asyncio
+async def test_process_deployment_passes_prometheus_available_false_when_cluster_unreachable(mock_session):
+    """cluster_id set and prometheus_status != 'found' -> prometheus_available=False."""
+    row = _make_deploy_row(cluster_id=uuid.uuid4(), prometheus_status="unreachable",
+                            health_check_url="http://svc/health")
+
+    with patch("agent.run.assess_deployment", new_callable=AsyncMock) as mock_assess, \
+         patch("agent.run.fire_alert", new_callable=AsyncMock), \
+         patch("agent.run.get_session", new_callable=AsyncMock):
+
+        mock_assess.return_value = (None, "unknown", {"metrics_source": "none", "reason": "n/a"})
+        await _process_deployment(mock_session, row)
+
+        assert mock_assess.call_args.kwargs["prometheus_available"] is False
+        assert mock_assess.call_args.kwargs["health_check_url"] == "http://svc/health"
+
+
+@pytest.mark.asyncio
+async def test_process_deployment_unknown_verdict_no_alert(mock_session):
+    """'unknown' verdict (no metrics source) never fires an alert — there's no score to alert on."""
+    row = _make_deploy_row()
+
+    with patch("agent.run.assess_deployment", new_callable=AsyncMock) as mock_assess, \
+         patch("agent.run.fire_alert", new_callable=AsyncMock) as mock_fire, \
+         patch("agent.run.get_session", new_callable=AsyncMock):
+
+        mock_assess.return_value = (None, "unknown", {"metrics_source": "none", "reason": "n/a"})
+        await _process_deployment(mock_session, row)
+
+        mock_fire.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -120,7 +175,7 @@ async def test_agent_loop_error_one_deployment_continues():
 
     call_count = 0
 
-    async def mock_assess(session, deploy, service_name, namespace):
+    async def mock_assess(session, deploy, service_name, namespace, **kwargs):
         nonlocal call_count
         call_count += 1
         if call_count == 1:
