@@ -22,6 +22,6 @@ describe('HealthRing', () => {
     render(<HealthRing score={null} verdict={null} />)
     expect(screen.getByText('?')).toBeInTheDocument()
     expect(screen.queryByText('0')).not.toBeInTheDocument()
-    expect(screen.getByLabelText(/unknown — connect metrics/i)).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /unknown — connect metrics/i })).toBeInTheDocument()
   })
 })
