@@ -1,5 +1,6 @@
 import { useSearchParams } from 'react-router-dom'
 import { useInstallations } from '../hooks/useInstallations'
+import { ClustersSection } from '../components/ClustersSection'
 import type { Installation } from '../types/installation'
 
 // The GitHub App's slug is a separate identity from this repo's name (set at
@@ -93,6 +94,15 @@ export function Settings() {
           )}
         </div>
       </section>
+
+      <ClustersSection
+        onAddCluster={() => {
+          // Wired up in E22-T5-S3 (AddClusterModal).
+        }}
+        onRotateToken={() => {
+          // Wired up in E22-T5-S5 (rotate confirmation dialog).
+        }}
+      />
     </div>
   )
 }
