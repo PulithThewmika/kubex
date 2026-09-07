@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Settings } from './Settings'
 import { AuthProvider } from '../contexts/AuthContext'
@@ -17,6 +17,11 @@ const ME = {
   onboarding_completed: true,
 }
 
+function LocationProbe() {
+  const location = useLocation()
+  return <div data-testid="location-search">{location.search}</div>
+}
+
 function renderSettings(initialEntry = '/app/settings') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -26,6 +31,7 @@ function renderSettings(initialEntry = '/app/settings') {
           <Routes>
             <Route path="/app/settings" element={<Settings />} />
           </Routes>
+          <LocationProbe />
         </MemoryRouter>
       </AuthProvider>
     </QueryClientProvider>,
@@ -65,6 +71,7 @@ describe('Settings page', () => {
 
     const link = await screen.findByRole('link', { name: /connect github/i })
     expect(link).toHaveAttribute('href', 'https://github.com/apps/deploylens/installations/new')
+    expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=connections')
   })
 
   it('deep-links to a tab via ?tab=', async () => {
