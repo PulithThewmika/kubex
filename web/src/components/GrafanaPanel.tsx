@@ -59,9 +59,9 @@ export function GrafanaPanel({ uid, panelId, service, from = 'now-6h', to = 'now
       )}
       {status === 'error' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 p-4 text-center">
-          <p className="text-sm font-medium text-text">Metrics not available</p>
+          <p className="text-sm font-medium text-text">Metrics unavailable</p>
           <p className="text-xs text-text-muted">
-            The {title} panel needs a connected Prometheus data source.
+            The {title} panel couldn't load. If this service has no metrics source yet, connect one.
           </p>
           <Link
             to="/app/settings?tab=connections"

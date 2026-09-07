@@ -22,7 +22,7 @@ describe('GrafanaPanel', () => {
 
     renderPanel()
 
-    await waitFor(() => expect(screen.getByText('Metrics not available')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Metrics unavailable')).toBeInTheDocument())
     expect(screen.getByRole('link', { name: /connect prometheus/i })).toHaveAttribute(
       'href',
       '/app/settings?tab=connections',
@@ -34,7 +34,7 @@ describe('GrafanaPanel', () => {
 
     renderPanel()
 
-    expect(screen.queryByText('Metrics not available')).not.toBeInTheDocument()
+    expect(screen.queryByText('Metrics unavailable')).not.toBeInTheDocument()
     expect(screen.getByText(/loading error rate/i)).toBeInTheDocument()
   })
 })
