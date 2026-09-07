@@ -3,6 +3,7 @@ import type { Service } from '../types/service'
 import type { DeploymentDetail } from '../types/deploymentDetail'
 import type { Installation } from '../types/installation'
 import type { Cluster } from '../types/cluster'
+import type { Alert } from '../types/alert'
 
 export function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status })
@@ -78,6 +79,21 @@ export function makeDeploymentDetail(overrides: Partial<DeploymentDetail> = {}):
     },
     timeline: [],
     health_evidence: [],
+    ...overrides,
+  }
+}
+
+export function makeAlert(overrides: Partial<Alert> = {}): Alert {
+  return {
+    id: 1,
+    deployment_id: 42,
+    service_id: 1,
+    severity: 'critical',
+    title: 'Error rate spike on orders',
+    description: 'error_rate 0.12 over 5m',
+    fired_at: '2026-08-29T10:00:00Z',
+    resolved_at: null,
+    alertmanager_id: 'am-1',
     ...overrides,
   }
 }
