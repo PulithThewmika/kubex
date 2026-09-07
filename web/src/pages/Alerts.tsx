@@ -3,7 +3,6 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { formatDistanceStrict, formatDistanceToNow } from 'date-fns'
 import { AlertSeverityBadge } from '../components/AlertSeverityBadge'
 import { useAlerts } from '../hooks/useAlerts'
-import { useServices } from '../hooks/useServices'
 import type { Alert } from '../types/alert'
 
 const FILTERS = [
@@ -18,7 +17,7 @@ function isFilterId(value: string | null): value is FilterId {
   return value !== null && FILTERS.some((f) => f.id === value)
 }
 
-function AlertRow({ alert, serviceName }: { alert: Alert; serviceName: string }) {
+function AlertRow({ alert }: { alert: Alert }) {
   const resolved = alert.resolved_at !== null
   return (
     <li className="flex flex-col gap-2 border-b border-border px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:gap-4">
@@ -32,7 +31,7 @@ function AlertRow({ alert, serviceName }: { alert: Alert; serviceName: string })
         )}
       </div>
       <div className="text-xs text-text-muted sm:w-32 sm:shrink-0">
-        <span className="rounded border border-border px-1.5 py-0.5">{serviceName}</span>
+        <span className="rounded border border-border px-1.5 py-0.5">{alert.service_name}</span>
       </div>
       <Link
         to={`/app/deployments/${alert.deployment_id}`}
@@ -60,13 +59,6 @@ export function Alerts() {
   const activeFilter: FilterId = isFilterId(filterParam) ? filterParam : 'active'
 
   const { data: alerts, isLoading, isError } = useAlerts()
-  const { data: services } = useServices()
-
-  const serviceNames = useMemo(() => {
-    const map = new Map<number, string>()
-    services?.forEach((s) => map.set(s.id, s.name))
-    return map
-  }, [services])
 
   const visible = useMemo(() => {
     if (!alerts) return []
@@ -142,11 +134,7 @@ export function Alerts() {
       ) : (
         <ul className="overflow-hidden rounded-lg border border-border bg-surface">
           {visible.map((alert) => (
-            <AlertRow
-              key={alert.id}
-              alert={alert}
-              serviceName={serviceNames.get(alert.service_id) ?? `Service #${alert.service_id}`}
-            />
+            <AlertRow key={alert.id} alert={alert} />
           ))}
         </ul>
       )}

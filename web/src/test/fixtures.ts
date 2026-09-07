@@ -88,6 +88,7 @@ export function makeAlert(overrides: Partial<Alert> = {}): Alert {
     id: 1,
     deployment_id: 42,
     service_id: 1,
+    service_name: 'orders',
     severity: 'critical',
     title: 'Error rate spike on orders',
     description: 'error_rate 0.12 over 5m',
