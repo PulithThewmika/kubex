@@ -10,6 +10,7 @@ from sqlalchemy.sql import Select
 from app.correlation.engine import (
     apply_terminal_guarded_status,
     extract_image_tag,
+    extract_image_tag_from_images,
     parse_iso_timestamp,
     resolve_service,
     resolve_org_id,
@@ -58,6 +59,37 @@ class TestExtractImageTag:
 
     def test_empty_string_returned_as_is(self):
         assert extract_image_tag("") == ""
+
+
+# ── extract_image_tag_from_images ──────────────────────────────────
+
+class TestExtractImageTagFromImages:
+    def test_comma_separated_same_tag(self):
+        s = "ghcr.io/o/app-frontend:abc1234,ghcr.io/o/app-orders:abc1234"
+        assert extract_image_tag_from_images(s) == "abc1234"
+
+    def test_go_slice_space_separated(self):
+        s = "[ghcr.io/o/app-frontend:abc1234 ghcr.io/o/app-orders:abc1234]"
+        assert extract_image_tag_from_images(s) == "abc1234"
+
+    def test_majority_wins_during_rolling_update(self):
+        # payments still rolling: old tag lingers alongside the new one,
+        # plus a sidecar image on its own tag — the bumped tag is on 3.
+        s = ("[curlimages/curl:8.10.1 ghcr.io/o/app-frontend:6a80f84 "
+             "ghcr.io/o/app-orders:6a80f84 ghcr.io/o/app-payments:6a80f84 "
+             "ghcr.io/o/app-payments:e2edeg1]")
+        assert extract_image_tag_from_images(s) == "6a80f84"
+
+    def test_registry_port_not_mistaken_for_tag(self):
+        assert extract_image_tag_from_images("[localhost:5000/app-x:v9]") == "v9"
+
+    def test_latest_ignored(self):
+        assert extract_image_tag_from_images("ghcr.io/o/app-x:latest") is None
+
+    def test_empty_and_none(self):
+        assert extract_image_tag_from_images(None) is None
+        assert extract_image_tag_from_images("  ") is None
+        assert extract_image_tag_from_images("[]") is None
 
 
 # ── parse_iso_timestamp ────────────────────────────────────────────
