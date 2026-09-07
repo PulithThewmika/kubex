@@ -1,0 +1,32 @@
+import { useState } from 'react'
+
+type CodeBlockProps = {
+  code: string
+}
+
+const COPIED_RESET_MS = 2000
+
+export function CodeBlock({ code }: CodeBlockProps) {
+  const [copied, setCopied] = useState(false)
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(code)
+    setCopied(true)
+    setTimeout(() => setCopied(false), COPIED_RESET_MS)
+  }
+
+  return (
+    <div className="relative rounded-md border border-border bg-background">
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="absolute right-2 top-2 rounded border border-border bg-surface px-2 py-1 text-xs font-medium text-text-muted transition-colors hover:text-text"
+      >
+        {copied ? 'Copied!' : 'Copy'}
+      </button>
+      <pre className="overflow-x-auto p-4 pr-16 text-xs text-text">
+        <code>{code}</code>
+      </pre>
+    </div>
+  )
+}
