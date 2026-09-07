@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { GITHUB_APP_INSTALL_URL } from '../../lib/github'
 import { useInstallations } from '../../hooks/useInstallations'
 import { ClustersSection } from '../ClustersSection'
+import { SlackSection } from './SlackSection'
 import { AddClusterModal } from '../AddClusterModal'
 import { RotateTokenDialog } from '../RotateTokenDialog'
 import { StatusBadge } from '../StatusBadge'
@@ -98,6 +99,8 @@ export function ConnectionsTab({ installationId }: ConnectionsTabProps) {
       </section>
 
       <ClustersSection onAddCluster={() => setShowAddCluster(true)} onRotateToken={setRotatingCluster} />
+
+      <SlackSection />
 
       {showAddCluster && <AddClusterModal onClose={() => setShowAddCluster(false)} />}
       {rotatingCluster && (

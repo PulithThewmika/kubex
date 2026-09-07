@@ -4,6 +4,7 @@ import { AddClusterModal } from '../components/AddClusterModal'
 import { ConnectReposStep } from '../components/onboarding/ConnectReposStep'
 import { DeployMethodStep, type DeployMethod } from '../components/onboarding/DeployMethodStep'
 import { MetricsStep, type MetricsMethod } from '../components/onboarding/MetricsStep'
+import { NotificationsStep } from '../components/onboarding/NotificationsStep'
 import { Stepper } from '../components/onboarding/Stepper'
 import { SummaryStep } from '../components/onboarding/SummaryStep'
 import { useClusters } from '../hooks/useClusters'
@@ -11,7 +12,7 @@ import { useCompleteOnboarding } from '../hooks/useCompleteOnboarding'
 import { useInstallInfo } from '../hooks/useInstallInfo'
 import { useInstallations } from '../hooks/useInstallations'
 
-const STEP_LABELS = ['Repositories', 'Deployments', 'Metrics', 'Done']
+const STEP_LABELS = ['Repositories', 'Deployments', 'Metrics', 'Notifications', 'Done']
 
 export function Onboarding() {
   const navigate = useNavigate()
@@ -86,7 +87,8 @@ export function Onboarding() {
             onAddCluster={() => setShowAddCluster(true)}
           />
         )}
-        {step === 3 && (
+        {step === 3 && <NotificationsStep />}
+        {step === 4 && (
           <SummaryStep
             installations={installations}
             clusters={clusters}
