@@ -23,7 +23,7 @@ export function Onboarding() {
 
   const { data: installations } = useInstallations()
   const { data: clusters } = useClusters()
-  const { data: installInfo } = useInstallInfo()
+  const installInfoQuery = useInstallInfo()
   const complete = useCompleteOnboarding()
 
   const isLast = step === STEP_LABELS.length - 1
@@ -40,9 +40,10 @@ export function Onboarding() {
   // "Skip this step" records an explicit skip for the step's choice (so the
   // summary shows "not configured" rather than a half-answered state), then
   // advances — distinct from "Continue", which keeps whatever's selected.
+  // It overrides any current selection: skipping means skipping.
   function skipStep() {
-    if (step === 1 && !deployMethod) setDeployMethod('skip')
-    if (step === 2 && !metricsMethod) setMetricsMethod('skip')
+    if (step === 1) setDeployMethod('skip')
+    if (step === 2) setMetricsMethod('skip')
     next()
   }
 
@@ -71,7 +72,9 @@ export function Onboarding() {
             value={deployMethod}
             onChange={setDeployMethod}
             onAddCluster={() => setShowAddCluster(true)}
-            ingestPublicUrl={installInfo?.ingest_public_url}
+            ingestPublicUrl={installInfoQuery.data?.ingest_public_url}
+            ingestUrlLoading={installInfoQuery.isLoading}
+            ingestUrlError={installInfoQuery.isError}
             apiKey={webhookApiKey}
             onApiKeyCreated={setWebhookApiKey}
           />
