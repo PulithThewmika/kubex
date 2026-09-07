@@ -53,6 +53,10 @@ def test_redact_slack_tokens():
 
     assert redact_slack_tokens("got xoxb-123-abc from slack") == "got xox*** from slack"
     assert "xoxp-" not in redact_slack_tokens("xoxp-9-9-9")
+    # app-level, workflow, and rotating token shapes
+    assert "xapp-" not in redact_slack_tokens("xapp-1-A-2-bcd")
+    assert "xwfp-" not in redact_slack_tokens("xwfp-abc123")
+    assert "xoxe.xoxb-" not in redact_slack_tokens("token xoxe.xoxb-1-abc rotates")
 
 
 # ── signature verification ───────────────────────────────────────────
@@ -266,3 +270,36 @@ async def test_events_app_uninstalled_tears_down(client: FastAPI, mock_session, 
     assert resp.status_code == 200
     assert ws.uninstalled_at is not None
     mock_session.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_events_tokens_revoked_only_for_bot(client: FastAPI, mock_session, monkeypatch):
+    """tokens_revoked without our bot in event.tokens.bot is a no-op."""
+    monkeypatch.setattr("app.auth.SLACK_SIGNING_SECRET", SIGNING_SECRET)
+    mock_session.scalars = AsyncMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+
+    body = b'{"type":"event_callback","team_id":"T1","event":{"type":"tokens_revoked","tokens":{"oauth":["U9"]}}}'
+    req = _signed_request(body)
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.post(
+            "/webhooks/slack/events",
+            content=body,
+            headers={
+                "X-Slack-Request-Timestamp": req.headers["X-Slack-Request-Timestamp"],
+                "X-Slack-Signature": req.headers["X-Slack-Signature"],
+            },
+        )
+    assert resp.status_code == 200
+    # no bot tokens listed -> no teardown query, no commit
+    mock_session.scalars.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_teardown_workspace_filters_by_bot_user_id():
+    from app.routers.integrations_slack import _teardown_workspace
+
+    session = AsyncMock()
+    session.scalars = AsyncMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+    await _teardown_workspace(session, "T1", bot_user_ids=["UBOT1"])
+    where = str(session.scalars.await_args.args[0])
+    assert "bot_user_id IN" in where
