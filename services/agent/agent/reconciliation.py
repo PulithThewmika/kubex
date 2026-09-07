@@ -78,10 +78,16 @@ async def reconcile_active_alerts(session: AsyncSession) -> int:
             "restarts_post": post["restarts"],
             "request_rate_base": base["request_rate"],
             "request_rate_post": post["request_rate"],
+            "coverage_base": base["coverage"],
+            "coverage_post": post["coverage"],
         }
 
-        score, verdict, _ = compute_health_score(metrics)
-        recovered = score >= HEALTHY_THRESHOLD
+        score, verdict, details = compute_health_score(metrics)
+        # A low-confidence cycle (Prometheus data gap, E23-T4-S10) must not
+        # count toward recovery — a service still failing behind a scrape
+        # gap would otherwise look "healthy" for two cycles just because
+        # there's no data to penalize it with, and get its alert resolved.
+        recovered = score >= HEALTHY_THRESHOLD and not details["low_confidence"]
 
         if recovered:
             _recovery_counters[alert_id] = _recovery_counters.get(alert_id, 0) + 1

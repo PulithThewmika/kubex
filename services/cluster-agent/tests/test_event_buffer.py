@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import logging
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 from cluster_agent import event_buffer, run
@@ -40,3 +42,26 @@ async def test_heartbeat_tick_flushes_buffer_on_success() -> None:
     with patch("cluster_agent.run.ingest_client.heartbeat", AsyncMock(return_value={})):
         await run._heartbeat_tick()
     assert event_buffer.size() == 0
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_tick_retains_buffer_on_failure_then_logs_and_drains_on_success(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A regression that dropped the buffer without reporting it would pass
+    a check for size()==0 alone — assert the outage transition actually got
+    logged before it's cleared."""
+    event_buffer.drain()
+    event = {"from_status": "found", "to_status": "not_found"}
+    event_buffer.push(event)
+
+    with patch("cluster_agent.run.ingest_client.heartbeat", AsyncMock(side_effect=httpx.ConnectError("refused"))):
+        with pytest.raises(httpx.ConnectError):
+            await run._heartbeat_tick()
+    assert event_buffer.size() == 1  # retained — heartbeat never reached ingest
+
+    with caplog.at_level(logging.WARNING, logger="kubex.cluster_agent"):
+        with patch("cluster_agent.run.ingest_client.heartbeat", AsyncMock(return_value={})):
+            await run._heartbeat_tick()
+    assert event_buffer.size() == 0
+    assert any(str(event) in record.getMessage() for record in caplog.records)
