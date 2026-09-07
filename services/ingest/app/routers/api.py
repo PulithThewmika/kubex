@@ -551,7 +551,7 @@ async def list_alerts(
     service: str | None = Query(None, description="Filter by service name"),
     session: AsyncSession = Depends(get_session),
     user: UserContext = Depends(get_current_user),
-):
+) -> list[AlertResponse]:
     """List alerts with optional active/service filters."""
     conditions = ["a.org_id = :org_id"]
     params: dict = {"org_id": user.org_id}
@@ -573,7 +573,7 @@ async def list_alerts(
                    a.title, a.description, a.fired_at, a.resolved_at,
                    a.alertmanager_id, s.name AS service_name
             FROM alerts a
-            JOIN services s ON s.id = a.service_id
+            JOIN services s ON s.id = a.service_id AND s.org_id = :org_id
             {where_clause}
             ORDER BY a.fired_at DESC
             LIMIT 200

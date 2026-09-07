@@ -8,11 +8,12 @@ from httpx import ASGITransport, AsyncClient
 
 
 def _mock_alert_row(
-    id=1, deployment_id=10, service_id=1, severity="warning",
-    title="DeployDegradation", description="Score 65/100",
-    fired_at=None, resolved_at=None, alertmanager_id=None,
-    service_name="orders",
-):
+    id: int = 1, deployment_id: int = 10, service_id: int = 1,
+    severity: str = "warning", title: str = "DeployDegradation",
+    description: str | None = "Score 65/100", fired_at: datetime | None = None,
+    resolved_at: datetime | None = None, alertmanager_id: str | None = None,
+    service_name: str = "orders",
+) -> MagicMock:
     row = MagicMock()
     row.id = id
     row.deployment_id = deployment_id
@@ -43,6 +44,7 @@ async def test_alerts_returns_list(client, mock_session):
     data = resp.json()
     assert len(data) == 2
     assert data[0]["severity"] == "warning"
+    assert data[0]["service_name"] == "orders"
     assert data[1]["severity"] == "critical"
 
 
