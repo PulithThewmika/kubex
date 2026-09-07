@@ -19,11 +19,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
+from datetime import datetime, timezone
 from typing import Awaitable, Callable
 
 import httpx
 
-from . import argocd, bootstrap as bootstrap_module, ingest_client, prometheus
+from . import argocd, bootstrap as bootstrap_module, event_buffer, ingest_client, prometheus
 from .backoff import Backoff
 from .config import (
     AGENT_VERSION,
@@ -57,7 +58,20 @@ _CONNECTIVITY_ERRORS = (httpx.TransportError, httpx.TimeoutException)
 
 
 async def _discover() -> None:
+    previous_argocd_status = _state["argocd_status"]
     argocd_result = await argocd.discover()
+    if previous_argocd_status is not None and argocd_result["status"] != previous_argocd_status:
+        # heartbeat_loop only ever reports the *current* status, so a
+        # transition that happens while heartbeat can't reach ingest would
+        # otherwise be lost the moment a later transition overwrites it —
+        # buffer it here so it survives to the next successful heartbeat.
+        event_buffer.push({
+            "from_status": previous_argocd_status,
+            "to_status": argocd_result["status"],
+            "version": argocd_result["version"],
+            "namespace": argocd_result["namespace"],
+            "detected_at": datetime.now(timezone.utc).isoformat(),
+        })
     _state["argocd_status"] = argocd_result["status"]
     _state["argocd_version"] = argocd_result["version"]
     _state["argocd_namespace"] = argocd_result["namespace"]
@@ -136,6 +150,18 @@ async def _heartbeat_tick() -> None:
         argocd_status=_state["argocd_status"],
         prometheus_status=_state["prometheus_status"],
     )
+    if event_buffer.size():
+        # Reaching here means the heartbeat POST above just succeeded, so
+        # any buffered ArgoCD status transitions accumulated during a prior
+        # outage are now safe to report and drop — nothing to send them to
+        # (ingest's heartbeat endpoint carries current state only, not
+        # history), but logging them keeps the outage's transition history
+        # visible to whoever's reading the agent's logs.
+        buffered = event_buffer.drain()
+        logger.warning(
+            "Flushing %d buffered ArgoCD status transition(s) from a connectivity outage: %s",
+            len(buffered), buffered,
+        )
 
 
 async def heartbeat_loop(cluster_id: str) -> None:
