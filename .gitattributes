@@ -1,0 +1,5 @@
+# PEM certificates must keep LF line endings regardless of platform —
+# CRLF conversion on a Windows checkout would bake CRLF into the
+# Docker image's copy, and while OpenSSL's PEM parser tolerates it,
+# there's no reason to risk it (#817).
+*.pem text eol=lf
