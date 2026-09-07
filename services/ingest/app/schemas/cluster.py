@@ -9,6 +9,18 @@ class ClusterCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=253)
 
 
+class InstallInfoResponse(BaseModel):
+    """Constants the Add Cluster wizard's Helm/GitOps command text needs —
+    kept here (E22-T5, #806) so the frontend doesn't hand-duplicate values
+    that already live in install.py's build_install_manifest(), which only
+    the kubectl tab (GET /install/:token.yaml) previously read from."""
+
+    ingest_public_url: str
+    agent_namespace: str
+    chart_repo_url: str
+    chart_path: str
+
+
 class ClusterCreateResponse(BaseModel):
     id: str
     name: str

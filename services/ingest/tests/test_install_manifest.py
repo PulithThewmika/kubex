@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.models.cluster import Cluster
-from app.routers.install import build_install_manifest
+from app.routers.install import AGENT_NAMESPACE, CHART_PATH, CHART_REPO_URL, build_install_manifest
 
 _CHART_DIR = Path(__file__).resolve().parents[3] / "deploy" / "helm" / "cluster-agent"
 
@@ -186,6 +186,56 @@ async def test_install_manifest_500_when_ingest_public_url_is_loopback(
 
 
 @pytest.mark.asyncio
+@patch("app.routers.install.INGEST_PUBLIC_URL", "http://ingest.example.com")
+async def test_install_manifest_500_for_non_https_non_loopback_url(client: FastAPI, mock_session: AsyncMock) -> None:
+    """A non-loopback but plain-http INGEST_PUBLIC_URL would still send the
+    cluster's real bearer token in plaintext on every agent request
+    (CodeRabbit, PR #804) — reject unless explicitly opted into via
+    ALLOW_INSECURE_INGEST_PUBLIC_URL (local/dev only)."""
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get("/install/kbx_anything.yaml")
+
+    assert resp.status_code == 500
+    mock_session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@patch("app.routers.install.INGEST_PUBLIC_URL", "not-a-valid-url")
+@patch("app.routers.install.ALLOW_INSECURE_INGEST_PUBLIC_URL", True)
+async def test_install_manifest_500_for_hostless_url_even_with_insecure_allowed(
+    client: FastAPI, mock_session: AsyncMock
+) -> None:
+    """A malformed INGEST_PUBLIC_URL with no hostname parses with scheme=''
+    (not "https"), which the https check alone would already reject — but
+    ALLOW_INSECURE_INGEST_PUBLIC_URL=True bypasses that one, and
+    _is_loopback(None) returns False, so nothing else would catch it
+    (CodeRabbit, PR #804)."""
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get("/install/kbx_anything.yaml")
+
+    assert resp.status_code == 500
+    mock_session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@patch("app.routers.install.INGEST_PUBLIC_URL", "http://ingest.example.com")
+@patch("app.routers.install.ALLOW_INSECURE_INGEST_PUBLIC_URL", True)
+async def test_install_manifest_allows_non_https_when_explicitly_opted_in(
+    client: FastAPI, mock_session: AsyncMock
+) -> None:
+    token = "kbx_" + "a" * 40
+    cluster = _fake_cluster(token)
+    mock_session.execute = AsyncMock(
+        return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[cluster]))))
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get(f"/install/{token}.yaml")
+
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
 @patch("app.routers.install.INGEST_PUBLIC_URL", "https://ingest.example.com")
 async def test_install_manifest_404_for_grace_period_old_token(client: FastAPI, mock_session: AsyncMock) -> None:
     """A token that only matches token_hash_old (post-rotation grace window,
@@ -205,3 +255,57 @@ async def test_install_manifest_404_for_grace_period_old_token(client: FastAPI, 
         resp = await ac.get(f"/install/{old_token}.yaml")
 
     assert resp.status_code == 404
+
+
+# ── #806: /api/install-info — authoritative values for the Add Cluster
+# wizard's Helm/GitOps command text, instead of the frontend hand-
+# duplicating them as string literals ─────────────────────────────────
+
+
+@pytest.mark.asyncio
+@patch("app.routers.install.INGEST_PUBLIC_URL", "https://ingest.example.com")
+async def test_install_info_returns_authoritative_values(client: FastAPI) -> None:
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get("/api/install-info")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {
+        "ingest_public_url": "https://ingest.example.com",
+        "agent_namespace": AGENT_NAMESPACE,
+        "chart_repo_url": CHART_REPO_URL,
+        "chart_path": CHART_PATH,
+    }
+
+
+@pytest.mark.asyncio
+@patch("app.routers.install.INGEST_PUBLIC_URL", "http://localhost:8000")
+async def test_install_info_500_when_ingest_public_url_is_loopback(client: FastAPI) -> None:
+    """Same guard as install_manifest — a loopback INGEST_PUBLIC_URL would
+    hand the Add Cluster wizard a command that can never reach this service
+    (CodeRabbit, PR #804)."""
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get("/api/install-info")
+
+    assert resp.status_code == 500
+
+
+@pytest.mark.asyncio
+@patch("app.routers.install.INGEST_PUBLIC_URL", "http://ingest.example.com")
+async def test_install_info_500_for_non_https_non_loopback_url(client: FastAPI) -> None:
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get("/api/install-info")
+
+    assert resp.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_install_info_requires_auth(client: FastAPI) -> None:
+    from app.auth_middleware import get_current_user
+
+    client.dependency_overrides.pop(get_current_user, None)
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get("/api/install-info")
+
+    assert resp.status_code in (401, 403)
