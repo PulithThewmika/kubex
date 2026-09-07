@@ -23,7 +23,7 @@ def _result(t: datetime, status: int | None, ms: int) -> HealthCheckResult:
 
 
 class TestPrometheusSource:
-    def test_metrics_source_is_prometheus(self):
+    def test_metrics_source_is_prometheus(self) -> None:
         metrics = {
             "error_rate_base": 0.01, "error_rate_post": 0.01,
             "latency_p99_base_ms": 100.0, "latency_p99_post_ms": 100.0,
@@ -36,7 +36,7 @@ class TestPrometheusSource:
 
 
 class TestHealthCheckSource:
-    def test_healthy_service(self):
+    def test_healthy_service(self) -> None:
         results = (
             [_result(BASE_START + timedelta(minutes=i), 200, 50) for i in range(10)]
             + [_result(OBS_START + timedelta(minutes=i), 200, 55) for i in range(10)]
@@ -48,7 +48,7 @@ class TestHealthCheckSource:
         assert verdict == "healthy"
         assert score >= 80
 
-    def test_degraded_service_high_error_rate(self):
+    def test_degraded_service_high_error_rate(self) -> None:
         base = [_result(BASE_START + timedelta(minutes=i), 200, 50) for i in range(10)]
         post = [_result(OBS_START + timedelta(minutes=i), 200 if i % 2 else 500, 50) for i in range(10)]
         score, verdict, details = compute_health_check_score(
@@ -58,7 +58,7 @@ class TestHealthCheckSource:
         assert details["raw_metrics"]["error_rate_post"] == pytest.approx(0.5)
         assert verdict == "degraded"
 
-    def test_failed_service_all_errors_and_slow(self):
+    def test_failed_service_all_errors_and_slow(self) -> None:
         base = [_result(BASE_START + timedelta(minutes=i), 200, 50) for i in range(10)]
         # All errors (delta=1.0 -> 40pt penalty) and 3x response time
         # (ratio=3.0 -> 60pt penalty) -> score 0.
@@ -69,7 +69,7 @@ class TestHealthCheckSource:
         assert verdict == "failed"
         assert details["raw_metrics"]["error_rate_post"] == pytest.approx(1.0)
 
-    def test_low_confidence_when_coverage_thin(self):
+    def test_low_confidence_when_coverage_thin(self) -> None:
         # 30-min baseline window, 3-min interval -> ~10 expected pings, only 1 present.
         results = [_result(BASE_START + timedelta(minutes=1), 200, 50)]
         _, _, details = compute_health_check_score(
@@ -78,7 +78,7 @@ class TestHealthCheckSource:
         assert details["low_confidence"] is True
         assert details["coverage"]["post"] == 0.0
 
-    def test_no_results_in_either_window(self):
+    def test_no_results_in_either_window(self) -> None:
         score, verdict, details = compute_health_check_score(
             [], BASE_START, BASE_END, OBS_START, OBS_END, interval_s=180,
         )
@@ -91,7 +91,7 @@ class TestHealthCheckSource:
 
 
 class TestRingBufferCoversScoringWindow:
-    def test_buffer_capacity_spans_baseline_plus_observation(self):
+    def test_buffer_capacity_spans_baseline_plus_observation(self) -> None:
         """Regression: the ring buffer must hold enough history to cover
         BASELINE_WINDOW+OBSERVATION_WINDOW at a service's own ping interval,
         or compute_health_check_score's baseline window is silently empty
@@ -104,7 +104,7 @@ class TestRingBufferCoversScoringWindow:
         span_pings = (BASELINE_WINDOW_SECONDS + OBSERVATION_WINDOW_SECONDS) / interval_s
         assert capacity > span_pings
 
-    def test_record_result_buffer_survives_full_window(self):
+    def test_record_result_buffer_survives_full_window(self) -> None:
         service_id = 999
         interval_s = 30
         capacity = hc._buffer_capacity(interval_s)
@@ -122,7 +122,7 @@ class TestRingBufferCoversScoringWindow:
 
 
 class TestNoMetricsSource:
-    def test_returns_null_score_and_unknown_verdict(self):
+    def test_returns_null_score_and_unknown_verdict(self) -> None:
         score, verdict, details = no_metrics_score("no prometheus, no health check")
         assert score is None
         assert verdict == "unknown"

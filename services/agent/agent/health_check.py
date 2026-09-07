@@ -110,9 +110,14 @@ def _buffer_capacity(interval_s: int) -> int:
 
 
 def record_result(service_id: int, result: HealthCheckResult, interval_s: int = 30) -> None:
-    buffer = _results.setdefault(
-        service_id, deque(maxlen=_buffer_capacity(interval_s))
-    )
+    capacity = _buffer_capacity(interval_s)
+    buffer = _results.get(service_id)
+    if buffer is None or buffer.maxlen != capacity:
+        # Reconfiguring a service's health_check_interval_s changes its
+        # required capacity — resize in place (keeping existing samples)
+        # rather than pinning to whatever interval was first observed.
+        buffer = deque(buffer or (), maxlen=capacity)
+        _results[service_id] = buffer
     buffer.append(result)
 
 
