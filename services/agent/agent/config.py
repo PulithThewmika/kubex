@@ -2,6 +2,7 @@ import os
 import re
 import ssl
 from pathlib import Path
+from urllib.parse import urlsplit
 
 
 def _parse_duration(value: str) -> int:
@@ -36,6 +37,18 @@ def _supabase_ssl_context() -> ssl.SSLContext:
     return context
 
 
+_SUPABASE_HOST_SUFFIXES = (".supabase.co", ".supabase.com")
+
+
+def _is_supabase_host(url: str) -> bool:
+    """See services/ingest/app/db.py's identical helper for why this
+    parses the hostname rather than doing a raw "supabase" in url
+    substring check (case-sensitivity and false-positive/negative risk).
+    """
+    hostname = urlsplit(url).hostname
+    return hostname is not None and hostname.endswith(_SUPABASE_HOST_SUFFIXES)
+
+
 def prepare_database_url(url: str) -> tuple[str, dict]:
     """Normalize a DATABASE_URL to the asyncpg dialect and work out the
     connect_args a Supabase host needs. Rejects the transaction-mode
@@ -47,9 +60,9 @@ def prepare_database_url(url: str) -> tuple[str, dict]:
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
     connect_args: dict = {}
-    if "supabase" in url:
+    if _is_supabase_host(url):
         connect_args["ssl"] = _supabase_ssl_context()
-        if ":6543" in url:
+        if urlsplit(url).port == 6543:
             raise ValueError(
                 "DATABASE_URL points at Supabase's transaction-mode pooler "
                 "(port 6543), which this codebase does not support — "
