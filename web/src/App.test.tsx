@@ -121,17 +121,23 @@ describe('App routing', () => {
     expect(await screen.findByPlaceholderText(/ask about/i)).toBeInTheDocument()
   })
 
-  it('falls through gracefully on an unknown route without crashing', async () => {
+  it('renders the 404 page on an unknown route', async () => {
     stubRoutedFetch(AUTHENTICATED_ROUTES)
     window.history.pushState({}, '', '/this-route-does-not-exist')
 
-    const { container } = await renderApp()
+    await renderApp()
 
-    // No route (not even the AppLayout wrapper) matches an unregistered
-    // path today, so nothing renders — the important thing is it doesn't throw.
+    expect(await screen.findByRole('heading', { name: /page not found/i })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Overview' })).not.toBeInTheDocument()
-    expect(screen.queryByPlaceholderText(/ask about/i)).not.toBeInTheDocument()
-    expect(container).toBeInTheDocument()
+  })
+
+  it('renders the 404 page for an unknown /app child route', async () => {
+    stubRoutedFetch(AUTHENTICATED_ROUTES)
+    window.history.pushState({}, '', '/app/nope')
+
+    await renderApp()
+
+    expect(await screen.findByRole('heading', { name: /page not found/i })).toBeInTheDocument()
   })
 })
 

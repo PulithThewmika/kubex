@@ -16,6 +16,7 @@ import { Chat } from './pages/Chat'
 import { Alerts } from './pages/Alerts'
 import { Services } from './pages/Services'
 import { Settings } from './pages/Settings'
+import { NotFound } from './pages/NotFound'
 
 const queryClient = new QueryClient()
 
@@ -59,7 +60,9 @@ function App() {
                 <Route path="deployments/:id" element={<DeployDetail />} />
                 <Route path="chat" element={<Chat />} />
                 <Route path="settings" element={<Settings />} />
+                <Route path="*" element={<NotFound />} />
               </Route>
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
         </AuthProvider>
