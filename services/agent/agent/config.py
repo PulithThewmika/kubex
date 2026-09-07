@@ -38,10 +38,10 @@ def _supabase_ssl_context() -> ssl.SSLContext:
 
 def prepare_database_url(url: str) -> tuple[str, dict]:
     """Normalize a DATABASE_URL to the asyncpg dialect and work out the
-    connect_args a Supabase host needs (TLS, and disabled statement
-    caching if pointed at the transaction-mode pooler on :6543). The
-    local-dev compose Postgres (--profile local-db) has no TLS listener,
-    so this is a no-op for it.
+    connect_args a Supabase host needs. Rejects the transaction-mode
+    pooler (:6543) outright — see services/ingest/app/db.py's identical
+    function for why. The local-dev compose Postgres (--profile
+    local-db) has no TLS listener, so this is a no-op for it.
     """
     if url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
@@ -50,7 +50,14 @@ def prepare_database_url(url: str) -> tuple[str, dict]:
     if "supabase" in url:
         connect_args["ssl"] = _supabase_ssl_context()
         if ":6543" in url:
-            connect_args["statement_cache_size"] = 0
+            raise ValueError(
+                "DATABASE_URL points at Supabase's transaction-mode pooler "
+                "(port 6543), which this codebase does not support — "
+                "prepared statements break under transaction pooling even "
+                "with asyncpg's statement cache disabled, since SQLAlchemy's "
+                "asyncpg dialect keeps its own separate prepared-statement "
+                "cache. Use the session pooler (port 5432) instead."
+            )
     return url, connect_args
 
 
