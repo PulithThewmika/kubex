@@ -28,6 +28,13 @@ class HealthSummary(BaseModel):
     verdict: str | None = None
 
 
+class IntegrationStatusResponse(BaseModel):
+    ci: bool
+    cd: str | None = None
+    metrics: str | None = None
+    available_features: list[str] = []
+
+
 class ServiceWithStatusResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -39,6 +46,7 @@ class ServiceWithStatusResponse(BaseModel):
     latest_deploy: LatestDeployInfo | None = None
     health: HealthSummary | None = None
     active_alert_count: int = 0
+    integration_status: IntegrationStatusResponse
 
 
 class DeploymentResponse(BaseModel):
