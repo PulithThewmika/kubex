@@ -18,11 +18,11 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import BASELINE_WINDOW, BASELINE_WINDOW_SECONDS, OBSERVATION_WINDOW, OBSERVATION_WINDOW_SECONDS
 from . import promql
+from . import health_check
 
 logger = logging.getLogger("kubex.agent.health_score")
 
@@ -32,7 +32,19 @@ WEIGHTS = {
     "restarts": 25,
 }
 
+# Adaptive weights for services with only an HTTP health check (no Prometheus,
+# E23-T2). Reuses the same penalty() curves — response_time via the
+# latency_p99 ratio formula, error_rate via the same clamp((post-base)/0.05).
+HEALTH_CHECK_WEIGHTS = {
+    "response_time": 60,
+    "error_rate": 40,
+}
+
 LOW_TRAFFIC_THRESHOLD = 0.1  # rps
+
+# A window is "low confidence" if fewer than half its expected health checks
+# (window_seconds / health_check_interval_s) actually landed in it.
+MIN_DATA_COVERAGE = 0.5
 
 
 def clamp(value: float, min_val: float, max_val: float) -> float:
@@ -68,6 +80,21 @@ def penalty(base: float | None, post: float | None, kind: str) -> float:
 
     else:
         raise ValueError(f"Unknown metric kind: {kind}")
+
+
+def _score_and_verdict(weighted_sum: float) -> tuple[int, str]:
+    """Shared score/verdict banding for both the Prometheus and health-check
+    formulas — doc 05's >=80 healthy / 50-79 degraded / <50 failed rule is a
+    single fixed thing, not one copy per metrics source.
+    """
+    score = int(round(clamp(100 - weighted_sum, 0, 100)))
+    if score >= 80:
+        verdict = "healthy"
+    elif score >= 50:
+        verdict = "degraded"
+    else:
+        verdict = "failed"
+    return score, verdict
 
 
 def compute_health_score(metrics: dict) -> tuple[int, str, dict]:
@@ -120,20 +147,15 @@ def compute_health_score(metrics: dict) -> tuple[int, str, dict]:
     )
 
     weighted_sum = sum(WEIGHTS[k] * penalties[k] for k in WEIGHTS)
-    score = int(round(clamp(100 - weighted_sum, 0, 100)))
-
-    if score >= 80:
-        verdict = "healthy"
-    elif score >= 50:
-        verdict = "degraded"
-    else:
-        verdict = "failed"
+    score, verdict = _score_and_verdict(weighted_sum)
 
     details = {
+        "metrics_source": "prometheus",
         "penalties": {k: round(v, 4) for k, v in penalties.items()},
         "weights": WEIGHTS,
         "weighted_sum": round(weighted_sum, 2),
         "low_traffic": low_traffic,
+        "low_confidence": low_traffic,
         "raw_metrics": {
             "error_rate_base": metrics.get("error_rate_base"),
             "error_rate_post": metrics.get("error_rate_post"),
@@ -149,6 +171,81 @@ def compute_health_score(metrics: dict) -> tuple[int, str, dict]:
         details["skip_reasons"] = skip_reasons
 
     return score, verdict, details
+
+
+def _http_error_rate(results: list) -> float | None:
+    """Fraction of health check pings that failed (status >= 400 or unreachable)."""
+    if not results:
+        return None
+    errors = sum(1 for r in results if r.status_code is None or r.status_code >= 400)
+    return errors / len(results)
+
+
+def _avg_response_time(results: list) -> float | None:
+    if not results:
+        return None
+    return sum(r.response_time_ms for r in results) / len(results)
+
+
+def compute_health_check_score(
+    results: list,
+    baseline_start: datetime,
+    baseline_end: datetime,
+    observation_start: datetime,
+    observation_end: datetime,
+    interval_s: int,
+) -> tuple[int, str, dict]:
+    """Adaptive score for services with only an HTTP health check (E23-T2).
+
+    Weights: response_time=60, error_rate=40 (vs the Prometheus formula's
+    error_rate=45/latency=30/restarts=25) — there's no restart signal
+    without Kubernetes/Prometheus visibility.
+    """
+    base_results = [r for r in results if baseline_start <= r.checked_at < baseline_end]
+    post_results = [r for r in results if observation_start <= r.checked_at <= observation_end]
+
+    response_time_base = _avg_response_time(base_results)
+    response_time_post = _avg_response_time(post_results)
+    error_rate_base = _http_error_rate(base_results)
+    error_rate_post = _http_error_rate(post_results)
+
+    penalties = {
+        "response_time": penalty(response_time_base, response_time_post, "latency_p99"),
+        "error_rate": penalty(error_rate_base, error_rate_post, "error_rate"),
+    }
+
+    weighted_sum = sum(HEALTH_CHECK_WEIGHTS[k] * penalties[k] for k in HEALTH_CHECK_WEIGHTS)
+    score, verdict = _score_and_verdict(weighted_sum)
+
+    expected_base = max((baseline_end - baseline_start).total_seconds() / interval_s, 1.0)
+    expected_post = max((observation_end - observation_start).total_seconds() / interval_s, 1.0)
+    coverage_base = min(len(base_results) / expected_base, 1.0)
+    coverage_post = min(len(post_results) / expected_post, 1.0)
+    low_confidence = coverage_base < MIN_DATA_COVERAGE or coverage_post < MIN_DATA_COVERAGE
+
+    details = {
+        "metrics_source": "health_check",
+        "penalties": {k: round(v, 4) for k, v in penalties.items()},
+        "weights": HEALTH_CHECK_WEIGHTS,
+        "weighted_sum": round(weighted_sum, 2),
+        "low_confidence": low_confidence,
+        "coverage": {"base": round(coverage_base, 2), "post": round(coverage_post, 2)},
+        "raw_metrics": {
+            "response_time_base_ms": response_time_base,
+            "response_time_post_ms": response_time_post,
+            "error_rate_base": error_rate_base,
+            "error_rate_post": error_rate_post,
+            "samples_base": len(base_results),
+            "samples_post": len(post_results),
+        },
+    }
+
+    return score, verdict, details
+
+
+def no_metrics_score(reason: str) -> tuple[None, str, dict]:
+    """No Prometheus and no health check configured — can't score this deployment."""
+    return None, "unknown", {"metrics_source": "none", "reason": reason, "raw_metrics": {}}
 
 
 def _max_of(values: list[float | None]) -> float | None:
@@ -196,14 +293,25 @@ async def assess_deployment(
     deployment,
     components: list[str],
     namespace: str,
-) -> tuple[int, str, dict] | None:
+    prometheus_available: bool = True,
+    health_check_url: str | None = None,
+    health_check_interval_s: int = 30,
+) -> tuple[int | None, str, dict] | None:
     """Fetch metrics for both windows, compute health score, and write to DB.
+
+    Picks the metrics source adaptively (E23-T2): Prometheus when the
+    service's cluster reports it reachable, else an HTTP health check
+    fallback if one is configured, else no score at all.
 
     Args:
         session: async SQLAlchemy session
         deployment: Deployment ORM instance (must have finished_at set)
         components: list of Prometheus service labels to query and aggregate
         namespace: Kubernetes namespace
+        prometheus_available: False when the service's cluster reports
+            prometheus_status != 'found' (remote cluster-agent path)
+        health_check_url: fallback HTTP health check URL, if configured
+        health_check_interval_s: ping interval backing the ring buffer
 
     Returns:
         (score, verdict, details) tuple, or None if deployment can't be assessed
@@ -212,36 +320,59 @@ async def assess_deployment(
         logger.warning("Deployment %d has no finished_at, skipping", deployment.id)
         return None
 
+    baseline_start = deployment.finished_at - timedelta(seconds=BASELINE_WINDOW_SECONDS)
     baseline_end = deployment.finished_at
+    observation_start = deployment.finished_at
     observation_end = deployment.finished_at + timedelta(seconds=OBSERVATION_WINDOW_SECONDS)
 
+    if prometheus_available:
+        logger.info(
+            "Assessing deployment %d for components %s: baseline window %s before %s, "
+            "observation window %s after deployment",
+            deployment.id, components, BASELINE_WINDOW,
+            baseline_end.isoformat(), OBSERVATION_WINDOW,
+        )
+
+        base = await _aggregate_metrics(components, namespace, BASELINE_WINDOW, baseline_end)
+        post = await _aggregate_metrics(components, namespace, OBSERVATION_WINDOW, observation_end)
+
+        metrics = {
+            "error_rate_base": base["error_rate"],
+            "error_rate_post": post["error_rate"],
+            "latency_p99_base_ms": base["latency_p99"],
+            "latency_p99_post_ms": post["latency_p99"],
+            "restarts_base": base["restarts"],
+            "restarts_post": post["restarts"],
+            "request_rate_base": base["request_rate"],
+            "request_rate_post": post["request_rate"],
+        }
+
+        score, verdict, details = compute_health_score(metrics)
+        details["components"] = components
+
+    elif health_check_url:
+        logger.info(
+            "Prometheus unavailable for deployment %d, scoring via health check %s",
+            deployment.id, health_check_url,
+        )
+        results = health_check.get_results(deployment.service_id)
+        score, verdict, details = compute_health_check_score(
+            results, baseline_start, baseline_end, observation_start, observation_end,
+            health_check_interval_s,
+        )
+
+    else:
+        logger.info(
+            "No Prometheus or health check available for deployment %d, skipping scoring",
+            deployment.id,
+        )
+        score, verdict, details = no_metrics_score(
+            "no Prometheus (cluster unreachable) and no health_check_url configured"
+        )
+
     logger.info(
-        "Assessing deployment %d for components %s: baseline window %s before %s, "
-        "observation window %s after deployment",
-        deployment.id, components, BASELINE_WINDOW,
-        baseline_end.isoformat(), OBSERVATION_WINDOW,
-    )
-
-    base = await _aggregate_metrics(components, namespace, BASELINE_WINDOW, baseline_end)
-    post = await _aggregate_metrics(components, namespace, OBSERVATION_WINDOW, observation_end)
-
-    metrics = {
-        "error_rate_base": base["error_rate"],
-        "error_rate_post": post["error_rate"],
-        "latency_p99_base_ms": base["latency_p99"],
-        "latency_p99_post_ms": post["latency_p99"],
-        "restarts_base": base["restarts"],
-        "restarts_post": post["restarts"],
-        "request_rate_base": base["request_rate"],
-        "request_rate_post": post["request_rate"],
-    }
-
-    score, verdict, details = compute_health_score(metrics)
-    details["components"] = components
-
-    logger.info(
-        "Deployment %d scored %d/100 — verdict: %s",
-        deployment.id, score, verdict,
+        "Deployment %d scored %s — verdict: %s",
+        deployment.id, score if score is not None else "n/a", verdict,
     )
 
     return score, verdict, details
