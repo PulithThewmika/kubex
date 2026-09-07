@@ -4,6 +4,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AddClusterModal } from './AddClusterModal'
 import { jsonResponse, makeCluster } from '../test/fixtures'
 
+const INSTALL_INFO = {
+  ingest_public_url: 'https://ingest.example.com',
+  agent_namespace: 'kubex-agent',
+  chart_repo_url: 'https://github.com/PulithThewmika/kubex.git',
+  chart_path: 'deploy/helm/cluster-agent',
+}
+
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
@@ -24,8 +31,9 @@ describe('AddClusterModal', () => {
     let heartbeatConnected = false
     vi.stubGlobal(
       'fetch',
-      vi.fn((_url: string, init?: RequestInit) => {
+      vi.fn((url: string, init?: RequestInit) => {
         if (init?.method === 'POST') return Promise.resolve(jsonResponse(created, 201))
+        if (url.includes('/api/install-info')) return Promise.resolve(jsonResponse(INSTALL_INFO))
         return Promise.resolve(
           jsonResponse(heartbeatConnected ? [makeCluster({ id: 'c1', status: 'connected' })] : []),
         )
@@ -89,7 +97,11 @@ describe('AddClusterModal', () => {
     let resolveCreate: (r: Response) => void = () => {}
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockReturnValue(new Promise<Response>((resolve) => (resolveCreate = resolve))),
+      vi.fn((url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') return new Promise<Response>((resolve) => (resolveCreate = resolve))
+        if (url.includes('/api/install-info')) return Promise.resolve(jsonResponse(INSTALL_INFO))
+        return Promise.resolve(jsonResponse([]))
+      }),
     )
     const onClose = vi.fn()
 
@@ -109,7 +121,14 @@ describe('AddClusterModal', () => {
 
   it('sanitizes the cluster name into a valid Helm release name in the Helm command', async () => {
     const created = { id: 'c1', name: "My Prod'; rm -rf /", token: 'kbx_shown_once', created_at: '2026-08-29T10:00:00Z' }
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(jsonResponse(created, 201))))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') return Promise.resolve(jsonResponse(created, 201))
+        if (url.includes('/api/install-info')) return Promise.resolve(jsonResponse(INSTALL_INFO))
+        return Promise.resolve(jsonResponse([]))
+      }),
+    )
 
     renderModal()
     fireEvent.change(screen.getByPlaceholderText('production'), { target: { value: "My Prod'; rm -rf /" } })
@@ -131,8 +150,9 @@ describe('AddClusterModal', () => {
     const created = { id: 'c1', name: 'prod', token: 'kbx_shown_once', created_at: '2026-08-29T10:00:00Z' }
     vi.stubGlobal(
       'fetch',
-      vi.fn((_url: string, init?: RequestInit) => {
+      vi.fn((url: string, init?: RequestInit) => {
         if (init?.method === 'POST') return Promise.resolve(jsonResponse(created, 201))
+        if (url.includes('/api/install-info')) return Promise.resolve(jsonResponse(INSTALL_INFO))
         return Promise.resolve(new Response(null, { status: 500 }))
       }),
     )

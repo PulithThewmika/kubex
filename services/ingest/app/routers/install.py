@@ -20,7 +20,9 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import INGEST_PUBLIC_URL, find_cluster_by_token
+from ..auth_middleware import UserContext, get_current_user
 from ..db import get_session
+from ..schemas.cluster import InstallInfoResponse
 
 _NO_STORE = {"Cache-Control": "no-store"}
 
@@ -48,6 +50,11 @@ router = APIRouter(tags=["install"])
 # release and interpolate it here instead of :latest.
 AGENT_IMAGE = "ghcr.io/puliththewmika/kubex-cluster-agent:latest"
 AGENT_NAMESPACE = "kubex-agent"
+# Matches deploy/argocd/cluster-agent.yaml's own repoURL/path — kept here
+# too (not just there) so /api/install-info (E22-T5, #806) has a single
+# place to read them from for the Add Cluster wizard's Helm/GitOps tabs.
+CHART_REPO_URL = "https://github.com/PulithThewmika/kubex.git"
+CHART_PATH = "deploy/helm/cluster-agent"
 
 
 def build_install_manifest(token: str, endpoint: str) -> str:
@@ -195,3 +202,19 @@ async def install_manifest(token: str, session: AsyncSession = Depends(get_sessi
 
     manifest = build_install_manifest(token, INGEST_PUBLIC_URL)
     return PlainTextResponse(manifest, media_type="application/yaml", headers=_NO_STORE)
+
+
+@router.get("/api/install-info", response_model=InstallInfoResponse)
+async def install_info(user: UserContext = Depends(get_current_user)) -> InstallInfoResponse:
+    """Authoritative values for the Add Cluster wizard's Helm/GitOps command
+    text (E22-T5, #806) — the frontend used to hand-duplicate AGENT_NAMESPACE/
+    the chart repo path as string literals, which could silently drift from
+    this file's own values. No secrets here (token stays client-side, from
+    POST /api/clusters), so `user` is unused beyond requiring a session."""
+    del user
+    return InstallInfoResponse(
+        ingest_public_url=INGEST_PUBLIC_URL,
+        agent_namespace=AGENT_NAMESPACE,
+        chart_repo_url=CHART_REPO_URL,
+        chart_path=CHART_PATH,
+    )
