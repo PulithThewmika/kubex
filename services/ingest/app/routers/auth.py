@@ -388,6 +388,7 @@ async def me(
         org_id=str(user.org_id),
         org_name=db_org.name if db_org else None,
         org_slug=db_org.slug if db_org else None,
+        onboarding_completed=db_org.onboarding_completed if db_org else False,
     )
 
 
