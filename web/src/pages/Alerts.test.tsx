@@ -72,7 +72,7 @@ describe('Alerts page', () => {
 
     renderAlerts()
 
-    expect(await screen.findByText(/everything looks healthy/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /all clear/i })).toBeInTheDocument()
   })
 
   it('shows an error state when the alerts request fails', async () => {
