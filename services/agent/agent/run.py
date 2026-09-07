@@ -65,9 +65,12 @@ async def _find_unassessed_deployments(session):
         text("""
             SELECT d.id, d.service_id, d.org_id, d.finished_at, d.commit_sha,
                    s.name AS service_name, s.namespace,
-                   s.prom_components
+                   s.prom_components, s.cluster_id,
+                   s.health_check_url, s.health_check_interval_s,
+                   c.prometheus_status
             FROM deployments d
             JOIN services s ON s.id = d.service_id
+            LEFT JOIN clusters c ON c.id = s.cluster_id
             WHERE d.status = 'deployed'
               AND d.finished_at IS NOT NULL
               AND d.finished_at + interval '1 second' * :obs_window <= now()
@@ -91,23 +94,37 @@ async def _process_deployment(session, row) -> None:
     namespace = row.namespace
     components = row.prom_components if row.prom_components is not None else [service_name]
 
+    # Prometheus is assumed reachable for local/legacy services (no
+    # cluster_id — the in-cluster Kind deployment); for remote clusters
+    # (cluster-agent, EPIC-022) it's adaptive on the cluster's last-reported
+    # prometheus_status (E23-T2).
+    prometheus_available = row.cluster_id is None or row.prometheus_status == "found"
+
     logger.info(
-        "Processing deployment %d for %s (commit %s, components=%s)",
+        "Processing deployment %d for %s (commit %s, components=%s, prometheus_available=%s)",
         deploy_id, service_name, (row.commit_sha or "unknown")[:7], components,
+        prometheus_available,
     )
 
     # Build a lightweight object with finished_at for assess_deployment
     class _Deploy:
         def __init__(self, r):
             self.id = r.id
+            self.service_id = r.service_id
             self.finished_at = r.finished_at
 
-    result = await assess_deployment(session, _Deploy(row), components, namespace)
+    result = await assess_deployment(
+        session, _Deploy(row), components, namespace,
+        prometheus_available=prometheus_available,
+        health_check_url=row.health_check_url,
+        health_check_interval_s=row.health_check_interval_s,
+    )
     if result is None:
         logger.warning("Could not assess deployment %d, skipping", deploy_id)
         return
 
     score, verdict, details = result
+    raw_metrics = details.get("raw_metrics", {})
 
     # Insert health_assessments row
     await session.execute(
@@ -130,12 +147,12 @@ async def _process_deployment(session, row) -> None:
             "deployment_id": deploy_id,
             "score": score,
             "verdict": verdict,
-            "error_rate_base": details["raw_metrics"].get("error_rate_base"),
-            "error_rate_post": details["raw_metrics"].get("error_rate_post"),
-            "latency_p99_base_ms": details["raw_metrics"].get("latency_p99_base_ms"),
-            "latency_p99_post_ms": details["raw_metrics"].get("latency_p99_post_ms"),
-            "restarts_base": details["raw_metrics"].get("restarts_base"),
-            "restarts_post": details["raw_metrics"].get("restarts_post"),
+            "error_rate_base": raw_metrics.get("error_rate_base"),
+            "error_rate_post": raw_metrics.get("error_rate_post"),
+            "latency_p99_base_ms": raw_metrics.get("latency_p99_base_ms"),
+            "latency_p99_post_ms": raw_metrics.get("latency_p99_post_ms"),
+            "restarts_base": raw_metrics.get("restarts_base"),
+            "restarts_post": raw_metrics.get("restarts_post"),
             "details": json.dumps(details),
         },
     )
@@ -149,12 +166,13 @@ async def _process_deployment(session, row) -> None:
     await session.commit()
 
     logger.info(
-        "Deployment %d assessed: score=%d verdict=%s",
-        deploy_id, score, verdict,
+        "Deployment %d assessed: score=%s verdict=%s",
+        deploy_id, score if score is not None else "n/a", verdict,
     )
 
-    # Fire alert if degraded or failed
-    if verdict != "healthy":
+    # Fire alert if degraded or failed. 'unknown' (no metrics source at all)
+    # has no score to alert on.
+    if verdict not in ("healthy", "unknown"):
         try:
             alert_session = await get_session()
             async with alert_session:
