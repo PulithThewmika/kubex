@@ -18,6 +18,16 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      // Slack OAuth connect + Events webhook (E23-T5) — the "Add to Slack"
+      // link is a top-level <a href="/integrations/slack/install">.
+      '/integrations': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/webhooks': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
       '/grafana': {
         target: 'http://localhost:3000',
         changeOrigin: true,
