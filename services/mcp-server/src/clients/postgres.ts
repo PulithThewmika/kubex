@@ -21,8 +21,9 @@ try {
   // Malformed URL — treated as non-Supabase below; pg.Pool will surface
   // a clear connection error rather than this silently swallowing it.
 }
-const isSupabase = parsedUrl !== null
-  && SUPABASE_HOST_SUFFIXES.some((suffix) => parsedUrl!.hostname.toLowerCase().endsWith(suffix));
+// A fully-qualified DNS name may have a trailing root dot.
+const normalizedHostname = parsedUrl?.hostname.toLowerCase().replace(/\.+$/, "") ?? "";
+const isSupabase = SUPABASE_HOST_SUFFIXES.some((suffix) => normalizedHostname.endsWith(suffix));
 
 // Supabase signs its pooler certs with its own private CA, not a public
 // one node's default trust store recognizes — load it explicitly rather
