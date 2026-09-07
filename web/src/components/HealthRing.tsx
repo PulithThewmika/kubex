@@ -32,6 +32,7 @@ export function HealthRing({ score, verdict, size = 56 }: HealthRingProps) {
 
   return (
     <div
+      role="img"
       className="relative inline-flex items-center justify-center"
       style={{ width: size, height: size }}
       title={isUnknown ? 'Connect metrics to see a health score' : undefined}
