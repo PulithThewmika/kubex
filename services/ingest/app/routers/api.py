@@ -70,7 +70,7 @@ async def _fetch_services_with_status(
                 COALESCE(ac.cnt, 0) AS active_alert_count,
                 COALESCE(dc.cnt, 0) AS deploy_count_30d
             FROM services s
-            LEFT JOIN clusters c ON c.id = s.cluster_id
+            LEFT JOIN clusters c ON c.id = s.cluster_id AND c.org_id = :org_id
             LEFT JOIN LATERAL (
                 SELECT commit_sha, author, status, finished_at
                 FROM deployments
@@ -571,12 +571,15 @@ async def list_alerts(
         text(f"""
             SELECT a.id, a.deployment_id, a.service_id, a.severity,
                    a.title, a.description, a.fired_at, a.resolved_at,
-                   a.alertmanager_id
+                   a.alertmanager_id, s.name AS service_name
             FROM alerts a
             JOIN services s ON s.id = a.service_id
             {where_clause}
             ORDER BY a.fired_at DESC
+            LIMIT 200
         """),
+        # ponytail: fixed cap, no pagination — the alerts UI shows recent
+        # alerts only; add ?limit/?cursor if a tenant ever needs the full history.
         params,
     )
     rows = result.fetchall()
@@ -586,6 +589,7 @@ async def list_alerts(
             id=row.id,
             deployment_id=row.deployment_id,
             service_id=row.service_id,
+            service_name=row.service_name,
             severity=row.severity,
             title=row.title,
             description=row.description,
