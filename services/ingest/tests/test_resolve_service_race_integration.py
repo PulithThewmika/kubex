@@ -90,6 +90,8 @@ def pg():
             namespace TEXT NOT NULL DEFAULT 'default',
             prom_components TEXT[],
             cluster_id UUID,
+            health_check_url TEXT,
+            health_check_interval_s INT NOT NULL DEFAULT 30,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             CONSTRAINT uq_services_org_name UNIQUE (org_id, name)
         );
