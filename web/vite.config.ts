@@ -14,6 +14,10 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      '/install': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
       '/grafana': {
         target: 'http://localhost:3000',
         changeOrigin: true,

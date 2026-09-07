@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useInstallations } from '../hooks/useInstallations'
 import { ClustersSection } from '../components/ClustersSection'
+import { AddClusterModal } from '../components/AddClusterModal'
 import type { Installation } from '../types/installation'
 
 // The GitHub App's slug is a separate identity from this repo's name (set at
@@ -46,6 +48,7 @@ function InstallationRow({ installation }: { installation: Installation }) {
 }
 
 export function Settings() {
+  const [showAddCluster, setShowAddCluster] = useState(false)
   const [searchParams] = useSearchParams()
   const installationId = searchParams.get('installation_id')
   const { data: installations, isLoading, isError } = useInstallations({
@@ -96,13 +99,13 @@ export function Settings() {
       </section>
 
       <ClustersSection
-        onAddCluster={() => {
-          // Wired up in E22-T5-S3 (AddClusterModal).
-        }}
+        onAddCluster={() => setShowAddCluster(true)}
         onRotateToken={() => {
           // Wired up in E22-T5-S5 (rotate confirmation dialog).
         }}
       />
+
+      {showAddCluster && <AddClusterModal onClose={() => setShowAddCluster(false)} />}
     </div>
   )
 }
