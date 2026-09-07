@@ -55,7 +55,9 @@ export function SummaryStep({
   finishError,
 }: SummaryStepProps) {
   const installCount = installations?.length ?? 0
-  const clusterCount = clusters?.length ?? 0
+  // A cluster row is created as status='pending' and only flips to 'connected'
+  // once the agent's first heartbeat lands — don't report a pending one as done.
+  const clusterCount = clusters?.filter((c) => c.status === 'connected').length ?? 0
 
   const rows: SummaryRow[] = [
     {
