@@ -69,4 +69,35 @@ describe('Onboarding wizard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Skip this step' }))
     expect(screen.getByRole('heading', { name: 'Connect your metrics' })).toBeInTheDocument()
   })
+
+  it('"Skip this step" overrides a selection made on that step', async () => {
+    stubRoutedFetch(BASE_ROUTES)
+    renderWizard()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    fireEvent.click(screen.getByText('GitHub Deployments'))
+    fireEvent.click(screen.getByRole('button', { name: 'Skip this step' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Skip this step' }))
+
+    expect(screen.getByRole('heading', { name: "You're set" })).toBeInTheDocument()
+    expect(screen.getAllByText('Not configured yet')).toHaveLength(2)
+  })
+
+  it('does not count a pending cluster as connected in the summary', async () => {
+    stubRoutedFetch({
+      ...BASE_ROUTES,
+      '/api/clusters': () =>
+        jsonResponse([
+          { id: 'c1', name: 'edge', status: 'pending', agent_version: null, argocd_version: null, argocd_status: null, prometheus_status: null, last_heartbeat: null, created_at: '2026-09-07T00:00:00Z' },
+        ]),
+    })
+    renderWizard()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(screen.getByRole('heading', { name: "You're set" })).toBeInTheDocument()
+    expect(screen.getByText('No cluster connected')).toBeInTheDocument()
+  })
 })
