@@ -111,6 +111,30 @@ jobs:
           DATABASE_URL: postgresql://kubex:kubex@localhost:5432/kubex
         run: npm test
 
+  test-web:
+    name: Web Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: npm test
+
   test-agent:
     name: Agent Tests
     runs-on: ubuntu-latest

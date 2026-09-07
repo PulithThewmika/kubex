@@ -57,12 +57,20 @@ function useClusterConnected(clusterId: string | null) {
   })
 }
 
-// Single-quotes a value for safe interpolation into the generated shell
-// commands below — cluster names come from user input (schemas/cluster.py
-// only bounds length, no character allowlist), and these commands are
-// displayed for the user to copy-paste verbatim (code-reviewer, PR #804).
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'\\''`)}'`
+// Helm release names must be valid DNS-1123 labels (lowercase alphanumeric
+// and '-', <=53 chars) — a cluster display name like "My Prod!" is legal
+// per the backend's own naming rules but not as a Helm release name,
+// producing a command that fails immediately on paste (CodeRabbit, PR
+// #804). Deterministic given the same clusterName, so it doesn't need to
+// be persisted anywhere — it's just what's suggested in this one command.
+function toHelmReleaseName(clusterName: string): string {
+  const normalized = clusterName
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9-]+/g, '-')
+    .replaceAll(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 53)
+  return normalized || 'cluster-agent'
 }
 
 function installCommand(method: InstallMethod, token: string, endpoint: string, clusterName: string): string {
@@ -72,7 +80,7 @@ function installCommand(method: InstallMethod, token: string, endpoint: string, 
     case 'helm':
       return [
         'git clone https://github.com/PulithThewmika/kubex.git',
-        `helm install ${shellQuote(clusterName)} kubex/deploy/helm/cluster-agent \\`,
+        `helm install ${toHelmReleaseName(clusterName)} kubex/deploy/helm/cluster-agent \\`,
         '  --create-namespace --namespace kubex-agent \\',
         `  --set token=${token} \\`,
         `  --set endpoint=${endpoint} \\`,

@@ -45,7 +45,7 @@ describe('AddClusterModal', () => {
     // Step 3: install method tabs, default kubectl
     expect(await screen.findByText(/kubectl apply -f -/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Helm' }))
-    expect(await screen.findByText(/helm install 'prod'/)).toBeInTheDocument()
+    expect(await screen.findByText(/helm install prod /)).toBeInTheDocument()
 
     // GitOps snippet is meant to be committed to Git — must never embed the
     // real token in plaintext, unlike the one-shot kubectl/Helm commands.
@@ -107,19 +107,24 @@ describe('AddClusterModal', () => {
     expect(await screen.findByText('kbx_shown_once')).toBeInTheDocument()
   })
 
-  it('shell-quotes the cluster name in the Helm command, including embedded quotes', async () => {
-    const created = { id: 'c1', name: "prod'; rm -rf /", token: 'kbx_shown_once', created_at: '2026-08-29T10:00:00Z' }
+  it('sanitizes the cluster name into a valid Helm release name in the Helm command', async () => {
+    const created = { id: 'c1', name: "My Prod'; rm -rf /", token: 'kbx_shown_once', created_at: '2026-08-29T10:00:00Z' }
     vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(jsonResponse(created, 201))))
 
     renderModal()
-    fireEvent.change(screen.getByPlaceholderText('production'), { target: { value: "prod'; rm -rf /" } })
+    fireEvent.change(screen.getByPlaceholderText('production'), { target: { value: "My Prod'; rm -rf /" } })
     fireEvent.click(screen.getByRole('button', { name: /continue/i }))
     await screen.findByText('kbx_shown_once')
     fireEvent.click(screen.getByRole('button', { name: /continue/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Helm' }))
 
     const helmBlock = await screen.findByText(/helm install/)
-    expect(helmBlock.textContent).toContain(`'prod'\\''; rm -rf /'`)
+    // Lowercased, non [a-z0-9-] characters collapsed to single hyphens —
+    // never a raw shell metacharacter or uppercase letter in the release
+    // name itself (other lines, e.g. the REPLACE_WITH_SHA placeholder,
+    // legitimately contain uppercase, so only check the install line).
+    const installLine = helmBlock.textContent?.split('\n').find((line) => line.startsWith('helm install'))
+    expect(installLine).toBe('helm install my-prod-rm-rf kubex/deploy/helm/cluster-agent \\')
   })
 
   it('shows a retry option if heartbeat polling fails', async () => {
