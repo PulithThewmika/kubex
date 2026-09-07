@@ -8,7 +8,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 
-def _mock_upstream(status_code=200, content_type="text/html; charset=UTF-8", chunks=None):
+def _mock_upstream(status_code: int = 200, content_type: str = "text/html; charset=UTF-8", chunks: object = None) -> MagicMock:
     chunks = chunks or [b"<html>panel</html>"]
     upstream = MagicMock()
     upstream.status_code = status_code
@@ -23,7 +23,9 @@ def _mock_upstream(status_code=200, content_type="text/html; charset=UTF-8", chu
     return upstream
 
 
-def _stub_session(mock_session, *, prom_components=("orders",), has_source=True):
+def _stub_session(
+    mock_session: object, *, prom_components: object = ("orders",), has_source: bool = True
+) -> None:
     """Wire mock_session so the proxy's service lookup and connected-cluster
     check resolve. prom_components=None -> service row exists with no
     components; prom_components=False -> no matching service row (cross-org
@@ -34,7 +36,7 @@ def _stub_session(mock_session, *, prom_components=("orders",), has_source=True)
     mock_session.scalar = AsyncMock(return_value=uuid.uuid4() if has_source else None)
 
 
-def _mock_grafana_client():
+def _mock_grafana_client() -> MagicMock:
     upstream = _mock_upstream(chunks=[b"<html>", b"panel", b"</html>"])
     c = MagicMock()
     c.build_request = MagicMock(return_value="fake-request")
@@ -43,7 +45,7 @@ def _mock_grafana_client():
 
 
 @pytest.mark.asyncio
-async def test_proxy_returns_grafana_panel_html(client, mock_session):
+async def test_proxy_returns_grafana_panel_html(client, mock_session) -> None:
     _stub_session(mock_session)
     grafana_client = _mock_grafana_client()
 
@@ -72,7 +74,7 @@ async def test_proxy_returns_grafana_panel_html(client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_proxy_expands_prom_components(client, mock_session):
+async def test_proxy_expands_prom_components(client, mock_session) -> None:
     _stub_session(mock_session, prom_components=("frontend", "orders", "payments"))
     grafana_client = _mock_grafana_client()
 
@@ -90,7 +92,7 @@ async def test_proxy_expands_prom_components(client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_proxy_rejects_unknown_dashboard_uid(client, mock_session):
+async def test_proxy_rejects_unknown_dashboard_uid(client, mock_session) -> None:
     _stub_session(mock_session)
     async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
         resp = await ac.get(
@@ -101,7 +103,7 @@ async def test_proxy_rejects_unknown_dashboard_uid(client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_proxy_rejects_service_from_another_org(client, mock_session):
+async def test_proxy_rejects_service_from_another_org(client, mock_session) -> None:
     # No service row for (name, this org) -> cross-tenant read attempt.
     _stub_session(mock_session, prom_components=False)
     grafana_client = _mock_grafana_client()
@@ -118,7 +120,7 @@ async def test_proxy_rejects_service_from_another_org(client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_proxy_requires_var_service(client, mock_session):
+async def test_proxy_requires_var_service(client, mock_session) -> None:
     _stub_session(mock_session)
     async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
         resp = await ac.get("/api/grafana/proxy", params={"uid": "deploy-timeline", "panelId": 1})
@@ -126,7 +128,7 @@ async def test_proxy_requires_var_service(client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_proxy_503_when_no_connected_cluster(client, mock_session):
+async def test_proxy_503_when_no_connected_cluster(client, mock_session) -> None:
     _stub_session(mock_session, has_source=False)
     async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
         resp = await ac.get(
@@ -138,7 +140,7 @@ async def test_proxy_503_when_no_connected_cluster(client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_proxy_escapes_uid_before_building_url(client, mock_session):
+async def test_proxy_escapes_uid_before_building_url(client, mock_session) -> None:
     # A tampered uid still has to pass the allow-list first.
     _stub_session(mock_session)
     async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
@@ -154,7 +156,7 @@ async def test_proxy_escapes_uid_before_building_url(client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_proxy_returns_502_when_grafana_unreachable(client, mock_session):
+async def test_proxy_returns_502_when_grafana_unreachable(client, mock_session) -> None:
     _stub_session(mock_session)
     grafana_client = MagicMock()
     grafana_client.build_request = MagicMock(return_value="fake-request")
