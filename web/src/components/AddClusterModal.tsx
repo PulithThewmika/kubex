@@ -1,11 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { apiFetch } from '../lib/apiFetch'
+import { CLUSTERS_QUERY_KEY, fetchClusters } from '../hooks/useClusters'
 import { CodeBlock } from './CodeBlock'
+import { Modal } from './Modal'
 import type { Cluster, ClusterCreateResponse } from '../types/cluster'
 
 type Step = 'name' | 'token' | 'install' | 'waiting'
 type InstallMethod = 'kubectl' | 'helm' | 'gitops'
+
+// apiFetch's own calls are same-origin relative paths, which only works
+// because this app's routing (vite's dev proxy; a reverse proxy in prod)
+// fronts the React shell and ingest on one origin. These generated
+// commands are different: they're copy-pasted into a shell or a GitOps
+// repo and run with no browser/proxy in the loop, so they need the
+// ingest's real public URL regardless of that assumption — falling back to
+// window.location.origin only holds if shell and ingest truly share an
+// origin in production, which isn't guaranteed (CodeRabbit, PR #804).
+const INGEST_PUBLIC_URL = import.meta.env.VITE_INGEST_PUBLIC_URL ?? window.location.origin
 
 async function createCluster(name: string): Promise<ClusterCreateResponse> {
   const res = await apiFetch('/api/clusters', {
@@ -22,23 +34,35 @@ async function createCluster(name: string): Promise<ClusterCreateResponse> {
 
 // Faster than useClusters()' 30s background poll — this only runs while the
 // wizard's "waiting for heartbeat" step is open, so a quick confirmation
-// matters more than request volume.
+// matters more than request volume. Shares useClusters()' own ['clusters']
+// query (same queryFn, via `select` to pick out this one cluster) instead of
+// polling a separate copy under its own key: while both this hook and
+// ClustersSection's useClusters() are mounted, TanStack Query dedupes them
+// into one shared request using the shortest active refetchInterval, so the
+// wizard's faster cadence also keeps the Settings list underneath fresh
+// instead of two independent pollers hitting the same endpoint.
 const WAITING_POLL_MS = 3000
 
 function useClusterConnected(clusterId: string | null) {
   return useQuery({
-    queryKey: ['clusters', 'waiting', clusterId],
-    queryFn: async (): Promise<Cluster> => {
-      const res = await apiFetch('/api/clusters')
-      if (!res.ok) throw new Error(`Failed to fetch clusters: ${res.status}`)
-      const clusters: Cluster[] = await res.json()
-      const cluster = clusters.find((c) => c.id === clusterId)
-      if (!cluster) throw new Error('Cluster not found')
-      return cluster
-    },
+    queryKey: CLUSTERS_QUERY_KEY,
+    queryFn: fetchClusters,
     enabled: clusterId !== null,
-    refetchInterval: (query) => (query.state.data?.status === 'connected' ? false : WAITING_POLL_MS),
+    select: (clusters) => clusters.find((c) => c.id === clusterId),
+    refetchInterval: (query) => {
+      const clusters = query.state.data as Cluster[] | undefined
+      const cluster = clusters?.find((c) => c.id === clusterId)
+      return cluster?.status === 'connected' ? false : WAITING_POLL_MS
+    },
   })
+}
+
+// Single-quotes a value for safe interpolation into the generated shell
+// commands below — cluster names come from user input (schemas/cluster.py
+// only bounds length, no character allowlist), and these commands are
+// displayed for the user to copy-paste verbatim (code-reviewer, PR #804).
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`
 }
 
 function installCommand(method: InstallMethod, token: string, endpoint: string, clusterName: string): string {
@@ -48,11 +72,16 @@ function installCommand(method: InstallMethod, token: string, endpoint: string, 
     case 'helm':
       return [
         'git clone https://github.com/PulithThewmika/kubex.git',
-        `helm install ${clusterName} kubex/deploy/helm/cluster-agent \\`,
+        `helm install ${shellQuote(clusterName)} kubex/deploy/helm/cluster-agent \\`,
         '  --create-namespace --namespace kubex-agent \\',
         `  --set token=${token} \\`,
         `  --set endpoint=${endpoint} \\`,
-        '  --set image.tag=<latest short-SHA tag from the ghcr.io package page>',
+        // A literal <placeholder> breaks the shell (< is redirection) if
+        // copied as-is (CodeRabbit, PR #804) — REPLACE_WITH_SHA is a plain
+        // token that runs (and fails clearly on a nonexistent tag) rather
+        // than erroring on paste, while still being unmistakably something
+        // to edit first.
+        '  --set image.tag=REPLACE_WITH_SHA  # find the latest tag at https://github.com/PulithThewmika/kubex/pkgs/container/kubex-cluster-agent',
       ].join('\n')
     case 'gitops':
       // Unlike the kubectl/Helm one-liners (run once, never persisted), this
@@ -95,141 +124,133 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
     onSuccess: (data) => {
       setCreated(data)
       setStep('token')
-      queryClient.invalidateQueries({ queryKey: ['clusters'] })
+      queryClient.invalidateQueries({ queryKey: CLUSTERS_QUERY_KEY })
     },
   })
 
-  const { data: waitingCluster } = useClusterConnected(step === 'waiting' && created ? created.id : null)
+  const {
+    data: waitingCluster,
+    isError: waitingError,
+    refetch: retryWaiting,
+  } = useClusterConnected(step === 'waiting' && created ? created.id : null)
   const connected = waitingCluster?.status === 'connected'
 
   function handleClose() {
-    queryClient.invalidateQueries({ queryKey: ['clusters'] })
+    // The token is shown exactly once (onSuccess below) — closing mid-create
+    // would let the mutation resolve after unmount and lose it, leaving a
+    // cluster row with no way to see its token again (CodeRabbit, PR #804).
+    if (createMutation.isPending) return
     onClose()
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={(e) => e.target === e.currentTarget && handleClose()}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="add-cluster-title"
-        className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-y-auto rounded-lg border border-border bg-surface p-6"
-      >
-        <div className="flex items-center justify-between">
-          <h2 id="add-cluster-title" className="font-heading text-lg font-semibold text-text">
-            Add cluster
-          </h2>
+    <Modal titleId="add-cluster-title" title="Add cluster" onClose={handleClose}>
+      {step === 'name' && (
+        <div className="mt-4 flex flex-col gap-4">
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-text">Cluster name</span>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="production"
+              autoFocus
+              className="rounded-md border border-border bg-background px-3 py-2 text-sm text-text"
+            />
+          </label>
+          {createMutation.isError && (
+            <p className="text-sm text-failed">{(createMutation.error as Error).message}</p>
+          )}
           <button
             type="button"
-            onClick={handleClose}
-            aria-label="Close"
-            className="text-text-muted hover:text-text"
+            disabled={name.trim().length === 0 || createMutation.isPending}
+            onClick={() => createMutation.mutate(name.trim())}
+            className="w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90 disabled:opacity-50"
           >
-            ✕
+            {createMutation.isPending ? 'Creating…' : 'Continue'}
           </button>
         </div>
+      )}
 
-        {step === 'name' && (
-          <div className="mt-4 flex flex-col gap-4">
-            <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium text-text">Cluster name</span>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="production"
-                autoFocus
-                className="rounded-md border border-border bg-background px-3 py-2 text-sm text-text"
-              />
-            </label>
-            {createMutation.isError && (
-              <p className="text-sm text-failed">{(createMutation.error as Error).message}</p>
-            )}
-            <button
-              type="button"
-              disabled={name.trim().length === 0 || createMutation.isPending}
-              onClick={() => createMutation.mutate(name.trim())}
-              className="w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90 disabled:opacity-50"
-            >
-              {createMutation.isPending ? 'Creating…' : 'Continue'}
-            </button>
-          </div>
-        )}
+      {step === 'token' && created && (
+        <div className="mt-4 flex flex-col gap-4">
+          <p className="text-sm text-text-muted">
+            This token authenticates the agent to KubeX. It's shown only once — copy it now, or you'll need to
+            rotate it to get a new one.
+          </p>
+          <CodeBlock code={created.token} />
+          <button
+            type="button"
+            onClick={() => setStep('install')}
+            className="w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90"
+          >
+            Continue
+          </button>
+        </div>
+      )}
 
-        {step === 'token' && created && (
-          <div className="mt-4 flex flex-col gap-4">
-            <p className="text-sm text-text-muted">
-              This token authenticates the agent to KubeX. It's shown only once — copy it now, or you'll need to
-              rotate it to get a new one.
-            </p>
-            <CodeBlock code={created.token} />
-            <button
-              type="button"
-              onClick={() => setStep('install')}
-              className="w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90"
-            >
-              Continue
-            </button>
+      {step === 'install' && created && (
+        <div className="mt-4 flex flex-col gap-4">
+          <div className="flex gap-1 border-b border-border">
+            {INSTALL_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setInstallMethod(tab.id)}
+                className={`px-3 py-2 text-sm font-medium transition-colors ${
+                  installMethod === tab.id ? 'border-b-2 border-accent text-text' : 'text-text-muted hover:text-text'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
-        )}
+          <CodeBlock code={installCommand(installMethod, created.token, INGEST_PUBLIC_URL, name.trim())} />
+          <button
+            type="button"
+            onClick={() => setStep('waiting')}
+            className="w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90"
+          >
+            I've installed it
+          </button>
+        </div>
+      )}
 
-        {step === 'install' && created && (
-          <div className="mt-4 flex flex-col gap-4">
-            <div className="flex gap-1 border-b border-border">
-              {INSTALL_TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setInstallMethod(tab.id)}
-                  className={`px-3 py-2 text-sm font-medium transition-colors ${
-                    installMethod === tab.id
-                      ? 'border-b-2 border-accent text-text'
-                      : 'text-text-muted hover:text-text'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-            <CodeBlock code={installCommand(installMethod, created.token, window.location.origin, name.trim())} />
-            <button
-              type="button"
-              onClick={() => setStep('waiting')}
-              className="w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90"
-            >
-              I've installed it
-            </button>
-          </div>
-        )}
-
-        {step === 'waiting' && (
-          <div className="mt-4 flex flex-col items-center gap-3 py-6 text-center">
-            {connected ? (
-              <>
-                <span className="rounded-full bg-healthy/10 px-3 py-1 text-sm font-medium text-healthy">
-                  Connected
-                </span>
-                <p className="text-sm text-text-muted">The agent is reporting heartbeats. You're all set.</p>
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="mt-2 w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90"
-                >
-                  Done
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-accent" />
-                <p className="text-sm text-text-muted">Waiting for the agent's first heartbeat…</p>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+      {step === 'waiting' && (
+        <div className="mt-4 flex flex-col items-center gap-3 py-6 text-center">
+          {connected ? (
+            <>
+              <span className="rounded-full bg-healthy/10 px-3 py-1 text-sm font-medium text-healthy">
+                Connected
+              </span>
+              <p className="text-sm text-text-muted">The agent is reporting heartbeats. You're all set.</p>
+              <button
+                type="button"
+                onClick={handleClose}
+                className="mt-2 w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90"
+              >
+                Done
+              </button>
+            </>
+          ) : waitingError ? (
+            <>
+              <p className="text-sm text-failed">Couldn't check the cluster's status.</p>
+              <button
+                type="button"
+                onClick={() => retryWaiting()}
+                className="w-fit rounded-md border border-border px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-background"
+              >
+                Retry
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-accent" />
+              <p className="text-sm text-text-muted">Waiting for the agent's first heartbeat…</p>
+            </>
+          )}
+        </div>
+      )}
+    </Modal>
   )
 }

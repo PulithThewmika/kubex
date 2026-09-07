@@ -1,19 +1,12 @@
 import { formatDistanceToNow } from 'date-fns'
 import { useClusters } from '../hooks/useClusters'
+import { StatusBadge } from './StatusBadge'
 import type { Cluster } from '../types/cluster'
 
-const STATUS_STYLES: Record<Cluster['status'], string> = {
-  connected: 'bg-healthy/10 text-healthy',
-  pending: 'bg-degraded/10 text-degraded',
-  disconnected: 'bg-failed/10 text-failed',
-}
-
-function ClusterStatusBadge({ status }: { status: Cluster['status'] }) {
-  return (
-    <span className={`w-fit rounded-full px-2 py-0.5 text-xs font-medium capitalize ${STATUS_STYLES[status]}`}>
-      {status}
-    </span>
-  )
+const CLUSTER_STATUS_VARIANT: Record<Cluster['status'], 'healthy' | 'degraded' | 'failed'> = {
+  connected: 'healthy',
+  pending: 'degraded',
+  disconnected: 'failed',
 }
 
 // Agent-reported component status is a small free-text vocabulary
@@ -36,7 +29,7 @@ function ClusterRow({ cluster, onRotateToken }: ClusterRowProps) {
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-text">{cluster.name}</span>
-          <ClusterStatusBadge status={cluster.status} />
+          <StatusBadge variant={CLUSTER_STATUS_VARIANT[cluster.status]}>{cluster.status}</StatusBadge>
         </div>
         <p className="text-xs text-text-muted">
           ArgoCD: {formatComponentStatus(cluster.argocd_status)} · Prometheus:{' '}
