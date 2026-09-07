@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { useAlerts } from '../../hooks/useAlerts'
+import { useServices } from '../../hooks/useServices'
 
 type NavItem = {
   to: string
@@ -82,8 +82,11 @@ const NAV_ITEMS: NavItem[] = [
 ]
 
 export function Sidebar() {
-  const { data: alerts } = useAlerts()
-  const activeAlertCount = alerts?.filter((a) => a.resolved_at === null).length ?? 0
+  // Derived from the per-service active_alert_count already on /api/services
+  // (the app's primary polled query) rather than fetching the unbounded
+  // /api/alerts list on every authenticated page just for a count.
+  const { data: services } = useServices()
+  const activeAlertCount = services?.reduce((sum, s) => sum + s.active_alert_count, 0) ?? 0
 
   return (
     <aside className="flex h-dvh w-16 shrink-0 flex-col border-r border-border bg-surface md:w-56">
