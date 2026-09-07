@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,6 +25,7 @@ class Organization(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     slug: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default="now()")
+    onboarding_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
 
     memberships: Mapped[list[OrgMembership]] = relationship(
         back_populates="organization", cascade="all, delete", passive_deletes=True

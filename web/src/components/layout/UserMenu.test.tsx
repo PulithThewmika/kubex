@@ -14,6 +14,7 @@ const ME = {
   org_id: 'org-1',
   org_name: 'Acme',
   org_slug: 'acme',
+  onboarding_completed: true,
 }
 
 function renderMenu() {

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import { GITHUB_APP_INSTALL_URL } from '../lib/github'
 import { useInstallations } from '../hooks/useInstallations'
 import { ClustersSection } from '../components/ClustersSection'
 import { AddClusterModal } from '../components/AddClusterModal'
@@ -7,12 +8,6 @@ import { RotateTokenDialog } from '../components/RotateTokenDialog'
 import { StatusBadge } from '../components/StatusBadge'
 import type { Installation } from '../types/installation'
 import type { Cluster } from '../types/cluster'
-
-// The GitHub App's slug is a separate identity from this repo's name (set at
-// app registration, not touched by EPIC-025's DeployLens -> KubeX rename) —
-// override via VITE_GITHUB_APP_SLUG if the registered app isn't "deploylens".
-const GITHUB_APP_SLUG = import.meta.env.VITE_GITHUB_APP_SLUG ?? 'deploylens'
-const GITHUB_APP_INSTALL_URL = `https://github.com/apps/${GITHUB_APP_SLUG}/installations/new`
 
 const INSTALLATION_STATUS_VARIANT: Record<Installation['status'], 'healthy' | 'degraded' | 'failed'> = {
   active: 'healthy',
@@ -53,7 +48,15 @@ export function Settings() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="font-heading text-2xl font-semibold text-text">Settings</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="font-heading text-2xl font-semibold text-text">Settings</h1>
+        <Link
+          to="/app/onboarding"
+          className="text-sm font-medium text-text-muted underline-offset-4 hover:text-text hover:underline"
+        >
+          Re-run setup guide
+        </Link>
+      </div>
 
       <section className="mt-8">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted">Connect GitHub</h2>

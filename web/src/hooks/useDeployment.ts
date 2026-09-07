@@ -3,8 +3,11 @@ import { apiFetch } from '../lib/apiFetch'
 import type { DeploymentDetail } from '../types/deploymentDetail'
 
 class FetchDeploymentError extends Error {
-  constructor(public status: number) {
+  status: number
+
+  constructor(status: number) {
     super(`Failed to fetch deployment: ${status}`)
+    this.status = status
   }
 }
 
