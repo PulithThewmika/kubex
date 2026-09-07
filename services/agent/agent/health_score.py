@@ -189,7 +189,7 @@ def compute_health_score(metrics: dict) -> tuple[int, str, dict]:
     return score, verdict, details
 
 
-def _ping_failed(result) -> bool:
+def _ping_failed(result: health_check.HealthCheckResult) -> bool:
     """A single health check ping counts as failed: unreachable, or an
     HTTP error status. Shared by _http_error_rate and
     _trailing_consecutive_failures so the two stay in sync — they're
