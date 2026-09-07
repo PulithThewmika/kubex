@@ -39,7 +39,7 @@ def _mock_row(
 async def test_services_returns_correct_structure(client, mock_session):
     result = MagicMock()
     result.fetchall.return_value = [
-        _mock_row(id=1, name="frontend"),
+        _mock_row(id=1, name="frontend", deploy_count_30d=7, cluster_name="production"),
         _mock_row(id=2, name="orders"),
     ]
     mock_session.execute.return_value = result
@@ -52,6 +52,8 @@ async def test_services_returns_correct_structure(client, mock_session):
     assert len(data) == 2
     assert data[0]["name"] == "frontend"
     assert data[0]["health"]["score"] == 95
+    assert data[0]["deploy_count_30d"] == 7
+    assert data[0]["cluster_name"] == "production"
     assert data[0]["health"]["verdict"] == "healthy"
     assert data[0]["active_alert_count"] == 0
 
