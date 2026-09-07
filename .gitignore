@@ -221,3 +221,9 @@ __marimo__/
 # GitHub App private key
 secrets/
 *.pem
+# Exceptions: Supabase's public root CA cert (not a secret — needed at
+# build time for verified TLS, see services/ingest/app/db.py) (#817)
+!services/ingest/app/certs/supabase-root-2021-ca.pem
+!services/agent/agent/certs/supabase-root-2021-ca.pem
+!services/mcp-server/certs/supabase-root-2021-ca.pem
+!deploy/certs/supabase-root-2021-ca.pem
