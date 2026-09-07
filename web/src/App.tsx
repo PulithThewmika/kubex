@@ -1,5 +1,6 @@
+import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthErrorState } from './components/auth/AuthErrorState'
 import { RequireAuth } from './components/auth/RequireAuth'
 import { AppLayout } from './components/layout/AppLayout'
@@ -21,6 +22,13 @@ import { NotFound } from './pages/NotFound'
 
 const queryClient = new QueryClient()
 
+// Route-wide boundary: resetKey on pathname so navigating after a crash on a
+// top-level route (RootRoute/Login/NotFound) clears the fallback.
+function RoutedErrorBoundary({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation()
+  return <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
+}
+
 function RootRoute() {
   const { isAuthenticated, isLoading, isError, refetch } = useAuth()
   if (isLoading) return null
@@ -35,7 +43,7 @@ function App() {
       <ToastProvider>
         <AuthProvider>
           <BrowserRouter>
-            <ErrorBoundary>
+            <RoutedErrorBoundary>
               <Routes>
                 <Route path="/" element={<RootRoute />} />
                 <Route path="/login" element={<Login />} />
@@ -66,7 +74,7 @@ function App() {
                 </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>
-            </ErrorBoundary>
+            </RoutedErrorBoundary>
           </BrowserRouter>
         </AuthProvider>
       </ToastProvider>
