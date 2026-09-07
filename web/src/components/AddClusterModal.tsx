@@ -2,22 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { apiFetch } from '../lib/apiFetch'
 import { CLUSTERS_QUERY_KEY, fetchClusters } from '../hooks/useClusters'
+import { useInstallInfo, type InstallInfo } from '../hooks/useInstallInfo'
 import { CodeBlock } from './CodeBlock'
 import { Modal } from './Modal'
 import type { Cluster, ClusterCreateResponse } from '../types/cluster'
 
 type Step = 'name' | 'token' | 'install' | 'waiting'
 type InstallMethod = 'kubectl' | 'helm' | 'gitops'
-
-// apiFetch's own calls are same-origin relative paths, which only works
-// because this app's routing (vite's dev proxy; a reverse proxy in prod)
-// fronts the React shell and ingest on one origin. These generated
-// commands are different: they're copy-pasted into a shell or a GitOps
-// repo and run with no browser/proxy in the loop, so they need the
-// ingest's real public URL regardless of that assumption — falling back to
-// window.location.origin only holds if shell and ingest truly share an
-// origin in production, which isn't guaranteed (CodeRabbit, PR #804).
-const INGEST_PUBLIC_URL = import.meta.env.VITE_INGEST_PUBLIC_URL ?? window.location.origin
 
 async function createCluster(name: string): Promise<ClusterCreateResponse> {
   const res = await apiFetch('/api/clusters', {
@@ -73,17 +64,26 @@ function toHelmReleaseName(clusterName: string): string {
   return normalized || 'cluster-agent'
 }
 
-function installCommand(method: InstallMethod, token: string, endpoint: string, clusterName: string): string {
+// Namespace/chart repo/chart path come from the backend's own install-info
+// endpoint (E22-T5, #806) rather than being duplicated as string literals
+// here — those values live authoritatively in install.py, which only the
+// kubectl tab (GET /install/:token.yaml) previously read from.
+function installCommand(
+  method: InstallMethod,
+  token: string,
+  clusterName: string,
+  info: InstallInfo,
+): string {
   switch (method) {
     case 'kubectl':
-      return `curl -sL ${endpoint}/install/${token}.yaml | kubectl apply -f -`
+      return `curl -sL ${info.ingest_public_url}/install/${token}.yaml | kubectl apply -f -`
     case 'helm':
       return [
-        'git clone https://github.com/PulithThewmika/kubex.git',
-        `helm install ${toHelmReleaseName(clusterName)} kubex/deploy/helm/cluster-agent \\`,
-        '  --create-namespace --namespace kubex-agent \\',
+        `git clone ${info.chart_repo_url}`,
+        `helm install ${toHelmReleaseName(clusterName)} kubex/${info.chart_path} \\`,
+        `  --create-namespace --namespace ${info.agent_namespace} \\`,
         `  --set token=${token} \\`,
-        `  --set endpoint=${endpoint} \\`,
+        `  --set endpoint=${info.ingest_public_url} \\`,
         // A literal <placeholder> breaks the shell (< is redirection) if
         // copied as-is (CodeRabbit, PR #804) — REPLACE_WITH_SHA is a plain
         // token that runs (and fails clearly on a nonexistent tag) rather
@@ -99,12 +99,12 @@ function installCommand(method: InstallMethod, token: string, endpoint: string, 
       // own committed example, and point at the token already shown in the
       // previous step instead.
       return [
-        '# Copy deploy/argocd/cluster-agent.yaml from the kubex repo into your',
+        `# Copy deploy/argocd/cluster-agent.yaml from the kubex repo into your`,
         '# GitOps repo, then set its placeholders — route the token through',
         "# your existing secrets tooling (Sealed Secrets, Vault, etc.), don't",
         '# commit it in plaintext:',
         `#   token: <the token shown in the previous step>`,
-        `#   endpoint: "${endpoint}"`,
+        `#   endpoint: "${info.ingest_public_url}"`,
         '#   image.tag: "<latest short-SHA tag from the ghcr.io package page>"',
       ].join('\n')
   }
@@ -126,6 +126,7 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
   const [installMethod, setInstallMethod] = useState<InstallMethod>('kubectl')
   const [created, setCreated] = useState<ClusterCreateResponse | null>(null)
   const queryClient = useQueryClient()
+  const { data: installInfo } = useInstallInfo()
 
   const createMutation = useMutation({
     mutationFn: createCluster,
@@ -213,11 +214,16 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
               </button>
             ))}
           </div>
-          <CodeBlock code={installCommand(installMethod, created.token, INGEST_PUBLIC_URL, name.trim())} />
+          {installInfo ? (
+            <CodeBlock code={installCommand(installMethod, created.token, name.trim(), installInfo)} />
+          ) : (
+            <p className="text-sm text-text-muted">Loading install instructions…</p>
+          )}
           <button
             type="button"
             onClick={() => setStep('waiting')}
-            className="w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90"
+            disabled={!installInfo}
+            className="w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90 disabled:opacity-50"
           >
             I've installed it
           </button>

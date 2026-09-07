@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.models.cluster import Cluster
-from app.routers.install import build_install_manifest
+from app.routers.install import AGENT_NAMESPACE, CHART_PATH, CHART_REPO_URL, build_install_manifest
 
 _CHART_DIR = Path(__file__).resolve().parents[3] / "deploy" / "helm" / "cluster-agent"
 
@@ -205,3 +205,36 @@ async def test_install_manifest_404_for_grace_period_old_token(client: FastAPI, 
         resp = await ac.get(f"/install/{old_token}.yaml")
 
     assert resp.status_code == 404
+
+
+# ── #806: /api/install-info — authoritative values for the Add Cluster
+# wizard's Helm/GitOps command text, instead of the frontend hand-
+# duplicating them as string literals ─────────────────────────────────
+
+
+@pytest.mark.asyncio
+@patch("app.routers.install.INGEST_PUBLIC_URL", "https://ingest.example.com")
+async def test_install_info_returns_authoritative_values(client: FastAPI) -> None:
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get("/api/install-info")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {
+        "ingest_public_url": "https://ingest.example.com",
+        "agent_namespace": AGENT_NAMESPACE,
+        "chart_repo_url": CHART_REPO_URL,
+        "chart_path": CHART_PATH,
+    }
+
+
+@pytest.mark.asyncio
+async def test_install_info_requires_auth(client: FastAPI) -> None:
+    from app.auth_middleware import get_current_user
+
+    client.dependency_overrides.pop(get_current_user, None)
+
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get("/api/install-info")
+
+    assert resp.status_code in (401, 403)
