@@ -44,4 +44,14 @@ BLAST_RADIUS_INTERVAL_SECONDS = int(os.environ.get("BLAST_RADIUS_INTERVAL_SECOND
 # pings each configured service only once its own health_check_interval_s
 # has elapsed, since that's per-service and configurable via the API.
 HEALTH_CHECK_TICK_SECONDS = int(os.environ.get("HEALTH_CHECK_TICK_SECONDS", "15"))
+if HEALTH_CHECK_TICK_SECONDS <= 0:
+    raise ValueError("HEALTH_CHECK_TICK_SECONDS must be a positive integer")
+
 HEALTH_CHECK_RING_BUFFER_SIZE = int(os.environ.get("HEALTH_CHECK_RING_BUFFER_SIZE", "20"))
+if HEALTH_CHECK_RING_BUFFER_SIZE <= 0:
+    raise ValueError("HEALTH_CHECK_RING_BUFFER_SIZE must be a positive integer")
+
+# Caps how many health checks run at once per tick — an unbounded fan-out
+# would let a large service count open that many concurrent connections
+# (and DNS lookups) in one go.
+HEALTH_CHECK_MAX_CONCURRENCY = int(os.environ.get("HEALTH_CHECK_MAX_CONCURRENCY", "10"))
