@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import logging
 import time
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import httpx
 from sqlalchemy import text
+
+from .config import HEALTH_CHECK_RING_BUFFER_SIZE
 
 logger = logging.getLogger("kubex.agent.health_check")
 
@@ -81,17 +84,47 @@ async def _find_configured_services(session):
     return result.fetchall()
 
 
+# service_id -> ring buffer of its last N results (E23-T1-S4). In-memory
+# only — resets on agent restart, and deliberately not persisted since
+# these are short-lived samples feeding a live score, not an audit trail.
+_results: dict[int, deque[HealthCheckResult]] = {}
+
+
+def record_result(service_id: int, result: HealthCheckResult) -> None:
+    buffer = _results.setdefault(service_id, deque(maxlen=HEALTH_CHECK_RING_BUFFER_SIZE))
+    buffer.append(result)
+
+
+def get_results(service_id: int) -> list[HealthCheckResult]:
+    """Most recent health check results for a service, oldest first."""
+    return list(_results.get(service_id, ()))
+
+
+def _is_due(service_id: int, interval_s: int, now: datetime) -> bool:
+    buffer = _results.get(service_id)
+    if not buffer:
+        return True
+    return (now - buffer[-1].checked_at).total_seconds() >= interval_s
+
+
 async def run_health_checks(session) -> int:
-    """Ping every configured service's health check URL.
+    """Ping every service whose health check interval has elapsed and
+    record the result in its ring buffer.
 
     Returns the number of services checked this tick.
     """
     services = await _find_configured_services(session)
+    now = datetime.now(timezone.utc)
+    checked = 0
     for row in services:
+        if not _is_due(row.id, row.health_check_interval_s, now):
+            continue
         result = await ping(row.health_check_url)
+        record_result(row.id, result)
+        checked += 1
         logger.info(
             "Health check %s: status=%s response_time_ms=%d%s",
             row.name, result.status_code, result.response_time_ms,
             f" error={result.error}" if result.error else "",
         )
-    return len(services)
+    return checked
