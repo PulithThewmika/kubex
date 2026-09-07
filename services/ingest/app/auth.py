@@ -31,6 +31,13 @@ SHELL_URL = os.environ.get("SHELL_URL", "http://localhost:5173")
 # generated cluster-agent install manifests (E22-T2) so the agent knows
 # where to phone home.
 INGEST_PUBLIC_URL = os.environ.get("INGEST_PUBLIC_URL", "http://localhost:8000")
+# The cluster bearer token travels over this URL on every agent request —
+# cluster_agent/config.py already refuses a non-https DEPLOYLENS_ENDPOINT
+# unless the agent's own ALLOW_INSECURE_ENDPOINT is set. This is the same
+# escape hatch on the manifest-generation side, so a local/dev
+# INGEST_PUBLIC_URL (e.g. http://host.docker.internal:8000 against a Kind
+# cluster) doesn't need a real TLS cert just to test the install flow.
+ALLOW_INSECURE_INGEST_PUBLIC_URL = os.environ.get("ALLOW_INSECURE_INGEST_PUBLIC_URL", "").lower() in ("1", "true")
 
 
 def validate_auth_tokens() -> None:
