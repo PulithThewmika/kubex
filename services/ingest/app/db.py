@@ -51,13 +51,24 @@ def prepare_database_url(url: str) -> tuple[str, dict]:
     connect_args: dict = {}
     if "supabase" in url:
         connect_args["ssl"] = _supabase_ssl_context()
-        # Transaction-mode pooler (port 6543) doesn't support asyncpg's
-        # server-side prepared statements. We default to the session
-        # pooler (5432), but disable statement caching unconditionally
-        # if DATABASE_URL ever points at 6543 instead — cheap insurance
-        # against a bad rotation.
+        # Transaction-mode pooler (port 6543) doesn't support prepared
+        # statements at the pooler level. Disabling asyncpg's own
+        # statement_cache_size isn't sufficient by itself — SQLAlchemy's
+        # asyncpg dialect keeps a SEPARATE prepared-statement cache
+        # (prepared_statement_cache_size, default 100) and still calls
+        # connection.prepare() for every statement regardless of
+        # asyncpg's cache setting. Rather than half-support 6543 with a
+        # fix that's still incomplete, reject it outright — the session
+        # pooler (5432) is the only mode this codebase supports.
         if ":6543" in url:
-            connect_args["statement_cache_size"] = 0
+            raise ValueError(
+                "DATABASE_URL points at Supabase's transaction-mode pooler "
+                "(port 6543), which this codebase does not support — "
+                "prepared statements break under transaction pooling even "
+                "with asyncpg's statement cache disabled, since SQLAlchemy's "
+                "asyncpg dialect keeps its own separate prepared-statement "
+                "cache. Use the session pooler (port 5432) instead."
+            )
     return url, connect_args
 
 

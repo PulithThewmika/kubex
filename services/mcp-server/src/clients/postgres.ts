@@ -3,18 +3,39 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 
-const databaseUrl = process.env.DATABASE_URL ?? "";
+const rawDatabaseUrl = process.env.DATABASE_URL ?? "";
 // Supabase signs its pooler certs with its own private CA, not a public
 // one node's default trust store recognizes — load it explicitly rather
 // than disabling verification. The local-dev compose Postgres
 // (--profile local-db) has no TLS listener, hence the conditional.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ssl = databaseUrl.includes("supabase")
+const isSupabase = rawDatabaseUrl.includes("supabase");
+const ssl = isSupabase
   ? {
       ca: fs.readFileSync(path.join(__dirname, "..", "..", "certs", "supabase-root-2021-ca.pem"), "utf8"),
       rejectUnauthorized: true,
     }
   : undefined;
+
+// pg's connectionString parsing pulls its own ssl config out of a
+// sslmode= query param and REPLACES the explicit `ssl` option above
+// entirely (verified live against pg 8.13.1) rather than merging with
+// or deferring to it — silently discarding the Supabase CA if a
+// dashboard-copied connection string happens to include one. Strip any
+// ssl-related query params so the explicit `ssl` option above always wins.
+let databaseUrl = rawDatabaseUrl;
+if (isSupabase) {
+  try {
+    const parsed = new URL(rawDatabaseUrl);
+    for (const key of ["sslmode", "ssl", "sslrootcert", "sslcert", "sslkey"]) {
+      parsed.searchParams.delete(key);
+    }
+    databaseUrl = parsed.toString();
+  } catch {
+    // Malformed URL — leave it as-is; pg.Pool will surface a clear
+    // connection error rather than this silently swallowing it.
+  }
+}
 
 const pool = new pg.Pool({
   connectionString: databaseUrl,
