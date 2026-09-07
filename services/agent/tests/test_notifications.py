@@ -75,6 +75,14 @@ async def test_deliver_disables_channel_on_fatal_error(enc_key, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_deliver_disables_channel_on_missing_scope(enc_key, monkeypatch):
+    session = AsyncMock()
+    monkeypatch.setattr(notifications, "_post", AsyncMock(return_value=(False, "missing_scope")))
+    await notifications._deliver(session, [_channel_row(enc_key)], "hi", [])
+    assert "enabled = false" in str(session.execute.await_args.args[0])
+
+
+@pytest.mark.asyncio
 async def test_deliver_records_transient_error_without_disabling(enc_key, monkeypatch):
     session = AsyncMock()
     monkeypatch.setattr(notifications, "_post", AsyncMock(return_value=(False, "rate_limited")))

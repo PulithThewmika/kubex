@@ -58,6 +58,7 @@ async def reconcile_active_alerts(session: AsyncSession) -> int:
     baseline_end = now - timedelta(seconds=OBSERVATION_WINDOW_SECONDS)
     resolved_count = 0
     seen_alert_ids = set()
+    recovered_notices: list[dict] = []
 
     for row in rows:
         alert_id = row.id
@@ -99,12 +100,12 @@ async def reconcile_active_alerts(session: AsyncSession) -> int:
 
             if _recovery_counters[alert_id] >= 2:
                 await resolve_alert(session, alert_id, service_name, deploy_id)
-                # Own session + time budget — must not commit this
-                # function's single-commit batch mid-loop.
-                await notify_deploy_recovered(
-                    org_id=row.org_id, service_id=row.service_id,
-                    service_name=service_name, deployment_id=deploy_id,
-                )
+                # Queue the Slack notice — only sent once the batch commit
+                # below succeeds, so a rolled-back resolution never pings.
+                recovered_notices.append({
+                    "org_id": row.org_id, "service_id": row.service_id,
+                    "service_name": service_name, "deployment_id": deploy_id,
+                })
                 resolved_count += 1
                 _recovery_counters.pop(alert_id, None)
                 logger.info(
@@ -124,4 +125,9 @@ async def reconcile_active_alerts(session: AsyncSession) -> int:
             _recovery_counters.pop(stale_id)
 
     await session.commit()
+
+    # Post-commit: the resolutions are durable, so it's safe to announce them.
+    for notice in recovered_notices:
+        await notify_deploy_recovered(**notice)
+
     return resolved_count

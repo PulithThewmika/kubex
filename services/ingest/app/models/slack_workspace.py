@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, LargeBinary, Text
+from sqlalchemy import DateTime, ForeignKey, Index, LargeBinary, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,6 +21,14 @@ class SlackWorkspace(Base):
     """
 
     __tablename__ = "slack_workspaces"
+    __table_args__ = (
+        Index(
+            "uq_slack_workspaces_active_per_org",
+            "org_id",
+            unique=True,
+            postgresql_where=text("uninstalled_at IS NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default="gen_random_uuid()"

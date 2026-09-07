@@ -31,6 +31,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import slack_client
@@ -63,9 +64,6 @@ _SETTINGS_PATH = "/app/settings"
 router = APIRouter(prefix="/integrations/slack", tags=["integrations"])
 api_router = APIRouter(prefix="/api/settings/slack", tags=["integrations"])
 events_router = APIRouter(prefix="/webhooks/slack", tags=["webhooks"])
-
-# Slack bot events that mean "this workspace's install is gone".
-_TEARDOWN_EVENTS = {"app_uninstalled", "tokens_revoked"}
 
 
 def slack_enabled() -> bool:
@@ -208,8 +206,29 @@ async def slack_oauth_callback(
         pg_insert(SlackWorkspace)
         .values(org_id=org_id, slack_team_id=team_id, **row)
         .on_conflict_do_update(index_elements=["org_id", "slack_team_id"], set_=row)
+        .returning(SlackWorkspace.id)
     )
-    await session.execute(stmt)
+    try:
+        workspace_id = (await session.execute(stmt)).scalar_one()
+    except IntegrityError:
+        # uq_slack_workspaces_active_per_org — this org already connected a
+        # *different* workspace between slack_install's check and now.
+        await session.rollback()
+        logger.info("Slack connect rejected for org_id=%s — already has an active workspace", org_id)
+        resp = _settings_redirect("exists")
+        resp.delete_cookie(key=NONCE_COOKIE, path="/integrations/slack")
+        return resp
+    # A reconnect revives channels a prior teardown disabled — but only
+    # those, not ones disabled by a real per-channel failure.
+    await session.execute(
+        update(NotificationChannel)
+        .where(
+            NotificationChannel.workspace_id == workspace_id,
+            NotificationChannel.enabled.is_(False),
+            NotificationChannel.last_delivery_error == "workspace disconnected",
+        )
+        .values(enabled=True, last_delivery_error=None)
+    )
     await session.commit()
     logger.info("Slack workspace connected: org_id=%s team_id=%s", org_id, team_id)
 
@@ -444,19 +463,25 @@ async def test_channel(
     await session.commit()
 
 
-async def _teardown_workspace(session: AsyncSession, team_id: str) -> int:
-    """Soft-disconnect every workspace row for a Slack team (an org can
-    connect the same team, and two KubeX orgs can connect one team).
-    Kept, not deleted — the UI shows 'disconnected, reconnect' and an
-    OAuth re-install revives the row."""
-    workspaces = (
-        await session.scalars(
-            select(SlackWorkspace).where(
-                SlackWorkspace.slack_team_id == team_id,
-                SlackWorkspace.uninstalled_at.is_(None),
-            )
-        )
-    ).all()
+async def _teardown_workspace(
+    session: AsyncSession, team_id: str, *, bot_user_ids: list[str] | None = None
+) -> int:
+    """Soft-disconnect workspace rows for a Slack team (an org can connect
+    the same team, and two KubeX orgs can connect one team). Kept, not
+    deleted — the UI shows 'disconnected, reconnect' and an OAuth
+    re-install revives the row.
+
+    ``bot_user_ids`` (from a tokens_revoked event) narrows the teardown to
+    workspaces whose bot token was actually revoked; None means all
+    (app_uninstalled).
+    """
+    conditions = [
+        SlackWorkspace.slack_team_id == team_id,
+        SlackWorkspace.uninstalled_at.is_(None),
+    ]
+    if bot_user_ids is not None:
+        conditions.append(SlackWorkspace.bot_user_id.in_(bot_user_ids))
+    workspaces = (await session.scalars(select(SlackWorkspace).where(*conditions))).all()
     now = datetime.now(timezone.utc)
     for ws in workspaces:
         ws.uninstalled_at = now
@@ -483,14 +508,24 @@ async def slack_events(
         return {"challenge": payload.get("challenge", "")}
 
     if payload.get("type") == "event_callback":
-        event_type = payload.get("event", {}).get("type")
+        event = payload.get("event", {})
+        event_type = event.get("type")
         team_id = payload.get("team_id")
-        if event_type in _TEARDOWN_EVENTS and team_id:
+        if team_id and event_type == "app_uninstalled":
             n = await _teardown_workspace(session, team_id)
             await session.commit()
-            logger.info(
-                "Slack %s for team_id=%s — disconnected %d workspace(s)", event_type, team_id, n
-            )
+            logger.info("Slack app_uninstalled for team_id=%s — disconnected %d workspace(s)", team_id, n)
+        elif team_id and event_type == "tokens_revoked":
+            # Only tear down workspaces whose *bot* token was revoked; a
+            # user-token revocation doesn't affect our bot integration.
+            revoked_bots = event.get("tokens", {}).get("bot") or []
+            if revoked_bots:
+                n = await _teardown_workspace(session, team_id, bot_user_ids=revoked_bots)
+                await session.commit()
+                logger.info(
+                    "Slack tokens_revoked for team_id=%s bots=%s — disconnected %d workspace(s)",
+                    team_id, revoked_bots, n,
+                )
 
     # Slack retries on any non-2xx; always ack.
     return {"ok": True}
