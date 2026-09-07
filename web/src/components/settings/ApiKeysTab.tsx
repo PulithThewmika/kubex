@@ -31,8 +31,15 @@ function KeyRow({ apiKey, onRevoke }: { apiKey: ApiKey; onRevoke: (key: ApiKey) 
 function RevokeDialog({ apiKey, onClose }: { apiKey: ApiKey; onClose: () => void }) {
   const revokeMutation = useRevokeApiKey()
 
+  // Don't let Escape / overlay / close-button dismiss while the DELETE is in
+  // flight — the mutation would resolve against an unmounted component.
+  function handleClose() {
+    if (revokeMutation.isPending) return
+    onClose()
+  }
+
   return (
-    <Modal titleId="revoke-api-key-title" title="Revoke API key" onClose={onClose}>
+    <Modal titleId="revoke-api-key-title" title="Revoke API key" onClose={handleClose}>
       <div className="mt-4 flex flex-col gap-4">
         <p className="text-sm text-text-muted">
           Revoke <span className="font-medium text-text">{apiKey.name}</span>? Any client using it will
@@ -52,8 +59,9 @@ function RevokeDialog({ apiKey, onClose }: { apiKey: ApiKey; onClose: () => void
           </button>
           <button
             type="button"
+            disabled={revokeMutation.isPending}
             onClick={onClose}
-            className="w-fit rounded-md border border-border px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-background"
+            className="w-fit rounded-md border border-border px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-background disabled:opacity-50"
           >
             Cancel
           </button>
