@@ -1,5 +1,6 @@
 import os
 import re
+import ssl
 
 
 def _parse_duration(value: str) -> int:
@@ -12,9 +13,29 @@ def _parse_duration(value: str) -> int:
     return amount * multipliers[unit]
 
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL",
-    "postgresql+asyncpg://kubex:kubex@localhost:5432/kubex",
+def prepare_database_url(url: str) -> tuple[str, dict]:
+    """Normalize a DATABASE_URL to the asyncpg dialect and work out the
+    connect_args a Supabase host needs (TLS, and disabled statement
+    caching if pointed at the transaction-mode pooler on :6543). The
+    local-dev compose Postgres (--profile local-db) has no TLS listener,
+    so this is a no-op for it.
+    """
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    connect_args: dict = {}
+    if "supabase" in url:
+        connect_args["ssl"] = ssl.create_default_context()
+        if ":6543" in url:
+            connect_args["statement_cache_size"] = 0
+    return url, connect_args
+
+
+DATABASE_URL, DATABASE_CONNECT_ARGS = prepare_database_url(
+    os.environ.get(
+        "DATABASE_URL",
+        "postgresql+asyncpg://kubex:kubex@localhost:5432/kubex",
+    )
 )
 
 PROM_URL = os.environ.get("PROM_URL", "http://localhost:9090")
