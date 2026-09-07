@@ -55,11 +55,18 @@ function installCommand(method: InstallMethod, token: string, endpoint: string, 
         '  --set image.tag=<latest short-SHA tag from the ghcr.io package page>',
       ].join('\n')
     case 'gitops':
+      // Unlike the kubectl/Helm one-liners (run once, never persisted), this
+      // snippet is meant to be committed into the customer's own GitOps
+      // repo — embedding the real token here would put it in plaintext Git
+      // history. Keep it a placeholder, same as deploy/argocd/cluster-agent.yaml's
+      // own committed example, and point at the token already shown in the
+      // previous step instead.
       return [
         '# Copy deploy/argocd/cluster-agent.yaml from the kubex repo into your',
-        "# GitOps repo, then replace its placeholders (don't commit the token",
-        '# in plaintext — route it through your existing secrets tooling):',
-        `#   token: "${token}"`,
+        '# GitOps repo, then set its placeholders — route the token through',
+        "# your existing secrets tooling (Sealed Secrets, Vault, etc.), don't",
+        '# commit it in plaintext:',
+        `#   token: <the token shown in the previous step>`,
         `#   endpoint: "${endpoint}"`,
         '#   image.tag: "<latest short-SHA tag from the ghcr.io package page>"',
       ].join('\n')

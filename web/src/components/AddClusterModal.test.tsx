@@ -46,6 +46,13 @@ describe('AddClusterModal', () => {
     expect(await screen.findByText(/kubectl apply -f -/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Helm' }))
     expect(await screen.findByText(/helm install prod/)).toBeInTheDocument()
+
+    // GitOps snippet is meant to be committed to Git — must never embed the
+    // real token in plaintext, unlike the one-shot kubectl/Helm commands.
+    fireEvent.click(screen.getByRole('button', { name: 'GitOps' }))
+    const gitopsBlock = await screen.findByText(/cluster-agent\.yaml/)
+    expect(gitopsBlock.textContent).not.toContain('kbx_shown_once')
+
     fireEvent.click(screen.getByRole('button', { name: /i've installed it/i }))
 
     // Step 4: waiting, then connected once the poll sees status=connected
