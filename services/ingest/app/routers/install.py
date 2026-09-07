@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth import INGEST_PUBLIC_URL, find_cluster_by_token
+from ..auth import ALLOW_INSECURE_INGEST_PUBLIC_URL, INGEST_PUBLIC_URL, find_cluster_by_token
 from ..auth_middleware import UserContext, get_current_user
 from ..db import get_session
 from ..schemas.cluster import InstallInfoResponse
@@ -36,6 +36,29 @@ def _is_loopback(host: str | None) -> bool:
         return ip_address(host).is_loopback
     except ValueError:
         return False
+
+
+def _reject_unreachable_ingest_public_url() -> None:
+    """Shared by install_manifest and install_info — both embed
+    INGEST_PUBLIC_URL into something the agent uses to phone home, so both
+    need the same two guards: a loopback URL would deploy an agent that
+    phones home to itself, and a non-https URL sends the cluster's real
+    bearer token in plaintext on every request (the same rule
+    cluster_agent/config.py already enforces agent-side, with the same
+    ALLOW_INSECURE_* escape hatch for local/dev testing)."""
+    parsed = urlparse(INGEST_PUBLIC_URL)
+    if _is_loopback(parsed.hostname):
+        raise HTTPException(
+            status_code=500,
+            detail="INGEST_PUBLIC_URL is not configured to an externally reachable address",
+            headers=_NO_STORE,
+        )
+    if parsed.scheme != "https" and not ALLOW_INSECURE_INGEST_PUBLIC_URL:
+        raise HTTPException(
+            status_code=500,
+            detail="INGEST_PUBLIC_URL must be https:// — set ALLOW_INSECURE_INGEST_PUBLIC_URL=true for local/dev only",
+            headers=_NO_STORE,
+        )
 
 
 router = APIRouter(tags=["install"])
@@ -181,16 +204,7 @@ def build_install_manifest(token: str, endpoint: str) -> str:
 
 @router.get("/install/{token}.yaml", response_class=PlainTextResponse)
 async def install_manifest(token: str, session: AsyncSession = Depends(get_session)) -> PlainTextResponse:
-    # A loopback INGEST_PUBLIC_URL (unset, or left at its localhost default)
-    # would deploy an agent that phones home to itself instead of this
-    # service — fail loudly rather than hand out a manifest that can never
-    # connect.
-    if _is_loopback(urlparse(INGEST_PUBLIC_URL).hostname):
-        raise HTTPException(
-            status_code=500,
-            detail="INGEST_PUBLIC_URL is not configured to an externally reachable address",
-            headers=_NO_STORE,
-        )
+    _reject_unreachable_ingest_public_url()
 
     # allow_grace=False: a token accepted only via the post-rotation grace
     # window would go stale ~10 minutes after this manifest is applied,
@@ -212,15 +226,7 @@ async def install_info(user: UserContext = Depends(get_current_user)) -> Install
     this file's own values. No secrets here (token stays client-side, from
     POST /api/clusters), so `user` is unused beyond requiring a session."""
     del user
-    # Same guard as install_manifest below — a loopback INGEST_PUBLIC_URL
-    # would hand the wizard a kubectl/Helm/GitOps command that can never
-    # reach this service (CodeRabbit, PR #804).
-    if _is_loopback(urlparse(INGEST_PUBLIC_URL).hostname):
-        raise HTTPException(
-            status_code=500,
-            detail="INGEST_PUBLIC_URL is not configured to an externally reachable address",
-            headers=_NO_STORE,
-        )
+    _reject_unreachable_ingest_public_url()
     return InstallInfoResponse(
         ingest_public_url=INGEST_PUBLIC_URL,
         agent_namespace=AGENT_NAMESPACE,
