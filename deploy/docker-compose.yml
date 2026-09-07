@@ -117,10 +117,6 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-    env_file:
-      # Supplies SUPABASE_DB_HOST/PORT/NAME/GRAFANA_RO_USER/GRAFANA_RO_PASSWORD,
-      # expanded into datasources.yml via Grafana's $__env{} syntax.
-      - ../.env
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-kubex}
@@ -128,6 +124,16 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_SECURITY_COOKIE_SAMESITE: lax
       GF_SERVER_SERVE_FROM_SUB_PATH: "false"
+      # Only the fields datasources.yml's $__env{} expansion needs —
+      # deliberately NOT `env_file: ../.env`, which would hand this
+      # container every ingest secret (ANTHROPIC_API_KEY,
+      # MCP_INTERNAL_TOKEN, JWT_SECRET, GitHub OAuth/App secrets) it has
+      # no reason to hold.
+      SUPABASE_DB_HOST: ${SUPABASE_DB_HOST:-}
+      SUPABASE_DB_PORT: ${SUPABASE_DB_PORT:-5432}
+      SUPABASE_DB_NAME: ${SUPABASE_DB_NAME:-postgres}
+      SUPABASE_GRAFANA_RO_USER: ${SUPABASE_GRAFANA_RO_USER:-}
+      SUPABASE_GRAFANA_RO_PASSWORD: ${SUPABASE_GRAFANA_RO_PASSWORD:-}
     volumes:
       - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
