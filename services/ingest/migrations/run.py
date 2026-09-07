@@ -19,7 +19,14 @@ import psycopg2
 
 def get_connection(url: str):
     sync_url = url.replace("+asyncpg", "").replace("postgresql+asyncpg", "postgresql")
-    return psycopg2.connect(sync_url)
+    # Supabase requires TLS. libpq's default sslmode ("prefer") usually
+    # negotiates it anyway, but migrations run unattended in CI/DX
+    # scripts too, so make it explicit rather than relying on the
+    # negotiation succeeding silently. Local-dev compose Postgres
+    # (--profile local-db) has no TLS listener, so don't force this
+    # for it.
+    kwargs = {"sslmode": "require"} if "supabase" in sync_url else {}
+    return psycopg2.connect(sync_url, **kwargs)
 
 
 def run_migrations(url: str):
