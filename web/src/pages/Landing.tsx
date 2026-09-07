@@ -27,7 +27,7 @@ export function Landing() {
     <div className="min-h-dvh bg-background text-text">
       <LandingNav />
       <main>
-        <Hero />
+        <Hero githubHref={GITHUB_HREF} />
         <HowItWorks />
         <Features />
         <IntegrationTiers />
