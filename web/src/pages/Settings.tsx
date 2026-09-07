@@ -3,7 +3,9 @@ import { useSearchParams } from 'react-router-dom'
 import { useInstallations } from '../hooks/useInstallations'
 import { ClustersSection } from '../components/ClustersSection'
 import { AddClusterModal } from '../components/AddClusterModal'
+import { RotateTokenDialog } from '../components/RotateTokenDialog'
 import type { Installation } from '../types/installation'
+import type { Cluster } from '../types/cluster'
 
 // The GitHub App's slug is a separate identity from this repo's name (set at
 // app registration, not touched by EPIC-025's DeployLens -> KubeX rename) —
@@ -49,6 +51,7 @@ function InstallationRow({ installation }: { installation: Installation }) {
 
 export function Settings() {
   const [showAddCluster, setShowAddCluster] = useState(false)
+  const [rotatingCluster, setRotatingCluster] = useState<Cluster | null>(null)
   const [searchParams] = useSearchParams()
   const installationId = searchParams.get('installation_id')
   const { data: installations, isLoading, isError } = useInstallations({
@@ -98,14 +101,12 @@ export function Settings() {
         </div>
       </section>
 
-      <ClustersSection
-        onAddCluster={() => setShowAddCluster(true)}
-        onRotateToken={() => {
-          // Wired up in E22-T5-S5 (rotate confirmation dialog).
-        }}
-      />
+      <ClustersSection onAddCluster={() => setShowAddCluster(true)} onRotateToken={setRotatingCluster} />
 
       {showAddCluster && <AddClusterModal onClose={() => setShowAddCluster(false)} />}
+      {rotatingCluster && (
+        <RotateTokenDialog cluster={rotatingCluster} onClose={() => setRotatingCluster(null)} />
+      )}
     </div>
   )
 }
