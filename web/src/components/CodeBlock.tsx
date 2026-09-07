@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 type CodeBlockProps = {
   code: string
@@ -8,11 +8,19 @@ const COPIED_RESET_MS = 2000
 
 export function CodeBlock({ code }: CodeBlockProps) {
   const [copied, setCopied] = useState(false)
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (resetTimer.current) clearTimeout(resetTimer.current)
+    }
+  }, [])
 
   async function handleCopy() {
     await navigator.clipboard.writeText(code)
     setCopied(true)
-    setTimeout(() => setCopied(false), COPIED_RESET_MS)
+    if (resetTimer.current) clearTimeout(resetTimer.current)
+    resetTimer.current = setTimeout(() => setCopied(false), COPIED_RESET_MS)
   }
 
   return (
