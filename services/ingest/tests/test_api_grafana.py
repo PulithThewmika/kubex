@@ -62,7 +62,10 @@ async def test_proxy_returns_grafana_panel_html(client, mock_session):
 
     sent = grafana_client.build_request.call_args
     assert sent.kwargs["headers"]["Authorization"] == "Bearer super-secret-token"
+    # The SA token is forwarded to Grafana, never echoed to the browser.
     assert "super-secret-token" not in resp.text
+    assert "authorization" not in {h.lower() for h in resp.headers}
+    assert resp.headers["content-type"] == "text/html; charset=UTF-8"
     # org is injected server-side from UserContext, service is resolved.
     assert sent.kwargs["params"]["var-org"] == "00000000-0000-0000-0000-000000000002"
     assert sent.kwargs["params"]["var-service"] == "orders"

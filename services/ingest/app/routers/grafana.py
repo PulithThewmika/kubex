@@ -58,7 +58,13 @@ async def grafana_proxy(
       roll up several Prometheus components — see the architecture gotcha)
       before being forwarded as the panel's ``$service`` matcher.
     * ``var-org`` is injected from ``UserContext``; any client-supplied
-      value is ignored.
+      value is ignored. The customer-facing dashboard's SQL panels
+      constrain ``org_id = '$org'`` (deploy-timeline.json), so the
+      deployment-metadata panels are tenant-isolated here and now. The
+      Prometheus metric panels (error rate / latency / restarts) get
+      their tenant boundary from the datasource relay instead — until
+      #832 repoints ``kubex-prometheus`` at the org-scoped relay they
+      still read the operator-local Prometheus.
 
     The Grafana service account token is injected server-side and never
     reaches the browser.
