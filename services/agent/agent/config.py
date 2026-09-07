@@ -19,13 +19,21 @@ def prepare_database_url(url: str) -> tuple[str, dict]:
     caching if pointed at the transaction-mode pooler on :6543). The
     local-dev compose Postgres (--profile local-db) has no TLS listener,
     so this is a no-op for it.
+
+    Uses an unverified context (encrypt, don't verify the chain) — see
+    services/ingest/app/db.py's prepare_database_url for why full
+    chain/hostname verification failed in live testing against Supabase's
+    session pooler.
     """
     if url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
     connect_args: dict = {}
     if "supabase" in url:
-        connect_args["ssl"] = ssl.create_default_context()
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        connect_args["ssl"] = ssl_context
         if ":6543" in url:
             connect_args["statement_cache_size"] = 0
     return url, connect_args
