@@ -229,6 +229,18 @@ async def test_install_info_returns_authoritative_values(client: FastAPI) -> Non
 
 
 @pytest.mark.asyncio
+@patch("app.routers.install.INGEST_PUBLIC_URL", "http://localhost:8000")
+async def test_install_info_500_when_ingest_public_url_is_loopback(client: FastAPI) -> None:
+    """Same guard as install_manifest — a loopback INGEST_PUBLIC_URL would
+    hand the Add Cluster wizard a command that can never reach this service
+    (CodeRabbit, PR #804)."""
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
+        resp = await ac.get("/api/install-info")
+
+    assert resp.status_code == 500
+
+
+@pytest.mark.asyncio
 async def test_install_info_requires_auth(client: FastAPI) -> None:
     from app.auth_middleware import get_current_user
 

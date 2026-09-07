@@ -41,8 +41,11 @@ export function Modal({ titleId, title, onClose, children, widthClassName = 'max
       const first = focusable[0]
       const last = focusable[focusable.length - 1]
       // Basic focus trap: wrap Tab/Shift+Tab at the dialog's edges instead
-      // of letting it escape to background page controls.
-      if (e.shiftKey && document.activeElement === first) {
+      // of letting it escape to background page controls. The panel itself
+      // (tabIndex=-1) counts as the "first" boundary too — it's what's
+      // actually focused right after mount on any step that doesn't
+      // autofocus a real control (CodeRabbit, PR #804).
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === panelRef.current)) {
         e.preventDefault()
         last.focus()
       } else if (!e.shiftKey && document.activeElement === last) {

@@ -44,6 +44,17 @@ describe('Modal', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Last' }))
   })
 
+  it('wraps Shift+Tab from the panel itself (the initial focus target) to the last focusable element', () => {
+    // Right after mount, with nothing else focused, the panel (tabIndex=-1)
+    // is what's actually focused — Shift+Tab from there must still wrap
+    // instead of escaping the dialog (CodeRabbit, PR #804).
+    renderModal()
+
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Last' }))
+  })
+
   it('restores focus to the previously focused element on unmount', () => {
     const trigger = document.createElement('button')
     document.body.appendChild(trigger)
