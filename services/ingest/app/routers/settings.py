@@ -13,7 +13,7 @@ import uuid
 
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,11 +21,17 @@ from ..auth_middleware import UserContext, get_current_user
 from ..db import get_session
 from ..models.api_key import ApiKey
 from ..models.installation import Installation
+from ..models.org_membership import OrgMembership
+from ..models.organization import Organization
+from ..models.user import User
 from ..schemas.api_key import ApiKeyCreateRequest, ApiKeyCreateResponse, ApiKeyResponse
 from ..schemas.installation import InstallationResponse
+from ..schemas.member import MemberResponse
 
 router = APIRouter(prefix="/api/settings/api-keys", tags=["settings"])
 installations_router = APIRouter(prefix="/api/settings/installations", tags=["settings"])
+onboarding_router = APIRouter(prefix="/api/settings/onboarding", tags=["settings"])
+members_router = APIRouter(prefix="/api/settings/members", tags=["settings"])
 
 TOKEN_PREFIX = "dl_"
 
@@ -112,3 +118,47 @@ async def list_installations(
         )
         for i in result.scalars().all()
     ]
+
+
+@members_router.get("", response_model=list[MemberResponse])
+async def list_members(
+    user: UserContext = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[MemberResponse]:
+    """Members of the caller's active org (Team tab, E24-T3-S5). Org-scoped
+    per CLAUDE.md decision 9 — only rows for `user.org_id` are returned."""
+    result = await session.execute(
+        select(User.id, User.login, User.avatar_url, OrgMembership.role, OrgMembership.joined_at)
+        .join(OrgMembership, OrgMembership.user_id == User.id)
+        .where(OrgMembership.org_id == user.org_id)
+        .order_by(OrgMembership.joined_at)
+    )
+    return [
+        MemberResponse(
+            user_id=str(row.id),
+            login=row.login,
+            avatar_url=row.avatar_url,
+            role=row.role,
+            joined_at=row.joined_at,
+        )
+        for row in result.all()
+    ]
+
+
+@onboarding_router.post("/complete", status_code=204, response_model=None)
+async def complete_onboarding(
+    user: UserContext = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Mark the caller's org as having finished (or skipped) the onboarding
+    wizard (E24-T2-S6). Idempotent — re-running it is a no-op. The wizard
+    stays reachable from Settings regardless of this flag; it only controls
+    the first-login auto-redirect."""
+    result = await session.execute(
+        update(Organization).where(Organization.id == user.org_id).values(onboarding_completed=True)
+    )
+    await session.commit()
+    # A valid JWT outlives its org (deletion cascades memberships, not
+    # tokens) — 0 rows means the org is gone, so don't report success.
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Organization not found")

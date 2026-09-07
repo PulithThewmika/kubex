@@ -107,6 +107,8 @@ app.include_router(install.router)
 app.include_router(grafana.router)
 app.include_router(settings.router)
 app.include_router(settings.installations_router)
+app.include_router(settings.onboarding_router)
+app.include_router(settings.members_router)
 
 
 @app.get("/healthz")
