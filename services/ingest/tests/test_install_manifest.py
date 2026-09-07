@@ -42,7 +42,18 @@ def test_helm_chart_clusterrole_matches_install_manifest() -> None:
     raw_role = next(doc for doc in yaml.safe_load_all(raw_manifest) if doc["kind"] == "ClusterRole")
 
     rendered = subprocess.run(
-        ["helm", "template", "test", str(_CHART_DIR), "--set", "token=x", "--set", "endpoint=https://e"],
+        [
+            "helm",
+            "template",
+            "test",
+            str(_CHART_DIR),
+            "--set",
+            "token=x",
+            "--set",
+            "endpoint=https://e",
+            "--set",
+            "image.tag=abc1234",
+        ],
         capture_output=True,
         text=True,
         check=True,

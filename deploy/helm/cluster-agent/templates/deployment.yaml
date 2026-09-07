@@ -14,11 +14,18 @@ spec:
     metadata:
       labels:
         {{- include "cluster-agent.selectorLabels" . | nindent 8 }}
+      annotations:
+        # A token rotation (helm upgrade with a new .Values.token, or a
+        # GitOps sync picking up a new value) only changes the Secret, not
+        # this pod template — without this checksum, kubelet keeps the old
+        # Pod running with the now-invalid token mounted until it happens
+        # to be rescheduled for an unrelated reason (CodeRabbit, PR #802).
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
     spec:
       serviceAccountName: {{ include "cluster-agent.fullname" . }}
       containers:
         - name: cluster-agent
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ required "image.tag is required — pin an immutable short-SHA tag, see values.yaml" .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: DEPLOYLENS_ENDPOINT
