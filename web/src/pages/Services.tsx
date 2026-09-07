@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { EmptyState } from '../components/EmptyState'
 import { ServiceCardGrid } from '../components/ServiceCardGrid'
 import { useServices } from '../hooks/useServices'
 import { useClusters } from '../hooks/useClusters'
@@ -127,11 +128,31 @@ export function Services() {
       {isError ? (
         <p className="text-sm text-failed">Failed to load services. Retrying automatically.</p>
       ) : !isLoading && visible.length === 0 ? (
-        <p className="text-sm text-text-muted">
-          {services && services.length > 0
-            ? 'No services match the current filters.'
-            : 'No services registered yet. Services appear here once a deployment webhook fires.'}
-        </p>
+        services && services.length > 0 ? (
+          <EmptyState
+            title="No matching services"
+            description="No service matches the current search and filters."
+            action={{
+              label: 'Clear filters',
+              onClick: () =>
+                setSearchParams(
+                  (prev) => {
+                    const next = new URLSearchParams(prev)
+                    next.delete('q')
+                    next.delete('cluster')
+                    return next
+                  },
+                  { replace: true },
+                ),
+            }}
+          />
+        ) : (
+          <EmptyState
+            title="No services yet"
+            description="Services appear here once a deployment webhook fires."
+            action={{ label: 'Connect a repository', to: '/app/settings?tab=connections' }}
+          />
+        )
       ) : (
         <ServiceCardGrid services={visible} isLoading={isLoading} />
       )}

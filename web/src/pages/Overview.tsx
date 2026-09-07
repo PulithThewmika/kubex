@@ -1,3 +1,4 @@
+import { EmptyState } from '../components/EmptyState'
 import { ServiceCardGrid } from '../components/ServiceCardGrid'
 import { useServices } from '../hooks/useServices'
 
@@ -10,9 +11,11 @@ export function Overview() {
       {isError ? (
         <p className="text-sm text-failed">Failed to load services. Retrying automatically.</p>
       ) : !isLoading && services?.length === 0 ? (
-        <p className="text-sm text-text-muted">
-          No services registered yet. Services appear here once a deployment webhook fires.
-        </p>
+        <EmptyState
+          title="No services yet"
+          description="Services show up here once a deployment webhook fires. Connect a repository to get started."
+          action={{ label: 'Connect a repository', to: '/app/settings?tab=connections' }}
+        />
       ) : (
         <ServiceCardGrid services={services} isLoading={isLoading} />
       )}

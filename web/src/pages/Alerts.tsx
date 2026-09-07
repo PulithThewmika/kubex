@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { formatDistanceStrict, formatDistanceToNow } from 'date-fns'
 import { AlertSeverityBadge } from '../components/AlertSeverityBadge'
+import { EmptyState } from '../components/EmptyState'
 import { useAlerts } from '../hooks/useAlerts'
 import type { Alert } from '../types/alert'
 
@@ -124,13 +125,16 @@ export function Alerts() {
           ))}
         </ul>
       ) : visible.length === 0 ? (
-        <p className="text-sm text-text-muted">
-          {activeFilter === 'active'
-            ? 'No active alerts. Everything looks healthy.'
-            : activeFilter === 'resolved'
-              ? 'No resolved alerts yet.'
-              : 'No alerts recorded yet.'}
-        </p>
+        <EmptyState
+          title={activeFilter === 'active' ? 'All clear' : 'Nothing here'}
+          description={
+            activeFilter === 'active'
+              ? 'No active alerts. Every service is within its health thresholds.'
+              : activeFilter === 'resolved'
+                ? 'No resolved alerts yet.'
+                : 'No alerts have been recorded yet.'
+          }
+        />
       ) : (
         <ul className="overflow-hidden rounded-lg border border-border bg-surface">
           {visible.map((alert) => (
