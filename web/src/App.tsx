@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { AuthErrorState } from './components/auth/AuthErrorState'
 import { RequireAuth } from './components/auth/RequireAuth'
 import { AppLayout } from './components/layout/AppLayout'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
@@ -22,8 +23,9 @@ function PlaceholderPage({ title }: { title: string }) {
 }
 
 function RootRoute() {
-  const { isAuthenticated, isLoading } = useAuth()
+  const { isAuthenticated, isLoading, isError, refetch } = useAuth()
   if (isLoading) return null
+  if (isError) return <AuthErrorState onRetry={() => refetch()} />
   if (isAuthenticated) return <Navigate to="/app" replace />
   return <Landing />
 }
