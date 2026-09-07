@@ -43,8 +43,15 @@ HEALTH_CHECK_WEIGHTS = {
 LOW_TRAFFIC_THRESHOLD = 0.1  # rps
 
 # A window is "low confidence" if fewer than half its expected health checks
-# (window_seconds / health_check_interval_s) actually landed in it.
+# (window_seconds / health_check_interval_s), or fewer than half its
+# expected Prometheus metric values (E23-T4-S10), actually landed in it.
 MIN_DATA_COVERAGE = 0.5
+
+# A health check endpoint failing 3 pings in a row (E23-T4-S9) is treated as
+# fully down rather than scored by its raw failure fraction — a target that
+# dies mid-window would otherwise only ever cost a partial error_rate
+# penalty proportional to how late in the window it died.
+UNREACHABLE_THRESHOLD = 3
 
 
 def clamp(value: float, min_val: float, max_val: float) -> float:
@@ -105,7 +112,10 @@ def compute_health_score(metrics: dict) -> tuple[int, str, dict]:
             error_rate_base, error_rate_post,
             latency_p99_base_ms, latency_p99_post_ms,
             restarts_base, restarts_post,
-            request_rate_base, request_rate_post
+            request_rate_base, request_rate_post,
+            coverage_base, coverage_post (optional, default 1.0 — fraction of
+            the 4 per-component Prometheus queries that returned data rather
+            than None; a real scrape gap, not a genuine zero value)
 
     Returns:
         (score, verdict, details) where:
@@ -149,13 +159,18 @@ def compute_health_score(metrics: dict) -> tuple[int, str, dict]:
     weighted_sum = sum(WEIGHTS[k] * penalties[k] for k in WEIGHTS)
     score, verdict = _score_and_verdict(weighted_sum)
 
+    coverage_base = metrics.get("coverage_base", 1.0)
+    coverage_post = metrics.get("coverage_post", 1.0)
+    data_gap = coverage_base < MIN_DATA_COVERAGE or coverage_post < MIN_DATA_COVERAGE
+
     details = {
         "metrics_source": "prometheus",
         "penalties": {k: round(v, 4) for k, v in penalties.items()},
         "weights": WEIGHTS,
         "weighted_sum": round(weighted_sum, 2),
         "low_traffic": low_traffic,
-        "low_confidence": low_traffic,
+        "low_confidence": low_traffic or data_gap,
+        "coverage": {"base": round(coverage_base, 2), "post": round(coverage_post, 2)},
         "raw_metrics": {
             "error_rate_base": metrics.get("error_rate_base"),
             "error_rate_post": metrics.get("error_rate_post"),
@@ -187,6 +202,18 @@ def _avg_response_time(results: list) -> float | None:
     return sum(r.response_time_ms for r in results) / len(results)
 
 
+def _trailing_consecutive_failures(results: list) -> int:
+    """Count failed pings (unreachable or >=400) at the tail of results
+    (oldest-first), i.e. the most recent run of consecutive failures."""
+    count = 0
+    for r in reversed(results):
+        if r.status_code is None or r.status_code >= 400:
+            count += 1
+        else:
+            break
+    return count
+
+
 def compute_health_check_score(
     results: list,
     baseline_start: datetime,
@@ -209,6 +236,13 @@ def compute_health_check_score(
     error_rate_base = _http_error_rate(base_results)
     error_rate_post = _http_error_rate(post_results)
 
+    # A target that's gone fully unreachable is worse than its raw
+    # error_rate over the window implies (it may have died partway through)
+    # — score it as 100% failed for the rest of the window instead.
+    unreachable = _trailing_consecutive_failures(post_results) >= UNREACHABLE_THRESHOLD
+    if unreachable:
+        error_rate_post = 1.0
+
     penalties = {
         "response_time": penalty(response_time_base, response_time_post, "latency_p99"),
         "error_rate": penalty(error_rate_base, error_rate_post, "error_rate"),
@@ -229,6 +263,7 @@ def compute_health_check_score(
         "weights": HEALTH_CHECK_WEIGHTS,
         "weighted_sum": round(weighted_sum, 2),
         "low_confidence": low_confidence,
+        "unreachable": unreachable,
         "coverage": {"base": round(coverage_base, 2), "post": round(coverage_post, 2)},
         "raw_metrics": {
             "response_time_base_ms": response_time_base,
@@ -272,6 +307,23 @@ async def _query_component(
     }
 
 
+def _coverage(results: list[dict]) -> float:
+    """Fraction of the 4 per-component queries that returned actual data
+    (E23-T4-S10). A None here is a real Prometheus gap (scrape failure,
+    Prometheus restart, target down) — distinct from a genuine 0 value,
+    which is real data and stays non-None."""
+    if not results:
+        return 0.0
+    total = len(results) * 4
+    present = sum(
+        1
+        for r in results
+        for v in (r["error_rate"], r["latency_p99"], r["restarts"], r["request_rate"])
+        if v is not None
+    )
+    return present / total
+
+
 async def _aggregate_metrics(
     components: list[str], namespace: str, window: str, timestamp: datetime
 ) -> dict:
@@ -285,6 +337,7 @@ async def _aggregate_metrics(
         "latency_p99": _max_of([r["latency_p99"] for r in results]),
         "restarts": _sum_of([r["restarts"] for r in results]),
         "request_rate": _sum_of([r["request_rate"] for r in results]),
+        "coverage": _coverage(results),
     }
 
 
@@ -345,6 +398,8 @@ async def assess_deployment(
             "restarts_post": post["restarts"],
             "request_rate_base": base["request_rate"],
             "request_rate_post": post["request_rate"],
+            "coverage_base": base["coverage"],
+            "coverage_post": post["coverage"],
         }
 
         score, verdict, details = compute_health_score(metrics)
