@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Alerts } from './Alerts'
-import { jsonResponse, makeAlert, makeService, stubRoutedFetch } from '../test/fixtures'
+import { jsonResponse, makeAlert, stubRoutedFetch } from '../test/fixtures'
 
 function renderAlerts(initialEntry = '/app/alerts') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -29,10 +29,9 @@ describe('Alerts page', () => {
     stubRoutedFetch({
       '/api/alerts': () =>
         jsonResponse([
-          makeAlert({ id: 1, title: 'Error rate spike', service_id: 1, deployment_id: 42 }),
+          makeAlert({ id: 1, title: 'Error rate spike', service_name: 'orders', deployment_id: 42 }),
           makeAlert({ id: 2, title: 'Old resolved one', resolved_at: '2026-08-29T11:00:00Z' }),
         ]),
-      '/api/services': () => jsonResponse([makeService({ id: 1, name: 'orders' })]),
     })
 
     renderAlerts()
@@ -58,7 +57,6 @@ describe('Alerts page', () => {
             resolved_at: '2026-08-29T10:30:00Z',
           }),
         ]),
-      '/api/services': () => jsonResponse([]),
     })
 
     renderAlerts('/app/alerts?status=resolved')
@@ -70,7 +68,6 @@ describe('Alerts page', () => {
   it('renders an empty state when there are no active alerts', async () => {
     stubRoutedFetch({
       '/api/alerts': () => jsonResponse([]),
-      '/api/services': () => jsonResponse([]),
     })
 
     renderAlerts()
@@ -81,7 +78,6 @@ describe('Alerts page', () => {
   it('shows an error state when the alerts request fails', async () => {
     stubRoutedFetch({
       '/api/alerts': () => new Response(null, { status: 500 }),
-      '/api/services': () => jsonResponse([]),
     })
 
     renderAlerts()
