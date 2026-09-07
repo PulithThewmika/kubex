@@ -13,6 +13,7 @@ class MeResponse(BaseModel):
     org_id: str
     org_name: str | None
     org_slug: str | None
+    onboarding_completed: bool
 
 
 class MembershipItem(BaseModel):
