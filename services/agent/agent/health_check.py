@@ -7,16 +7,19 @@ will later consume these as an alternative metrics source.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Sequence
 
 import httpx
-from sqlalchemy import text
+from sqlalchemy import Row, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from .config import HEALTH_CHECK_RING_BUFFER_SIZE
+from .config import HEALTH_CHECK_MAX_CONCURRENCY, HEALTH_CHECK_RING_BUFFER_SIZE
 
 logger = logging.getLogger("kubex.agent.health_check")
 
@@ -72,7 +75,7 @@ async def ping(url: str) -> HealthCheckResult:
         )
 
 
-async def _find_configured_services(session):
+async def _find_configured_services(session: AsyncSession) -> Sequence[Row]:
     """All services with a health check URL configured."""
     result = await session.execute(
         text("""
@@ -107,24 +110,35 @@ def _is_due(service_id: int, interval_s: int, now: datetime) -> bool:
     return (now - buffer[-1].checked_at).total_seconds() >= interval_s
 
 
-async def run_health_checks(session) -> int:
+_ping_semaphore = asyncio.Semaphore(HEALTH_CHECK_MAX_CONCURRENCY)
+
+
+async def _ping_bounded(url: str) -> HealthCheckResult:
+    async with _ping_semaphore:
+        return await ping(url)
+
+
+async def run_health_checks(session: AsyncSession) -> int:
     """Ping every service whose health check interval has elapsed and
     record the result in its ring buffer.
+
+    Pings run concurrently (bounded by HEALTH_CHECK_MAX_CONCURRENCY) —
+    sequential awaits would let a handful of slow/unreachable endpoints
+    push a single tick past HEALTH_CHECK_TICK_SECONDS, and the job is
+    registered with max_instances=1 (run.py), so an overrun tick is
+    silently dropped rather than queued.
 
     Returns the number of services checked this tick.
     """
     services = await _find_configured_services(session)
     now = datetime.now(timezone.utc)
-    checked = 0
-    for row in services:
-        if not _is_due(row.id, row.health_check_interval_s, now):
-            continue
-        result = await ping(row.health_check_url)
+    due = [row for row in services if _is_due(row.id, row.health_check_interval_s, now)]
+    results = await asyncio.gather(*(_ping_bounded(row.health_check_url) for row in due))
+    for row, result in zip(due, results):
         record_result(row.id, result)
-        checked += 1
         logger.info(
             "Health check %s: status=%s response_time_ms=%d%s",
             row.name, result.status_code, result.response_time_ms,
             f" error={result.error}" if result.error else "",
         )
-    return checked
+    return len(due)

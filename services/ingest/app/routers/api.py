@@ -144,7 +144,7 @@ async def configure_health_check(
             RETURNING name, health_check_url, health_check_interval_s
         """),
         {
-            "url": str(body.health_check_url),
+            "url": body.health_check_url,
             "interval": body.health_check_interval_s,
             "org_id": user.org_id,
             "name": name,
