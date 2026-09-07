@@ -22,7 +22,7 @@ from ..correlation.engine import (
     utcnow,
 )
 from ..db import get_session
-from ..integration_status import get_service_integration_status
+from ..integration_status import get_service_integration_status, load_integration_context
 from ..schemas.health_check import HealthCheckConfigRequest, HealthCheckConfigResponse
 from ..models.deployment import Deployment
 from ..models.pipeline_event import PipelineEvent
@@ -97,6 +97,10 @@ async def _fetch_services_with_status(
     )
     rows = result.fetchall()
 
+    # One batch of org-wide queries backs every row's integration_status,
+    # rather than resolving each service independently (CodeRabbit, PR #809).
+    context = await load_integration_context(session, org_id)
+
     services = []
     for row in rows:
         latest_deploy = None
@@ -116,10 +120,10 @@ async def _fetch_services_with_status(
             )
 
         service_for_status = SimpleNamespace(
-            org_id=row.org_id, name=row.name, repo=row.repo,
+            org_id=row.org_id, name=row.name, repo=row.repo, argocd_app=row.argocd_app,
             cluster_id=row.cluster_id, health_check_url=row.health_check_url,
         )
-        integration_status = await get_service_integration_status(session, service_for_status)
+        integration_status = get_service_integration_status(context, service_for_status)
 
         services.append(ServiceWithStatusResponse(
             id=row.id,
@@ -137,7 +141,9 @@ async def _fetch_services_with_status(
 
 
 @router.get("/services", response_model=list[ServiceWithStatusResponse])
-async def list_services(session: AsyncSession = Depends(get_session), user: UserContext = Depends(get_current_user)):
+async def list_services(
+    session: AsyncSession = Depends(get_session), user: UserContext = Depends(get_current_user),
+) -> list[ServiceWithStatusResponse]:
     """List all services with latest deployment, health, and active alert count."""
     return await _fetch_services_with_status(session, user.org_id)
 
@@ -145,7 +151,7 @@ async def list_services(session: AsyncSession = Depends(get_session), user: User
 @router.get("/services/{name}", response_model=ServiceWithStatusResponse)
 async def get_service(
     name: str, session: AsyncSession = Depends(get_session), user: UserContext = Depends(get_current_user),
-):
+) -> ServiceWithStatusResponse:
     """Single service with latest deployment, health, and integration status."""
     services = await _fetch_services_with_status(session, user.org_id, name=name)
     if not services:
