@@ -36,6 +36,9 @@ export function makeService(overrides: Partial<Service> = {}): Service {
     },
     health: { score: 92, verdict: 'healthy' },
     active_alert_count: 0,
+    deploy_count_30d: 4,
+    cluster_id: null,
+    cluster_name: null,
     integration_status: {
       ci: true,
       cd: 'argocd',
