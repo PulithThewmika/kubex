@@ -55,3 +55,5 @@ if HEALTH_CHECK_RING_BUFFER_SIZE <= 0:
 # would let a large service count open that many concurrent connections
 # (and DNS lookups) in one go.
 HEALTH_CHECK_MAX_CONCURRENCY = int(os.environ.get("HEALTH_CHECK_MAX_CONCURRENCY", "10"))
+if HEALTH_CHECK_MAX_CONCURRENCY <= 0:
+    raise ValueError("HEALTH_CHECK_MAX_CONCURRENCY must be a positive integer")
