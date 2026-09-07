@@ -19,6 +19,7 @@ const ME_RESPONSE = {
   org_id: '2',
   org_name: 'Acme',
   org_slug: 'acme',
+  onboarding_completed: true,
 }
 
 const AUTHENTICATED_ROUTES = {
