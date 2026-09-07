@@ -82,6 +82,21 @@ def penalty(base: float | None, post: float | None, kind: str) -> float:
         raise ValueError(f"Unknown metric kind: {kind}")
 
 
+def _score_and_verdict(weighted_sum: float) -> tuple[int, str]:
+    """Shared score/verdict banding for both the Prometheus and health-check
+    formulas — doc 05's >=80 healthy / 50-79 degraded / <50 failed rule is a
+    single fixed thing, not one copy per metrics source.
+    """
+    score = int(round(clamp(100 - weighted_sum, 0, 100)))
+    if score >= 80:
+        verdict = "healthy"
+    elif score >= 50:
+        verdict = "degraded"
+    else:
+        verdict = "failed"
+    return score, verdict
+
+
 def compute_health_score(metrics: dict) -> tuple[int, str, dict]:
     """Compute health score from baseline and observation metrics.
 
@@ -132,14 +147,7 @@ def compute_health_score(metrics: dict) -> tuple[int, str, dict]:
     )
 
     weighted_sum = sum(WEIGHTS[k] * penalties[k] for k in WEIGHTS)
-    score = int(round(clamp(100 - weighted_sum, 0, 100)))
-
-    if score >= 80:
-        verdict = "healthy"
-    elif score >= 50:
-        verdict = "degraded"
-    else:
-        verdict = "failed"
+    score, verdict = _score_and_verdict(weighted_sum)
 
     details = {
         "metrics_source": "prometheus",
@@ -207,20 +215,12 @@ def compute_health_check_score(
     }
 
     weighted_sum = sum(HEALTH_CHECK_WEIGHTS[k] * penalties[k] for k in HEALTH_CHECK_WEIGHTS)
-    score = int(round(clamp(100 - weighted_sum, 0, 100)))
+    score, verdict = _score_and_verdict(weighted_sum)
 
-    if score >= 80:
-        verdict = "healthy"
-    elif score >= 50:
-        verdict = "degraded"
-    else:
-        verdict = "failed"
-
-    expected_per_window = max(
-        (baseline_end - baseline_start).total_seconds() / interval_s, 1.0
-    )
-    coverage_base = min(len(base_results) / expected_per_window, 1.0)
-    coverage_post = min(len(post_results) / expected_per_window, 1.0)
+    expected_base = max((baseline_end - baseline_start).total_seconds() / interval_s, 1.0)
+    expected_post = max((observation_end - observation_start).total_seconds() / interval_s, 1.0)
+    coverage_base = min(len(base_results) / expected_base, 1.0)
+    coverage_post = min(len(post_results) / expected_post, 1.0)
     low_confidence = coverage_base < MIN_DATA_COVERAGE or coverage_post < MIN_DATA_COVERAGE
 
     details = {
