@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .alerting import resolve_alert
 from .config import BASELINE_WINDOW, BASELINE_WINDOW_SECONDS, OBSERVATION_WINDOW, OBSERVATION_WINDOW_SECONDS
+from .notifications import notify_deploy_recovered
 from .health_score import compute_health_score, _aggregate_metrics
 
 logger = logging.getLogger("kubex.agent.reconciliation")
@@ -29,7 +30,7 @@ async def _fetch_active_alerts(session: AsyncSession):
     """Fetch all unresolved alerts with their service info."""
     result = await session.execute(
         text("""
-            SELECT a.id, a.deployment_id, a.service_id,
+            SELECT a.id, a.deployment_id, a.service_id, a.org_id,
                    s.name AS service_name, s.namespace,
                    s.prom_components
             FROM alerts a
@@ -57,6 +58,7 @@ async def reconcile_active_alerts(session: AsyncSession) -> int:
     baseline_end = now - timedelta(seconds=OBSERVATION_WINDOW_SECONDS)
     resolved_count = 0
     seen_alert_ids = set()
+    recovered_notices: list[dict] = []
 
     for row in rows:
         alert_id = row.id
@@ -98,6 +100,12 @@ async def reconcile_active_alerts(session: AsyncSession) -> int:
 
             if _recovery_counters[alert_id] >= 2:
                 await resolve_alert(session, alert_id, service_name, deploy_id)
+                # Queue the Slack notice — only sent once the batch commit
+                # below succeeds, so a rolled-back resolution never pings.
+                recovered_notices.append({
+                    "org_id": row.org_id, "service_id": row.service_id,
+                    "service_name": service_name, "deployment_id": deploy_id,
+                })
                 resolved_count += 1
                 _recovery_counters.pop(alert_id, None)
                 logger.info(
@@ -117,4 +125,9 @@ async def reconcile_active_alerts(session: AsyncSession) -> int:
             _recovery_counters.pop(stale_id)
 
     await session.commit()
+
+    # Post-commit: the resolutions are durable, so it's safe to announce them.
+    for notice in recovered_notices:
+        await notify_deploy_recovered(**notice)
+
     return resolved_count
