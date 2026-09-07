@@ -74,6 +74,16 @@ describe('App routing', () => {
     expect(screen.getAllByRole('link', { name: /sign in with github/i }).length).toBeGreaterThan(0)
   })
 
+  it('shows a retry state at / on a genuine backend error, not the Landing page', async () => {
+    stubRoutedFetch({ '/auth/me': () => new Response(null, { status: 500 }) })
+    window.history.pushState({}, '', '/')
+
+    await renderApp()
+
+    expect(await screen.findByText(/couldn't verify your session/i)).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /how it works/i })).not.toBeInTheDocument()
+  })
+
   it('redirects the bare / to /app when authenticated', async () => {
     stubRoutedFetch(AUTHENTICATED_ROUTES)
     window.history.pushState({}, '', '/')
