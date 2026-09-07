@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from ..integration_status import CDSource, MetricsSource
+
 
 class ServiceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -30,8 +32,8 @@ class HealthSummary(BaseModel):
 
 class IntegrationStatusResponse(BaseModel):
     ci: bool
-    cd: str | None = None
-    metrics: str | None = None
+    cd: CDSource | None = None
+    metrics: MetricsSource | None = None
     available_features: list[str] = []
 
 
