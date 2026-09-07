@@ -12,21 +12,41 @@ on:
       - "services/cluster-agent/**"
       - ".github/workflows/agent.yml"
 
+# Repo-level default. `packages: write` lives only on the publish job below
+# (zizmor: excessive-permissions) — a PR build never pushes, so it never
+# needs it.
 permissions:
   contents: read
-  packages: write
 
 env:
   IMAGE: ghcr.io/puliththewmika/kubex-cluster-agent
 
 jobs:
-  build-and-push:
+  # Runs on every PR and push — builds the image without pushing, so a
+  # broken Dockerfile fails CI before merge.
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: services/cluster-agent
+          push: false
+
+  # Only this job publishes, so only this job gets ghcr.io write access.
+  publish:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Log in to ghcr.io
-        if: github.event_name == 'push'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -35,25 +55,13 @@ jobs:
 
       - name: Compute tags
         id: vars
-        # github.ref_name is "802/merge" on a pull_request event — not a
-        # valid Docker tag component — so the floating branch/latest tag
-        # only applies on push, where ref_name is a real branch name.
         run: |
           short_sha="${GITHUB_SHA::7}"
-          floating=""
-          if [ "${{ github.event_name }}" = "push" ]; then
-            if [ "${{ github.ref_name }}" = "main" ]; then
-              floating="latest"
-            else
-              floating="${{ github.ref_name }}"
-            fi
-          fi
+          floating="${{ github.ref_name == 'main' && 'latest' || github.ref_name }}"
           {
             echo "tags<<EOF"
             printf '%s:%s\n' "$IMAGE" "$short_sha"
-            if [ -n "$floating" ]; then
-              printf '%s:%s\n' "$IMAGE" "$floating"
-            fi
+            printf '%s:%s\n' "$IMAGE" "$floating"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
         env:
@@ -63,5 +71,5 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: services/cluster-agent
-          push: ${{ github.event_name == 'push' }}
+          push: true
           tags: ${{ steps.vars.outputs.tags }}
