@@ -4,6 +4,7 @@ import { AuthErrorState } from './components/auth/AuthErrorState'
 import { RequireAuth } from './components/auth/RequireAuth'
 import { AppLayout } from './components/layout/AppLayout'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { OnboardingGate } from './components/onboarding/OnboardingGate'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
 import { Onboarding } from './pages/Onboarding'
@@ -47,7 +48,14 @@ function App() {
                 </RequireAuth>
               }
             >
-              <Route index element={<Overview />} />
+              <Route
+                index
+                element={
+                  <OnboardingGate>
+                    <Overview />
+                  </OnboardingGate>
+                }
+              />
               <Route path="onboarding" element={<Onboarding />} />
               <Route path="services" element={<PlaceholderPage title="Services" />} />
               <Route path="services/:name" element={<ServiceDeepDive />} />
