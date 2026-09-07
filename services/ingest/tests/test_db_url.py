@@ -1,3 +1,5 @@
+import pytest
+
 from app.db import prepare_database_url
 
 
@@ -21,8 +23,8 @@ def test_supabase_session_pooler_gets_ssl_only():
     assert "statement_cache_size" not in connect_args
 
 
-def test_supabase_transaction_pooler_disables_statement_cache():
-    _, connect_args = prepare_database_url(
-        "postgresql://postgres.ref:pw@aws-0-us-east-1.pooler.supabase.com:6543/postgres"
-    )
-    assert connect_args["statement_cache_size"] == 0
+def test_supabase_transaction_pooler_is_rejected():
+    with pytest.raises(ValueError, match="transaction-mode pooler"):
+        prepare_database_url(
+            "postgresql://postgres.ref:pw@aws-0-us-east-1.pooler.supabase.com:6543/postgres"
+        )
