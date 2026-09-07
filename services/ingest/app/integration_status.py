@@ -24,7 +24,6 @@ instead of an N+1 fan-out.
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from dataclasses import dataclass, field
 from typing import Literal, Protocol, TypedDict
@@ -132,16 +131,16 @@ async def _load_webhook_notify_services(session: AsyncSession, org_id: uuid.UUID
 
 async def load_integration_context(session: AsyncSession, org_id: uuid.UUID) -> IntegrationContext:
     """One batch of org-wide queries backing every service's integration
-    status — call once per request, not once per service."""
-    (
-        ci_repos, cluster_statuses, argocd_apps, github_deployment_repos, webhook_notify_services,
-    ) = await asyncio.gather(
-        _load_ci_repos(session, org_id),
-        _load_cluster_statuses(session, org_id),
-        _load_argocd_apps(session, org_id),
-        _load_github_deployment_repos(session, org_id),
-        _load_webhook_notify_services(session, org_id),
-    )
+    status — call once per request, not once per service.
+
+    Run serially, not via asyncio.gather: a single AsyncSession isn't safe
+    to use concurrently across tasks (SQLAlchemy 2.x asyncio docs).
+    """
+    ci_repos = await _load_ci_repos(session, org_id)
+    cluster_statuses = await _load_cluster_statuses(session, org_id)
+    argocd_apps = await _load_argocd_apps(session, org_id)
+    github_deployment_repos = await _load_github_deployment_repos(session, org_id)
+    webhook_notify_services = await _load_webhook_notify_services(session, org_id)
     return IntegrationContext(
         ci_repos=ci_repos,
         cluster_statuses=cluster_statuses,
