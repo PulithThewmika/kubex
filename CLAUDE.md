@@ -12,7 +12,7 @@ This is a solo academic project (12-week timeline, viva defense at the end). Exp
 
 ```
 GitHub Actions ──webhook──▶ ┌─────────────────┐
-ArgoCD Notifications ──────▶ │  Ingest Service │──▶ PostgreSQL 16 ◀── Detection Agent ──▶ Prometheus
+ArgoCD Notifications ──────▶ │  Ingest Service │──▶ Supabase Postgres ◀── Detection Agent ──▶ Prometheus
                              │  (FastAPI)      │        ▲                    │
                              └─────────────────┘        │                    ▼
                                                         │              Alertmanager ──▶ Slack
@@ -21,11 +21,12 @@ ArgoCD Notifications ──────▶ │  Ingest Service │──▶ Post
              Grafana (embedded panels + dashboards) ────┘
 ```
 
-**Two runtime zones:**
+**Two runtime zones, plus a managed database:**
 - **Kind cluster** (`kubex`): sample app (frontend → orders → payments), Prometheus stack, Loki + Fluent-Bit, ArgoCD, Alertmanager — all in-cluster.
-- **docker-compose** (central platform): PostgreSQL 16, ingest service, detection agent, MCP server, Grafana. Runs outside the cluster for fast iteration.
+- **docker-compose** (central platform): ingest service, detection agent, MCP server, Grafana. Runs outside the cluster for fast iteration.
+- **Supabase** (managed Postgres, #817): the platform database is no longer a container in docker-compose — it's an always-on, backed-up Supabase Postgres instance, reached over its Supavisor **session pooler** (IPv4, port 5432; TLS required — see `services/ingest/app/db.py`, `services/agent/agent/config.py::prepare_database_url`, `services/mcp-server/src/clients/postgres.ts`). The compose `postgres` service still exists as an opt-in `--profile local-db` escape hatch (`make up-local-db`) for offline dev, but it is not the default and is never used as a "real Postgres" test target (see decision 9's isolation-test guard).
 
-**PostgreSQL is the integration contract** — every producer (ingest, agent) writes to it; every consumer (MCP server, Grafana, REST API) reads from it.
+**PostgreSQL (Supabase-hosted) is the integration contract** — every producer (ingest, agent) writes to it; every consumer (MCP server, Grafana, REST API) reads from it.
 
 **It is a multi-tenant SaaS** (EPIC-019/020/021). Every data row carries `org_id`; users log in with GitHub OAuth and get a session JWT; a GitHub App installation binds a GitHub org to a KubeX org and provisions webhooks automatically. See decision 9 below — org scoping is the rule that leaks data across tenants if forgotten.
 
@@ -38,7 +39,7 @@ in a separate repo, [PulithThewmika/deploylens-sample-app](https://github.com/Pu
 ```
 deploy/
   kind-config.yaml            # Kind cluster with extraPortMappings (30080→8080)
-  docker-compose.yml          # postgres, ingest, agent, mcp-server, grafana
+  docker-compose.yml          # ingest, agent, mcp-server, grafana (+ opt-in local-db postgres profile)
   helm-values/                # kube-prometheus-stack, loki, fluent-bit values
   helm/kubex-agent/           # Helm chart packaging the detection agent (E15)
   k8s/                        # standalone manifests (blast-radius RBAC)
@@ -143,8 +144,16 @@ Makefile
 The authoritative, up-to-date list lives in `.env.example` — copy it to `.env` and fill in real values. Summary:
 
 ```
-POSTGRES_PASSWORD=       # compose Postgres password
-DATABASE_URL=            # postgresql+asyncpg://... for services
+SUPABASE_PROJECT_REF=    # Supabase Settings -> General -> Reference ID
+SUPABASE_DB_REGION=      # Supabase Settings -> General, next to the ref
+SUPABASE_DB_PASSWORD=    # the DB password set at project creation
+DATABASE_URL=            # Supabase SESSION POOLER connection string (Settings -> Database -> Connection string -> "Session pooler"), postgresql+asyncpg://... for ingest/agent
+SUPABASE_DB_HOST=        # bare pooler host (no port/path), for Grafana's datasource
+SUPABASE_DB_PORT=5432
+SUPABASE_DB_NAME=postgres
+SUPABASE_GRAFANA_RO_USER=      # grafana_ro.<project-ref> — Supavisor needs "<role>.<ref>"
+SUPABASE_GRAFANA_RO_PASSWORD=   # rotate V001's placeholder default in the Supabase SQL editor before use — see .env.example
+POSTGRES_PASSWORD=       # opt-in local-db profile compose Postgres password (make up-local-db)
 GITHUB_WEBHOOK_SECRET=   # HMAC secret for the legacy per-repo webhook
 ARGOCD_WEBHOOK_TOKEN=    # shared bearer token for ArgoCD notifications
 ALERTMANAGER_WEBHOOK_TOKEN=  # shared bearer token for Alertmanager -> /api/alerts/inbound
@@ -184,12 +193,15 @@ Sample-app chaos flags (per-service env in K8s manifests): `ERROR_RATE` (0–1 f
 ```
 make cluster-up / cluster-down   # Kind cluster lifecycle
 make cluster-status              # cluster info + node list
-make up / down                   # docker-compose lifecycle
-make migrate                     # run SQL migrations against local Postgres
+make up / down                   # docker-compose lifecycle (Supabase-backed by default)
+make up-local-db                 # docker-compose with the opt-in local-db profile's Postgres container included
+make migrate                     # run SQL migrations against DATABASE_URL (Supabase by default)
+make migrate-local                # run SQL migrations against the local-db profile container instead
 make forwards / forwards-stop    # port-forwards: Prometheus 9090, Loki 3100, Alertmanager 9093 (PIDs in .pids)
 make argocd-forward              # ArgoCD UI at localhost:8443
 make logs                        # docker-compose log tail
-make db-shell                    # psql into kubex DB
+make db-shell                    # psql into DATABASE_URL (Supabase by default)
+make db-shell-local              # psql into the local-db profile container instead
 make tunnel                      # ngrok tunnel on :8000 for GitHub webhook delivery
 make webhook-update              # patch the GitHub webhook with the current ngrok URL
 make e2e                         # full push-to-alert smoke test (scripts/e2e_smoke_test.py)
@@ -286,3 +298,9 @@ The shared principle: pick the cheapest tool that gets full-quality output, not 
 - Grafana provisioned datasources/dashboards only load on container start — restart the Grafana container after editing provisioning YAML.
 - Grafana dashboards are deliberately **platform-wide, not per-tenant** — they query the `dora_*` views (NULL org). Don't "fix" that by hand; it needs an org_id template variable first.
 - `psql`/manual SQL inserts into `services`/`deployments`/`alerts`/`pipeline_events` need an explicit `org_id` since V016 dropped the column DEFAULT — a bare INSERT now fails with a NOT NULL violation.
+- **Supabase session pooler, not direct connection or transaction pooler** (#817): the direct connection (`db.<ref>.supabase.co:5432`) is IPv6-only unless you've paid for the IPv4 add-on; the transaction-mode pooler (`:6543`) breaks asyncpg's server-side prepared statements and doesn't support `LISTEN/NOTIFY`. `DATABASE_URL` must be the session pooler (`aws-0-<region>.pooler.supabase.com:5432`).
+- **Every non-`postgres` Supabase role needs `<role>.<project-ref>` as its pooler username**, not the bare role name — `grafana_ro` connects as `grafana_ro.<project-ref>`, not `grafana_ro`.
+- **Never point `*_TEST_DATABASE_URL` (any of them) at Supabase** — `conftest.py` in `services/ingest/tests` refuses at collection time if one is, because their fixture teardowns run `TRUNCATE ... CASCADE` (see the E20-T3 incident this guards against).
+- If `V001__base_schema.sql`'s `CREATE ROLE grafana_ro` fails against Supabase (permission denied), create the role manually in the Supabase SQL editor first — the migration's `IF NOT EXISTS` guard makes it a no-op once the role already exists.
+- `deploy/docker-compose.yml`'s `depends_on: postgres: required: false` needs **Docker Compose CLI ≥ 2.20** (mid-2023) — an older Compose binary (legacy `docker-compose` v1, or a stale Docker Desktop) fails YAML validation on it and `make up`/`make up-local-db` won't start anything. Check `docker compose version` if that happens.
+- The local-db profile's Grafana PostgreSQL panel doesn't work out of the box — `datasources.yml` always points at the `SUPABASE_DB_*` vars with `sslmode: require`, and the local Postgres container has no TLS listener. See `.env.example`'s Local Postgres section for the (uncommitted, local-only) workaround.

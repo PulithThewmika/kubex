@@ -23,19 +23,28 @@ datasources:
     jsonData:
       maxLines: 1000
 
-  # ── PostgreSQL (deployments, health scores, DORA views) ────────────
+  # ── PostgreSQL (deployments, health scores, DORA views) ─────────────
+  # Managed Supabase Postgres (#817) — $__env{} is Grafana's built-in
+  # provisioning-file env expansion, resolved from the container's
+  # environment (see deploy/docker-compose.yml's grafana env_file).
   - name: PostgreSQL
     uid: kubex-postgres
     type: grafana-postgresql-datasource
     access: proxy
-    url: postgres:5432
-    user: grafana_ro
+    url: $__env{SUPABASE_DB_HOST}:$__env{SUPABASE_DB_PORT}
+    user: $__env{SUPABASE_GRAFANA_RO_USER}
     editable: false
     jsonData:
-      database: kubex
-      sslmode: disable
+      database: $__env{SUPABASE_DB_NAME}
+      # verify-full: Supabase signs its pooler certs with its own private
+      # CA, mounted read-only into this container (see docker-compose.yml)
+      # — full chain + hostname verification, not just encryption.
+      sslmode: verify-full
+      sslRootCertFile: /etc/grafana/certs/supabase-root-2021-ca.pem
+      # Supabase's free/small-tier connection limits are tight —
+      # keep this datasource's pool small.
       maxOpenConns: 5
       maxIdleConns: 2
       connMaxLifetime: 14400
     secureJsonData:
-      password: grafana_readonly
+      password: $__env{SUPABASE_GRAFANA_RO_PASSWORD}
