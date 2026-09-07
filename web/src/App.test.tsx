@@ -64,13 +64,23 @@ describe('App routing', () => {
     expect(await screen.findByRole('heading', { name: 'Overview' })).toBeInTheDocument()
   })
 
-  it('redirects the bare / to /app (then to /login when unauthenticated)', async () => {
+  it('renders the Landing page at bare / when unauthenticated', async () => {
     stubRoutedFetch({ '/auth/me': () => new Response(null, { status: 401 }) })
     window.history.pushState({}, '', '/')
 
     await renderApp()
 
-    expect(await screen.findByRole('link', { name: /sign in with github/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /how it works/i })).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: /sign in with github/i }).length).toBeGreaterThan(0)
+  })
+
+  it('redirects the bare / to /app when authenticated', async () => {
+    stubRoutedFetch(AUTHENTICATED_ROUTES)
+    window.history.pushState({}, '', '/')
+
+    await renderApp()
+
+    expect(await screen.findByRole('heading', { name: 'Overview' })).toBeInTheDocument()
   })
 
   it('renders ServiceDeepDive at /app/services/:name', async () => {
