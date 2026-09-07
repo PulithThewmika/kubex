@@ -1,11 +1,16 @@
 services:
-  # ── PostgreSQL 16 ──────────────────────────────────────────────
-  # The central database — every KubeX component reads/writes here.
-  # Creates the "kubex" database automatically on first start.
+  # ── PostgreSQL 16 (opt-in local escape hatch) ───────────────────
+  # The platform database is managed Supabase Postgres by default (see
+  # DATABASE_URL in .env, #817) — this container is NOT started unless
+  # you explicitly opt in with:
+  #   docker compose --profile local-db up
+  # and point DATABASE_URL at postgresql+asyncpg://kubex:<pw>@postgres:5432/kubex
+  # yourself for offline/no-Supabase dev.
   postgres:
     image: postgres:16
     container_name: kubex-postgres
     restart: unless-stopped
+    profiles: ["local-db"]
     environment:
       POSTGRES_DB: kubex
       POSTGRES_USER: kubex
@@ -35,7 +40,9 @@ services:
     env_file:
       - ../.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://kubex:${POSTGRES_PASSWORD:-kubex}@postgres:5432/kubex
+      # DATABASE_URL itself comes from env_file above (Supabase by
+      # default — see .env's Supabase section). Only override it here
+      # when explicitly running the local-db profile.
       PROM_URL: ${PROM_URL:-http://host.docker.internal:9090}
       OBSERVATION_WINDOW: ${OBSERVATION_WINDOW:-15m}
       BASELINE_WINDOW: ${BASELINE_WINDOW:-30m}
@@ -46,6 +53,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+        required: false
       mcp-server:
         condition: service_started
       grafana:
@@ -64,7 +72,7 @@ services:
     env_file:
       - ../.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://kubex:${POSTGRES_PASSWORD:-kubex}@postgres:5432/kubex
+      # DATABASE_URL comes from env_file above — see the ingest block.
       PROM_URL: ${PROM_URL:-http://host.docker.internal:9090}
       ALERTMANAGER_URL: ${ALERTMANAGER_URL:-http://host.docker.internal:9093}
       BASELINE_WINDOW: ${BASELINE_WINDOW:-30m}
@@ -72,6 +80,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+        required: false
 
   # ── MCP Server ─────────────────────────────────────────────────
   # Model Context Protocol server exposing deployment, metrics,
@@ -82,16 +91,21 @@ services:
       dockerfile: Dockerfile
     container_name: kubex-mcp
     restart: unless-stopped
+    env_file:
+      - ../.env
     environment:
-      DATABASE_URL: postgresql://kubex:${POSTGRES_PASSWORD:-kubex}@postgres:5432/kubex
+      # DATABASE_URL and MCP_INTERNAL_TOKEN come from env_file above —
+      # don't redeclare MCP_INTERNAL_TOKEN as ${MCP_INTERNAL_TOKEN} here,
+      # it resolves empty without an explicit --env-file flag and
+      # crash-loops the server.
       PROM_URL: ${PROM_URL:-http://host.docker.internal:9090}
       LOKI_URL: ${LOKI_URL:-http://host.docker.internal:3100}
       MCP_TRANSPORT: http
       MCP_HTTP_PORT: "3001"
-      MCP_INTERNAL_TOKEN: ${MCP_INTERNAL_TOKEN}
     depends_on:
       postgres:
         condition: service_healthy
+        required: false
 
   # ── Grafana ────────────────────────────────────────────────────
   # Visualization layer — provisioned datasources (Prometheus, Loki,
@@ -103,6 +117,10 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    env_file:
+      # Supplies SUPABASE_DB_HOST/PORT/NAME/GRAFANA_RO_USER/GRAFANA_RO_PASSWORD,
+      # expanded into datasources.yml via Grafana's $__env{} syntax.
+      - ../.env
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-kubex}
@@ -117,7 +135,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+        required: false
 
 volumes:
-  pgdata:
+  pgdata:  # only populated when running --profile local-db
   grafana_data:
