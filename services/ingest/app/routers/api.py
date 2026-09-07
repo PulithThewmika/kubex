@@ -97,6 +97,7 @@ async def _fetch_services_with_status(
                 SELECT COUNT(*) AS cnt
                 FROM deployments
                 WHERE service_id = s.id
+                  AND org_id = :org_id
                   AND started_at >= now() - interval '30 days'
             ) dc ON true
             WHERE s.org_id = :org_id AND (CAST(:name AS text) IS NULL OR s.name = CAST(:name AS text))
