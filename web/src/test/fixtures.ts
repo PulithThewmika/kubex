@@ -2,6 +2,7 @@ import { vi } from 'vitest'
 import type { Service } from '../types/service'
 import type { DeploymentDetail } from '../types/deploymentDetail'
 import type { Installation } from '../types/installation'
+import type { Cluster } from '../types/cluster'
 
 export function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status })
@@ -80,6 +81,21 @@ export function makeInstallation(overrides: Partial<Installation> = {}): Install
     repos: ['acme-corp/kubex'],
     status: 'active',
     created_at: '2026-08-29T10:00:00Z',
+    ...overrides,
+  }
+}
+
+export function makeCluster(overrides: Partial<Cluster> = {}): Cluster {
+  return {
+    id: '1',
+    name: 'prod-cluster',
+    status: 'connected',
+    agent_version: '0.1.0',
+    argocd_version: 'v2.11.0',
+    argocd_status: 'found',
+    prometheus_status: 'found',
+    last_heartbeat: '2026-08-29T10:00:00Z',
+    created_at: '2026-08-29T09:00:00Z',
     ...overrides,
   }
 }
