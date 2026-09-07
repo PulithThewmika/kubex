@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from agent import health_check as hc
 from agent.health_check import HealthCheckResult
 from agent.health_score import compute_health_check_score, no_metrics_score, compute_health_score
 
@@ -87,6 +88,37 @@ class TestHealthCheckSource:
         assert details["low_confidence"] is True
         assert details["raw_metrics"]["samples_base"] == 0
         assert details["raw_metrics"]["samples_post"] == 0
+
+
+class TestRingBufferCoversScoringWindow:
+    def test_buffer_capacity_spans_baseline_plus_observation(self):
+        """Regression: the ring buffer must hold enough history to cover
+        BASELINE_WINDOW+OBSERVATION_WINDOW at a service's own ping interval,
+        or compute_health_check_score's baseline window is silently empty
+        (score defaults to 100/healthy no matter the real data) by the time
+        a deployment becomes eligible for scoring.
+        """
+        interval_s = 30
+        capacity = hc._buffer_capacity(interval_s)
+        from agent.config import BASELINE_WINDOW_SECONDS, OBSERVATION_WINDOW_SECONDS
+        span_pings = (BASELINE_WINDOW_SECONDS + OBSERVATION_WINDOW_SECONDS) / interval_s
+        assert capacity > span_pings
+
+    def test_record_result_buffer_survives_full_window(self):
+        service_id = 999
+        interval_s = 30
+        capacity = hc._buffer_capacity(interval_s)
+        base = datetime.now(timezone.utc)
+        for i in range(capacity):
+            hc.record_result(
+                service_id,
+                HealthCheckResult(checked_at=base + timedelta(seconds=i * interval_s),
+                                   status_code=200, response_time_ms=10),
+                interval_s,
+            )
+        results = hc.get_results(service_id)
+        oldest, newest = results[0].checked_at, results[-1].checked_at
+        assert (newest - oldest).total_seconds() >= interval_s * (capacity - 1)
 
 
 class TestNoMetricsSource:

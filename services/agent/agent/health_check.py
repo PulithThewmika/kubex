@@ -19,7 +19,12 @@ import httpx
 from sqlalchemy import Row, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .config import HEALTH_CHECK_MAX_CONCURRENCY, HEALTH_CHECK_RING_BUFFER_SIZE
+from .config import (
+    HEALTH_CHECK_MAX_CONCURRENCY,
+    HEALTH_CHECK_RING_BUFFER_SIZE,
+    BASELINE_WINDOW_SECONDS,
+    OBSERVATION_WINDOW_SECONDS,
+)
 
 logger = logging.getLogger("kubex.agent.health_check")
 
@@ -93,8 +98,21 @@ async def _find_configured_services(session: AsyncSession) -> Sequence[Row]:
 _results: dict[int, deque[HealthCheckResult]] = {}
 
 
-def record_result(service_id: int, result: HealthCheckResult) -> None:
-    buffer = _results.setdefault(service_id, deque(maxlen=HEALTH_CHECK_RING_BUFFER_SIZE))
+def _buffer_capacity(interval_s: int) -> int:
+    """Ring buffer must span baseline+observation windows (E23-T2's adaptive
+    scoring reads back that far), not just HEALTH_CHECK_RING_BUFFER_SIZE's
+    flat default — otherwise the baseline window is silently empty for any
+    interval short enough that the default cap rolls off in under ~45 min.
+    """
+    window_span_s = BASELINE_WINDOW_SECONDS + OBSERVATION_WINDOW_SECONDS
+    needed = -(-window_span_s // interval_s) + 5  # ceil division + safety margin
+    return max(HEALTH_CHECK_RING_BUFFER_SIZE, needed)
+
+
+def record_result(service_id: int, result: HealthCheckResult, interval_s: int = 30) -> None:
+    buffer = _results.setdefault(
+        service_id, deque(maxlen=_buffer_capacity(interval_s))
+    )
     buffer.append(result)
 
 
@@ -135,7 +153,7 @@ async def run_health_checks(session: AsyncSession) -> int:
     due = [row for row in services if _is_due(row.id, row.health_check_interval_s, now)]
     results = await asyncio.gather(*(_ping_bounded(row.health_check_url) for row in due))
     for row, result in zip(due, results):
-        record_result(row.id, result)
+        record_result(row.id, result, row.health_check_interval_s)
         logger.info(
             "Health check %s: status=%s response_time_ms=%d%s",
             row.name, result.status_code, result.response_time_ms,
