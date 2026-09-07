@@ -87,7 +87,9 @@ async def _post(token: str, channel_id: str, message: str, blocks: list) -> tupl
                 resp = await client.post(_POST_MESSAGE_URL, json=payload, headers=headers)
             except httpx.HTTPError:
                 return False, "network_error"
-            if resp.status_code == 429 and attempt == 1:
+            if resp.status_code == 429:
+                if attempt == 2:
+                    return False, "rate_limited"
                 try:
                     delay = int(resp.headers.get("Retry-After", "1"))
                 except ValueError:
