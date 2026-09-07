@@ -79,7 +79,12 @@ function installCommand(
       return `curl -sL ${info.ingest_public_url}/install/${token}.yaml | kubectl apply -f -`
     case 'helm':
       return [
-        `git clone ${info.chart_repo_url}`,
+        // Explicit target dir: `git clone <url>` derives the directory
+        // name from the URL itself, which happens to be "kubex" for the
+        // current repo but silently breaks the next line's `kubex/...`
+        // path the moment chart_repo_url points anywhere else — a fork, a
+        // rename (CodeRabbit, PR #804).
+        `git clone ${info.chart_repo_url} kubex`,
         `helm install ${toHelmReleaseName(clusterName)} kubex/${info.chart_path} \\`,
         `  --create-namespace --namespace ${info.agent_namespace} \\`,
         `  --set token=${token} \\`,
@@ -126,7 +131,7 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
   const [installMethod, setInstallMethod] = useState<InstallMethod>('kubectl')
   const [created, setCreated] = useState<ClusterCreateResponse | null>(null)
   const queryClient = useQueryClient()
-  const { data: installInfo } = useInstallInfo()
+  const { data: installInfo, isError: installInfoError, refetch: retryInstallInfo } = useInstallInfo()
 
   const createMutation = useMutation({
     mutationFn: createCluster,
@@ -216,6 +221,17 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
           </div>
           {installInfo ? (
             <CodeBlock code={installCommand(installMethod, created.token, name.trim(), installInfo)} />
+          ) : installInfoError ? (
+            <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background p-3">
+              <p className="text-sm text-failed">Couldn't load install instructions.</p>
+              <button
+                type="button"
+                onClick={() => retryInstallInfo()}
+                className="w-fit rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text transition-colors hover:bg-background"
+              >
+                Retry
+              </button>
+            </div>
           ) : (
             <p className="text-sm text-text-muted">Loading install instructions…</p>
           )}

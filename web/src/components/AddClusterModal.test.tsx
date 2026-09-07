@@ -144,6 +144,31 @@ describe('AddClusterModal', () => {
     // legitimately contain uppercase, so only check the install line).
     const installLine = helmBlock.textContent?.split('\n').find((line) => line.startsWith('helm install'))
     expect(installLine).toBe('helm install my-prod-rm-rf kubex/deploy/helm/cluster-agent \\')
+    // git clone must name the target dir explicitly, matching the "kubex/"
+    // prefix in the helm install line above — it can't rely on the URL's
+    // own derived directory name once chart_repo_url points somewhere else.
+    expect(helmBlock.textContent).toContain(`git clone ${INSTALL_INFO.chart_repo_url} kubex`)
+  })
+
+  it('shows a retry option if install info fails to load', async () => {
+    const created = { id: 'c1', name: 'prod', token: 'kbx_shown_once', created_at: '2026-08-29T10:00:00Z' }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') return Promise.resolve(jsonResponse(created, 201))
+        if (url.includes('/api/install-info')) return Promise.resolve(new Response(null, { status: 500 }))
+        return Promise.resolve(jsonResponse([]))
+      }),
+    )
+
+    renderModal()
+    fireEvent.change(screen.getByPlaceholderText('production'), { target: { value: 'prod' } })
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByText('kbx_shown_once')
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(await screen.findByText(/couldn't load install instructions/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /i've installed it/i })).toBeDisabled()
   })
 
   it('shows a retry option if heartbeat polling fails', async () => {

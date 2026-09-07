@@ -212,6 +212,15 @@ async def install_info(user: UserContext = Depends(get_current_user)) -> Install
     this file's own values. No secrets here (token stays client-side, from
     POST /api/clusters), so `user` is unused beyond requiring a session."""
     del user
+    # Same guard as install_manifest below — a loopback INGEST_PUBLIC_URL
+    # would hand the wizard a kubectl/Helm/GitOps command that can never
+    # reach this service (CodeRabbit, PR #804).
+    if _is_loopback(urlparse(INGEST_PUBLIC_URL).hostname):
+        raise HTTPException(
+            status_code=500,
+            detail="INGEST_PUBLIC_URL is not configured to an externally reachable address",
+            headers=_NO_STORE,
+        )
     return InstallInfoResponse(
         ingest_public_url=INGEST_PUBLIC_URL,
         agent_namespace=AGENT_NAMESPACE,
