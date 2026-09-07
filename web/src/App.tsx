@@ -6,6 +6,7 @@ import { AppLayout } from './components/layout/AppLayout'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
+import { Onboarding } from './pages/Onboarding'
 import { Overview } from './pages/Overview'
 import { ServiceDeepDive } from './pages/ServiceDeepDive'
 import { DeployDetail } from './pages/DeployDetail'
@@ -47,6 +48,7 @@ function App() {
               }
             >
               <Route index element={<Overview />} />
+              <Route path="onboarding" element={<Onboarding />} />
               <Route path="services" element={<PlaceholderPage title="Services" />} />
               <Route path="services/:name" element={<ServiceDeepDive />} />
               <Route path="deployments/:id" element={<DeployDetail />} />
