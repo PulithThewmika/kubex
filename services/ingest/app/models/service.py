@@ -39,6 +39,8 @@ class Service(Base):
     cluster_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("clusters.id", ondelete="SET NULL")
     )
+    health_check_url: Mapped[str | None] = mapped_column(Text)
+    health_check_interval_s: Mapped[int] = mapped_column(nullable=False, server_default="30")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default="now()")
 
     deployments: Mapped[list[Deployment]] = relationship(back_populates="service")
