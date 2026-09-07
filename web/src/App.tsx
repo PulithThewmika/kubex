@@ -4,6 +4,7 @@ import { AuthErrorState } from './components/auth/AuthErrorState'
 import { RequireAuth } from './components/auth/RequireAuth'
 import { AppLayout } from './components/layout/AppLayout'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { ToastProvider } from './contexts/ToastContext'
 import { OnboardingGate } from './components/onboarding/OnboardingGate'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
@@ -29,38 +30,40 @@ function RootRoute() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<RootRoute />} />
-            <Route path="/login" element={<Login />} />
-            <Route
-              path="/app"
-              element={
-                <RequireAuth>
-                  <AppLayout />
-                </RequireAuth>
-              }
-            >
+      <ToastProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<RootRoute />} />
+              <Route path="/login" element={<Login />} />
               <Route
-                index
+                path="/app"
                 element={
-                  <OnboardingGate>
-                    <Overview />
-                  </OnboardingGate>
+                  <RequireAuth>
+                    <AppLayout />
+                  </RequireAuth>
                 }
-              />
-              <Route path="onboarding" element={<Onboarding />} />
-              <Route path="services" element={<Services />} />
-              <Route path="services/:name" element={<ServiceDeepDive />} />
-              <Route path="alerts" element={<Alerts />} />
-              <Route path="deployments/:id" element={<DeployDetail />} />
-              <Route path="chat" element={<Chat />} />
-              <Route path="settings" element={<Settings />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
+              >
+                <Route
+                  index
+                  element={
+                    <OnboardingGate>
+                      <Overview />
+                    </OnboardingGate>
+                  }
+                />
+                <Route path="onboarding" element={<Onboarding />} />
+                <Route path="services" element={<Services />} />
+                <Route path="services/:name" element={<ServiceDeepDive />} />
+                <Route path="alerts" element={<Alerts />} />
+                <Route path="deployments/:id" element={<DeployDetail />} />
+                <Route path="chat" element={<Chat />} />
+                <Route path="settings" element={<Settings />} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </ToastProvider>
     </QueryClientProvider>
   )
 }
