@@ -25,9 +25,11 @@ from .config import (
     ALERTMANAGER_URL,
     DATABASE_URL,
     BLAST_RADIUS_INTERVAL_SECONDS,
+    HEALTH_CHECK_TICK_SECONDS,
 )
 from .db import get_session, dispose_engine, engine
 from .health_score import assess_deployment
+from .health_check import run_health_checks, close_health_check_client
 from .alerting import fire_alert, close_alertmanager_client
 from .promql import close_prom_client
 from .reconciliation import reconcile_active_alerts
@@ -212,6 +214,18 @@ async def blast_radius_loop() -> None:
         logger.exception("Blast-radius discovery loop error")
 
 
+async def health_check_loop() -> None:
+    """Ping configured services' HTTP health check URLs (E23-T1)."""
+    try:
+        session = await get_session()
+        async with session:
+            checked = await run_health_checks(session)
+            if checked:
+                logger.info("Health check loop: pinged %d service(s)", checked)
+    except Exception:
+        logger.exception("Health check loop error")
+
+
 async def verify_connections() -> None:
     """Verify database connectivity on startup."""
     async with engine.begin() as conn:
@@ -228,6 +242,7 @@ async def shutdown(scheduler: AsyncIOScheduler) -> None:
     scheduler.shutdown(wait=False)
     await close_prom_client()
     await close_alertmanager_client()
+    await close_health_check_client()
     await close_k8s_client()
     await dispose_engine()
     logger.info("Agent stopped.")
@@ -257,7 +272,15 @@ async def main() -> None:
             max_instances=1,
             next_run_time=None,
         )
-    else:
+    scheduler.add_job(
+        health_check_loop,
+        "interval",
+        seconds=HEALTH_CHECK_TICK_SECONDS,
+        id="health_check_loop",
+        max_instances=1,
+        next_run_time=None,
+    )
+    if not blast_radius_enabled():
         logger.info("Blast-radius discovery disabled (K8S_API_SERVER/K8S_TOKEN/K8S_CA_CERT_B64 not set)")
     scheduler.start()
 
@@ -265,6 +288,7 @@ async def main() -> None:
     await agent_loop()
     if blast_radius_enabled():
         await blast_radius_loop()
+    await health_check_loop()
 
     # Schedule subsequent runs
     scheduler.reschedule_job("agent_loop", trigger="interval", seconds=AGENT_INTERVAL_SECONDS)
@@ -272,6 +296,7 @@ async def main() -> None:
         scheduler.reschedule_job(
             "blast_radius_loop", trigger="interval", seconds=BLAST_RADIUS_INTERVAL_SECONDS
         )
+    scheduler.reschedule_job("health_check_loop", trigger="interval", seconds=HEALTH_CHECK_TICK_SECONDS)
 
     loop = asyncio.get_event_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
