@@ -12,6 +12,7 @@ from sqlalchemy import text
 
 from .auth import validate_auth_tokens
 from .cluster_monitor import run_disconnect_sweep_loop
+from .crypto import install_log_redaction
 from .db import async_session, engine
 from .routers import (
     auth,
@@ -23,6 +24,7 @@ from .routers import (
     clusters,
     grafana,
     install,
+    integrations_slack,
     settings,
 )
 
@@ -30,6 +32,8 @@ from .routers import (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     validate_auth_tokens()
+    integrations_slack.validate_slack_config()
+    install_log_redaction()
     async with engine.begin() as conn:
         await conn.execute(text("SELECT 1"))
     sweep_task = asyncio.create_task(run_disconnect_sweep_loop(async_session))
@@ -104,6 +108,8 @@ app.include_router(api.router)
 app.include_router(chat.router)
 app.include_router(clusters.router)
 app.include_router(install.router)
+app.include_router(integrations_slack.router)
+app.include_router(integrations_slack.api_router)
 app.include_router(grafana.router)
 app.include_router(settings.router)
 app.include_router(settings.installations_router)
