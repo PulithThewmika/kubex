@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { ServiceCard } from '../components/ServiceCard'
-import { ServiceCardSkeleton } from '../components/ServiceCardSkeleton'
+import { useSearchParams } from 'react-router-dom'
+import { ServiceCardGrid } from '../components/ServiceCardGrid'
 import { useServices } from '../hooks/useServices'
 import { useClusters } from '../hooks/useClusters'
 import type { Service } from '../types/service'
@@ -127,26 +126,14 @@ export function Services() {
 
       {isError ? (
         <p className="text-sm text-failed">Failed to load services. Retrying automatically.</p>
-      ) : isLoading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }, (_, i) => (
-            <ServiceCardSkeleton key={i} />
-          ))}
-        </div>
-      ) : visible.length === 0 ? (
+      ) : !isLoading && visible.length === 0 ? (
         <p className="text-sm text-text-muted">
           {services && services.length > 0
             ? 'No services match the current filters.'
             : 'No services registered yet. Services appear here once a deployment webhook fires.'}
         </p>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {visible.map((service) => (
-            <Link key={service.id} to={`/app/services/${service.name}`} className="block">
-              <ServiceCard service={service} />
-            </Link>
-          ))}
-        </div>
+        <ServiceCardGrid services={visible} isLoading={isLoading} />
       )}
     </div>
   )
