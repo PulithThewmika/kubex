@@ -16,6 +16,7 @@ Same login-CSRF defense as the GitHub OAuth flow (routers/auth.py).
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import secrets
@@ -27,12 +28,12 @@ import httpx
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import slack_client
-from ..auth import JWT_SECRET, SHELL_URL
+from ..auth import JWT_SECRET, SHELL_URL, verify_slack_signature
 from ..auth_middleware import UserContext, get_current_owner, get_current_user
 from ..crypto import decrypt, encrypt, require_encryption_key
 from ..db import get_session
@@ -60,6 +61,10 @@ _SETTINGS_PATH = "/app/settings"
 
 router = APIRouter(prefix="/integrations/slack", tags=["integrations"])
 api_router = APIRouter(prefix="/api/settings/slack", tags=["integrations"])
+events_router = APIRouter(prefix="/webhooks/slack", tags=["webhooks"])
+
+# Slack bot events that mean "this workspace's install is gone".
+_TEARDOWN_EVENTS = {"app_uninstalled", "tokens_revoked"}
 
 
 def slack_enabled() -> bool:
@@ -427,3 +432,52 @@ async def test_channel(
     channel.last_delivery_at = now
     channel.last_delivery_error = None
     await session.commit()
+
+
+async def _teardown_workspace(session: AsyncSession, team_id: str) -> int:
+    """Soft-disconnect every workspace row for a Slack team (an org can
+    connect the same team, and two KubeX orgs can connect one team).
+    Kept, not deleted — the UI shows 'disconnected, reconnect' and an
+    OAuth re-install revives the row."""
+    workspaces = (
+        await session.scalars(
+            select(SlackWorkspace).where(
+                SlackWorkspace.slack_team_id == team_id,
+                SlackWorkspace.uninstalled_at.is_(None),
+            )
+        )
+    ).all()
+    now = datetime.now(timezone.utc)
+    for ws in workspaces:
+        ws.uninstalled_at = now
+        await session.execute(
+            update(NotificationChannel)
+            .where(NotificationChannel.workspace_id == ws.id)
+            .values(enabled=False, last_delivery_error="workspace disconnected")
+        )
+    return len(workspaces)
+
+
+@events_router.post("/events")
+async def slack_events(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    body = await verify_slack_signature(request)
+    payload = json.loads(body)
+
+    if payload.get("type") == "url_verification":
+        return {"challenge": payload.get("challenge", "")}
+
+    if payload.get("type") == "event_callback":
+        event_type = payload.get("event", {}).get("type")
+        team_id = payload.get("team_id")
+        if event_type in _TEARDOWN_EVENTS and team_id:
+            n = await _teardown_workspace(session, team_id)
+            await session.commit()
+            logger.info(
+                "Slack %s for team_id=%s — disconnected %d workspace(s)", event_type, team_id, n
+            )
+
+    # Slack retries on any non-2xx; always ack.
+    return {"ok": True}
