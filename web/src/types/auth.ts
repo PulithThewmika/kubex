@@ -6,4 +6,5 @@ export type Me = {
   org_id: string
   org_name: string | null
   org_slug: string | null
+  onboarding_completed: boolean
 }

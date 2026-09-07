@@ -57,7 +57,7 @@ describe('Overview page', () => {
 
     renderOverview()
 
-    expect(await screen.findByText(/no services registered yet/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /no services yet/i })).toBeInTheDocument()
   })
 
   it('renders a failure message on API error', async () => {
