@@ -105,7 +105,12 @@ async def test_configure_health_check_scopes_update_to_callers_org(client, mock_
 
 
 @pytest.mark.asyncio
-async def test_configure_health_check_rejects_loopback_url(client, mock_session):
+async def test_configure_health_check_rejects_loopback_url(client, mock_session, monkeypatch):
+    # ALLOW_INSECURE_HEALTH_CHECK_URL is read at import time — force it off
+    # so this test's 422 assertion holds regardless of the environment
+    # it happens to run in.
+    monkeypatch.setattr("app.schemas.health_check.ALLOW_INSECURE_HEALTH_CHECK_URL", False)
+
     async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
         resp = await ac.put(
             "/api/services/orders/health-check",
@@ -116,9 +121,11 @@ async def test_configure_health_check_rejects_loopback_url(client, mock_session)
 
 
 @pytest.mark.asyncio
-async def test_configure_health_check_rejects_link_local_metadata_url(client, mock_session):
+async def test_configure_health_check_rejects_link_local_metadata_url(client, mock_session, monkeypatch):
     """169.254.169.254 is the cloud metadata endpoint (AWS/GCP) — the
     always-on agent must not be pointable at it (SSRF)."""
+    monkeypatch.setattr("app.schemas.health_check.ALLOW_INSECURE_HEALTH_CHECK_URL", False)
+
     async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
         resp = await ac.put(
             "/api/services/orders/health-check",
