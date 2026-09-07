@@ -39,6 +39,8 @@ type DeployMethodStepProps = {
   onChange: (value: DeployMethod) => void
   onAddCluster: () => void
   ingestPublicUrl: string | undefined
+  ingestUrlLoading: boolean
+  ingestUrlError: boolean
   // Lifted to the page: this step unmounts on navigation, and the token is
   // shown exactly once — losing it would strand a real (unusable) API key on
   // the org and let repeat visits pile up more.
@@ -51,6 +53,8 @@ export function DeployMethodStep({
   onChange,
   onAddCluster,
   ingestPublicUrl,
+  ingestUrlLoading,
+  ingestUrlError,
   apiKey,
   onApiKeyCreated,
 }: DeployMethodStepProps) {
@@ -88,15 +92,24 @@ export function DeployMethodStep({
         )}
         {value === 'webhook' && (
           <div className="flex flex-col gap-2">
-            {!apiKey ? (
+            {ingestUrlError ? (
+              <p className="text-xs text-failed">
+                Couldn't load this org's ingest URL, so the webhook command can't be built yet. Retry in
+                a moment or finish setup and add the webhook later.
+              </p>
+            ) : !apiKey ? (
               <>
                 <button
                   type="button"
-                  disabled={keyMutation.isPending}
+                  disabled={keyMutation.isPending || ingestUrlLoading || !ingestPublicUrl}
                   onClick={() => keyMutation.mutate('Onboarding deploy webhook')}
                   className="w-fit rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text transition-colors hover:bg-surface disabled:opacity-50"
                 >
-                  {keyMutation.isPending ? 'Generating…' : 'Generate API key'}
+                  {keyMutation.isPending
+                    ? 'Generating…'
+                    : ingestUrlLoading
+                      ? 'Loading…'
+                      : 'Generate API key'}
                 </button>
                 {keyMutation.isError && (
                   <p className="text-xs text-failed">{(keyMutation.error as Error).message}</p>
@@ -108,7 +121,7 @@ export function DeployMethodStep({
                   Copy this key now — it's shown only once. Then call the API from your pipeline:
                 </p>
                 <CodeBlock code={apiKey} />
-                <CodeBlock code={curlExample(ingestPublicUrl ?? 'https://your-kubex-host', apiKey)} />
+                {ingestPublicUrl && <CodeBlock code={curlExample(ingestPublicUrl, apiKey)} />}
               </>
             )}
           </div>
