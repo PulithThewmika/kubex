@@ -18,9 +18,10 @@ describe('HealthRing', () => {
     expect(screen.getByText('100')).toBeInTheDocument()
   })
 
-  it('renders a null score as a grey ring with an em-dash', () => {
+  it('renders a null score as an unknown state with a question mark and a connect-metrics hint', () => {
     render(<HealthRing score={null} verdict={null} />)
-    expect(screen.getByText('—')).toBeInTheDocument()
+    expect(screen.getByText('?')).toBeInTheDocument()
     expect(screen.queryByText('0')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/unknown — connect metrics/i)).toBeInTheDocument()
   })
 })

@@ -31,7 +31,16 @@ export function HealthRing({ score, verdict, size = 56 }: HealthRingProps) {
   }, [])
 
   return (
-    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+    <div
+      className="relative inline-flex items-center justify-center"
+      style={{ width: size, height: size }}
+      title={isUnknown ? 'Connect metrics to see a health score' : undefined}
+      aria-label={
+        isUnknown
+          ? 'Health score unknown — connect metrics'
+          : `Health score ${Math.round(clampedScore)}${verdict ? `, ${verdict}` : ''}`
+      }
+    >
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
         <circle
           cx={size / 2}
@@ -58,7 +67,7 @@ export function HealthRing({ score, verdict, size = 56 }: HealthRingProps) {
         className={`absolute font-heading font-medium tabular-nums ${isUnknown ? 'text-text-muted' : 'text-text'}`}
         style={{ fontSize: size * 0.32 }}
       >
-        {isUnknown ? '—' : Math.round(clampedScore)}
+        {isUnknown ? '?' : Math.round(clampedScore)}
       </span>
     </div>
   )
