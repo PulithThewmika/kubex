@@ -60,14 +60,17 @@ async def _fetch_services_with_status(
             SELECT
                 s.id, s.name, s.namespace, s.repo, s.argocd_app,
                 s.org_id, s.cluster_id, s.health_check_url,
+                c.name           AS cluster_name,
                 d.commit_sha     AS latest_commit_sha,
                 d.author         AS latest_author,
                 d.status         AS latest_status,
                 d.finished_at    AS latest_finished_at,
                 ha.score         AS health_score,
                 ha.verdict       AS health_verdict,
-                COALESCE(ac.cnt, 0) AS active_alert_count
+                COALESCE(ac.cnt, 0) AS active_alert_count,
+                COALESCE(dc.cnt, 0) AS deploy_count_30d
             FROM services s
+            LEFT JOIN clusters c ON c.id = s.cluster_id
             LEFT JOIN LATERAL (
                 SELECT commit_sha, author, status, finished_at
                 FROM deployments
@@ -90,6 +93,12 @@ async def _fetch_services_with_status(
                 FROM alerts
                 WHERE service_id = s.id AND resolved_at IS NULL
             ) ac ON true
+            LEFT JOIN LATERAL (
+                SELECT COUNT(*) AS cnt
+                FROM deployments
+                WHERE service_id = s.id
+                  AND started_at >= now() - interval '30 days'
+            ) dc ON true
             WHERE s.org_id = :org_id AND (CAST(:name AS text) IS NULL OR s.name = CAST(:name AS text))
             ORDER BY s.name
         """),
@@ -134,6 +143,9 @@ async def _fetch_services_with_status(
             latest_deploy=latest_deploy,
             health=health,
             active_alert_count=row.active_alert_count,
+            deploy_count_30d=row.deploy_count_30d,
+            cluster_id=str(row.cluster_id) if row.cluster_id else None,
+            cluster_name=row.cluster_name,
             integration_status=IntegrationStatusResponse(**integration_status),
         ))
 

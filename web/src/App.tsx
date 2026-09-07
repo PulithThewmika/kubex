@@ -13,17 +13,10 @@ import { ServiceDeepDive } from './pages/ServiceDeepDive'
 import { DeployDetail } from './pages/DeployDetail'
 import { Chat } from './pages/Chat'
 import { Alerts } from './pages/Alerts'
+import { Services } from './pages/Services'
 import { Settings } from './pages/Settings'
 
 const queryClient = new QueryClient()
-
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div className="flex h-full items-center justify-center">
-      <h1 className="font-heading text-2xl">{title}</h1>
-    </div>
-  )
-}
 
 function RootRoute() {
   const { isAuthenticated, isLoading, isError, refetch } = useAuth()
@@ -58,7 +51,7 @@ function App() {
                 }
               />
               <Route path="onboarding" element={<Onboarding />} />
-              <Route path="services" element={<PlaceholderPage title="Services" />} />
+              <Route path="services" element={<Services />} />
               <Route path="services/:name" element={<ServiceDeepDive />} />
               <Route path="alerts" element={<Alerts />} />
               <Route path="deployments/:id" element={<DeployDetail />} />

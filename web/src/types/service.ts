@@ -29,5 +29,8 @@ export type Service = {
   latest_deploy: LatestDeployInfo | null
   health: HealthSummary | null
   active_alert_count: number
+  deploy_count_30d: number
+  cluster_id: string | null
+  cluster_name: string | null
   integration_status: IntegrationStatus
 }

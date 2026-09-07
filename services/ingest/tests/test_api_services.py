@@ -12,6 +12,7 @@ def _mock_row(
     latest_author="dev", latest_status="deployed",
     latest_finished_at=None, health_score=95,
     health_verdict="healthy", active_alert_count=0,
+    deploy_count_30d=0, cluster_id=None, cluster_name=None,
 ):
     row = MagicMock()
     row.id = id
@@ -26,6 +27,9 @@ def _mock_row(
     row.health_score = health_score
     row.health_verdict = health_verdict
     row.active_alert_count = active_alert_count
+    row.deploy_count_30d = deploy_count_30d
+    row.cluster_id = cluster_id
+    row.cluster_name = cluster_name
     return row
 
 
