@@ -65,15 +65,15 @@ class _SlackTokenRedactionFilter(logging.Filter):
     guarantee is never logging tokens in the first place — this is
     defense in depth.
 
-    # ponytail: attached to root handlers so propagated child records
-    # pass through it; if a handler is added after startup its records
-    # are unfiltered until install_log_redaction() runs again.
+    # ponytail: only redacts %-style positional args (a tuple). Dict-style
+    # args (logger.info("%(x)s", {...})) and pre-rendered messages via
+    # extra= are left alone; nothing in this codebase logs a token that way.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
         if isinstance(record.msg, str) and "xox" in record.msg:
             record.msg = redact_slack_tokens(record.msg)
-        if record.args:
+        if isinstance(record.args, tuple) and any("xox" in a for a in record.args if isinstance(a, str)):
             record.args = tuple(
                 redact_slack_tokens(a) if isinstance(a, str) else a for a in record.args
             )
@@ -81,10 +81,22 @@ class _SlackTokenRedactionFilter(logging.Filter):
 
 
 def install_log_redaction() -> None:
-    """Attach the redaction filter to every root-logger handler. A plain
-    logger-level filter would miss records propagated up from child
-    loggers, which is most of them."""
+    """Attach the redaction filter everywhere records actually get emitted:
+    every configured handler (root + named loggers) and ``lastResort`` —
+    the handler used when nothing else is configured, which is the case
+    under a bare ``uvicorn app.main:app``."""
     redactor = _SlackTokenRedactionFilter()
-    for handler in logging.getLogger().handlers:
-        if not any(isinstance(x, _SlackTokenRedactionFilter) for x in handler.filters):
-            handler.addFilter(redactor)
+
+    def _attach(target) -> None:
+        if target is not None and not any(
+            isinstance(f, _SlackTokenRedactionFilter) for f in target.filters
+        ):
+            target.addFilter(redactor)
+
+    _attach(logging.lastResort)
+    loggers = [logging.getLogger()] + [
+        logging.getLogger(name) for name in list(logging.root.manager.loggerDict)
+    ]
+    for lg in loggers:
+        for handler in getattr(lg, "handlers", []):
+            _attach(handler)

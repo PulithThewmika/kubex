@@ -99,8 +99,9 @@ async def reconcile_active_alerts(session: AsyncSession) -> int:
 
             if _recovery_counters[alert_id] >= 2:
                 await resolve_alert(session, alert_id, service_name, deploy_id)
+                # Own session + time budget — must not commit this
+                # function's single-commit batch mid-loop.
                 await notify_deploy_recovered(
-                    session,
                     org_id=row.org_id, service_id=row.service_id,
                     service_name=service_name, deployment_id=deploy_id,
                 )

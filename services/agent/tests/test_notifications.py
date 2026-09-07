@@ -106,9 +106,25 @@ async def test_post_retries_once_on_429_then_gives_up(monkeypatch):
 @pytest.mark.asyncio
 async def test_notify_is_noop_without_key(monkeypatch):
     monkeypatch.setattr(notifications, "INTEGRATION_ENC_KEY", "")
-    session = AsyncMock()
+    get_session = AsyncMock()
+    monkeypatch.setattr(notifications, "get_session", get_session)
     await notifications.notify_deploy_alert(
-        session, org_id=ORG_A, service_id=1, service_name="x",
+        org_id=ORG_A, service_id=1, service_name="x",
         deployment_id=1, score=10, verdict="failed", details={},
     )
-    session.execute.assert_not_called()
+    get_session.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_notify_uses_own_session_and_time_budget(monkeypatch, enc_key):
+    session = AsyncMock()
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
+    session.execute = AsyncMock(return_value=MagicMock(fetchall=MagicMock(return_value=[])))
+    monkeypatch.setattr(notifications, "get_session", AsyncMock(return_value=session))
+    await notifications.notify_deploy_recovered(
+        org_id=ORG_A, service_id=1, service_name="x", deployment_id=9,
+    )
+    # own session opened + closed; no channels -> no delivery, no raise
+    session.__aenter__.assert_awaited()
+    session.__aexit__.assert_awaited()
