@@ -12,9 +12,13 @@ import uuid
 from dataclasses import dataclass
 
 import jwt
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import JWT_SECRET
+from .db import get_session
+from .models.org_membership import OrgMembership
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,3 +50,26 @@ async def get_current_user(request: Request) -> UserContext:
 
 async def get_optional_user(request: Request) -> UserContext | None:
     return _decode_session(request)
+
+
+async def get_current_owner(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> UserContext:
+    """Like ``get_current_user`` but 403s unless the caller is an *owner*
+    of their active org. Guards mutations that grant KubeX access to a
+    third-party account (E23-T5 — connecting/disconnecting Slack).
+
+    Roles today are ``owner`` / ``member`` (see routers/auth.py); this is
+    the first place the distinction is enforced.
+    """
+    ctx = await get_current_user(request)
+    role = await session.scalar(
+        select(OrgMembership.role).where(
+            OrgMembership.user_id == ctx.user_id,
+            OrgMembership.org_id == ctx.org_id,
+        )
+    )
+    if role != "owner":
+        raise HTTPException(status_code=403, detail="Organization owner role required")
+    return ctx

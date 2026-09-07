@@ -1,3 +1,4 @@
+import { useSlackConnection } from '../../hooks/useSlack'
 import type { Cluster } from '../../types/cluster'
 import type { Installation } from '../../types/installation'
 import type { DeployMethod } from './DeployMethodStep'
@@ -54,6 +55,7 @@ export function SummaryStep({
   finishing,
   finishError,
 }: SummaryStepProps) {
+  const { data: slack } = useSlackConnection()
   const installCount = installations?.length ?? 0
   // A cluster row is created as status='pending' and only flips to 'connected'
   // once the agent's first heartbeat lands — don't report a pending one as done.
@@ -79,6 +81,11 @@ export function SummaryStep({
       label: 'Metrics',
       value: metricsMethod ? METRICS_LABELS[metricsMethod] : METRICS_LABELS.skip,
       done: !!metricsMethod && metricsMethod !== 'skip',
+    },
+    {
+      label: 'Slack',
+      value: slack?.connected ? `Connected to ${slack.team_name ?? 'your workspace'}` : 'Not connected',
+      done: slack?.connected ?? false,
     },
   ]
 
