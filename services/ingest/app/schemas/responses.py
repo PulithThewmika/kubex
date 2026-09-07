@@ -60,7 +60,7 @@ class HealthAssessmentResponse(BaseModel):
 
     id: int
     deployment_id: int
-    score: int
+    score: int | None = None
     verdict: str
     error_rate_base: float | None = None
     error_rate_post: float | None = None
