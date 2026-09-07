@@ -1,8 +1,15 @@
 import pg from "pg";
 
+const databaseUrl = process.env.DATABASE_URL ?? "";
+// Supabase requires TLS; its pooler cert chain isn't always in node's
+// default trust store, so don't rely on the URL alone to negotiate it.
+// The local-dev compose Postgres (--profile local-db) has no TLS listener.
+const ssl = databaseUrl.includes("supabase") ? { rejectUnauthorized: false } : undefined;
+
 const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: databaseUrl,
   max: 10,
+  ssl,
 });
 
 export async function query<T extends pg.QueryResultRow>(
