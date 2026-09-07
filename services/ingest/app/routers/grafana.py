@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from collections.abc import AsyncIterator
 from urllib.parse import quote
 
@@ -25,6 +26,17 @@ GRAFANA_SERVICE_ACCOUNT_TOKEN = os.environ.get("GRAFANA_SERVICE_ACCOUNT_TOKEN", 
 # from the browser; without an allow-list a caller could name any dashboard
 # in the Grafana org (operator-only ones included) and read it.
 EMBEDDABLE_DASHBOARD_UIDS = {"deploy-timeline"}
+
+_RE2_META = re.compile(r"([\\.+*?()|\[\]{}^$])")
+
+
+def _re2_quote(value: str) -> str:
+    """Escape a Prometheus label value so it matches literally inside the
+    panel's ``service=~"$service"`` matcher (RE2). ``prom_components`` is
+    free-text ``ARRAY(Text)``; a value like ``api.v1`` or one containing
+    ``|`` would otherwise widen the selector."""
+    return _RE2_META.sub(r"\\\1", value)
+
 
 _client: httpx.AsyncClient | None = None
 
@@ -100,10 +112,9 @@ async def grafana_proxy(
 
     params = {
         "panelId": panelId,
-        # Prometheus panels match service=~"$service"; the components are
-        # already anchored by that regex, so a plain alternation is enough
-        # (k8s object names can't contain regex metacharacters).
-        "var-service": "|".join(components),
+        # Prometheus panels match service=~"$service" (RE2, auto-anchored);
+        # each component is escaped so it's a literal alternative.
+        "var-service": "|".join(_re2_quote(c) for c in components),
         "var-org": str(user.org_id),
         "from": from_,
         "to": to,
