@@ -169,11 +169,13 @@ async def test_still_degraded_stays_at_zero(mock_session):
 
 
 @pytest.mark.asyncio
-async def test_low_coverage_does_not_count_toward_recovery(mock_session):
+async def test_low_coverage_does_not_count_toward_recovery(mock_session: AsyncMock) -> None:
     """A healthy-looking score from a Prometheus data gap (coverage < 50%,
     E23-T4-S10) must not advance the recovery counter -- otherwise a
     service still failing behind a scrape gap gets its alert resolved just
-    because there's no data to penalize it with."""
+    because there's no data to penalize it with. Reconciles twice (the full
+    2-cycle threshold) to prove the counter never advances at all, not just
+    that a single cycle doesn't resolve immediately."""
     result = MagicMock()
     result.fetchall.return_value = [_make_alert_row(alert_id=50)]
     mock_session.execute.return_value = result
@@ -184,6 +186,11 @@ async def test_low_coverage_does_not_count_toward_recovery(mock_session):
          patch("agent.reconciliation.resolve_alert", new_callable=AsyncMock) as mock_resolve:
 
         mock_agg.return_value = low_coverage
+
+        resolved = await reconcile_active_alerts(mock_session)
+        assert resolved == 0
+        assert _recovery_counters.get(50, 0) == 0
+        mock_resolve.assert_not_called()
 
         resolved = await reconcile_active_alerts(mock_session)
         assert resolved == 0
