@@ -82,13 +82,17 @@ services:
       dockerfile: Dockerfile
     container_name: kubex-mcp
     restart: unless-stopped
+    env_file:
+      - ../.env
     environment:
       DATABASE_URL: postgresql://kubex:${POSTGRES_PASSWORD:-kubex}@postgres:5432/kubex
       PROM_URL: ${PROM_URL:-http://host.docker.internal:9090}
       LOKI_URL: ${LOKI_URL:-http://host.docker.internal:3100}
       MCP_TRANSPORT: http
       MCP_HTTP_PORT: "3001"
-      MCP_INTERNAL_TOKEN: ${MCP_INTERNAL_TOKEN}
+      # MCP_INTERNAL_TOKEN comes from env_file (../.env) above — don't
+      # redeclare it here as ${MCP_INTERNAL_TOKEN}, which resolves blank
+      # and crash-loops the server when compose runs without --env-file.
     depends_on:
       postgres:
         condition: service_healthy
