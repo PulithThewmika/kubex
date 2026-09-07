@@ -483,11 +483,16 @@ def pg_url():
             description TEXT
         );
     """)
-    migration_path = os.path.join(
-        os.path.dirname(__file__), "..", "migrations", "V012__auth_tables.sql"
-    )
-    with open(migration_path) as f:
-        cur.execute(f.read())
+    migrations_dir = os.path.join(os.path.dirname(__file__), "..", "migrations")
+    for name in (
+        "V012__auth_tables.sql",
+        # _upsert_organization selects Organization, whose model now maps
+        # organizations.onboarding_completed (E24-T2) — apply the migration
+        # that adds the column so the SELECT doesn't reference a missing one.
+        "V028__organizations_onboarding_completed.sql",
+    ):
+        with open(os.path.join(migrations_dir, name)) as f:
+            cur.execute(f.read())
     cur.close()
     conn.close()
 
