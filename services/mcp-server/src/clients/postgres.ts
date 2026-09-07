@@ -1,10 +1,20 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import pg from "pg";
 
 const databaseUrl = process.env.DATABASE_URL ?? "";
-// Supabase requires TLS; its pooler cert chain isn't always in node's
-// default trust store, so don't rely on the URL alone to negotiate it.
-// The local-dev compose Postgres (--profile local-db) has no TLS listener.
-const ssl = databaseUrl.includes("supabase") ? { rejectUnauthorized: false } : undefined;
+// Supabase signs its pooler certs with its own private CA, not a public
+// one node's default trust store recognizes — load it explicitly rather
+// than disabling verification. The local-dev compose Postgres
+// (--profile local-db) has no TLS listener, hence the conditional.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ssl = databaseUrl.includes("supabase")
+  ? {
+      ca: fs.readFileSync(path.join(__dirname, "..", "..", "certs", "supabase-root-2021-ca.pem"), "utf8"),
+      rejectUnauthorized: true,
+    }
+  : undefined;
 
 const pool = new pg.Pool({
   connectionString: databaseUrl,
