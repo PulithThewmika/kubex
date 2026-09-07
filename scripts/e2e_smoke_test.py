@@ -74,9 +74,15 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SAMPLE_APP_REPO = REPO_ROOT.parent / "deploylens-sample-app"
-COMPONENT = "payments"  # the manifest/Prometheus label whose chaos flag we set
+COMPONENT = "payments"  # the Prometheus label whose chaos flag we set
 SERVICE = "sample-app"  # the ingest-registered service that deployment rolls up under
-ERROR_RATE_FIELD_RE = re.compile(r'(- name: ERROR_RATE\s*\n\s*value: )"[^"]*"')
+# We flip the ERROR_RATE default in payments/app.py (not the deploy
+# manifest): the commit then touches payments/**, which is what the
+# sample-app CI path filter keys on, so CI rebuilds the image and pushes a
+# tag-bump commit. Without a fresh image tag the ArgoCD sync correlates
+# onto the *existing* deployment (same image = same deploy, CLAUDE.md
+# decision 1) and no new record appears for the agent to score.
+ERROR_RATE_SRC_RE = re.compile(r'(ERROR_RATE = float\(os\.getenv\("ERROR_RATE", )"[^"]*"(\)\))')
 
 
 def log(msg: str) -> None:
@@ -84,7 +90,16 @@ def log(msg: str) -> None:
 
 
 def http_get(url: str):
-    with urllib.request.urlopen(url, timeout=10) as resp:
+    # REST API is org-scoped since EPIC-020 — attach a session cookie or
+    # API key from the environment if the caller supplied one.
+    req = urllib.request.Request(url)
+    session = os.environ.get("KUBEX_SESSION")
+    api_key = os.environ.get("KUBEX_API_KEY")
+    if session:
+        req.add_header("Cookie", f"session={session}")
+    elif api_key:
+        req.add_header("Authorization", f"Bearer {api_key}")
+    with urllib.request.urlopen(req, timeout=10) as resp:
         return json.loads(resp.read())
 
 
@@ -96,28 +111,39 @@ def run(cmd: list[str], cwd: Path) -> str:
 
 
 def set_error_rate(value: str, sample_app_repo: Path) -> tuple[bool, str | None]:
-    """Rewrite ERROR_RATE in the payments deployment manifest and push it.
+    """Set the payments service's ERROR_RATE default in its source and push.
 
-    Returns (mutated, commit_sha). `mutated` is True as soon as the manifest
-    is written to disk — even if the subsequent commit/push fails — so the
-    caller can still attempt cleanup on a partial failure instead of leaving
-    the checkout dirty. `commit_sha` is only set once the push succeeds;
-    when ERROR_RATE already matched `value`, mutated is False and nothing
-    was written, committed, or pushed.
+    Edits ONLY payments/app.py — not the deploy manifest. That keeps it a
+    single-cause change: the push matches the sample-app CI path filter
+    (payments/**), CI rebuilds the image and pushes ONE tag-bump commit,
+    ArgoCD does ONE sync of a genuinely new image tag, and exactly one new
+    deployment record appears. Touching the manifest too would trigger a
+    second, separate ArgoCD sync of the raw env change and split the
+    deployment lineage in two.
+
+    Returns (mutated, commit_sha). `mutated` is True as soon as the file is
+    written — even if commit/push then fails — so the caller can still
+    clean up. `commit_sha` is only set once the push succeeds.
     """
-    manifest = sample_app_repo / "deploy" / "payments" / "deployment.yaml"
-    original = manifest.read_text()
-    updated, count = ERROR_RATE_FIELD_RE.subn(rf'\1"{value}"', original)
-    if count != 1:
+    # The CI tag-bump job pushes a commit back to dev, so the local
+    # checkout is routinely behind — sync before mutating or the push
+    # below is a guaranteed non-fast-forward.
+    run(["git", "checkout", "dev"], cwd=sample_app_repo)
+    run(["git", "pull", "--ff-only", "origin", "dev"], cwd=sample_app_repo)
+
+    source = sample_app_repo / "payments" / "app.py"
+    src_original = source.read_text()
+    src_updated, src_count = ERROR_RATE_SRC_RE.subn(rf'\1"{value}"\2', src_original)
+    if src_count != 1:
         raise RuntimeError(
-            f"expected exactly one ERROR_RATE field in {manifest}, found {count}"
+            f"expected exactly one ERROR_RATE default in {source}, found {src_count}"
         )
-    if updated == original:
+    if src_updated == src_original:
         log(f"ERROR_RATE already {value!r} — nothing to commit")
         return False, None
 
-    manifest.write_text(updated)
-    run(["git", "add", str(manifest.relative_to(sample_app_repo))], cwd=sample_app_repo)
+    source.write_text(src_updated)
+    run(["git", "add", str(source.relative_to(sample_app_repo))], cwd=sample_app_repo)
     run(["git", "commit", "-m", f"chore(e2e): set payments ERROR_RATE={value} for smoke test"], cwd=sample_app_repo)
     run(["git", "push", "origin", "HEAD:dev"], cwd=sample_app_repo)
     return True, run(["git", "rev-parse", "HEAD"], cwd=sample_app_repo)
@@ -165,8 +191,9 @@ def main() -> int:
         help="path to a deploylens-sample-app checkout (default: ../deploylens-sample-app, or $SAMPLE_APP_REPO)",
     )
     parser.add_argument(
-        "--deploy-timeout", type=int, default=300,
-        help="seconds to wait for the new deployment to appear (default 300 = 5m)",
+        "--deploy-timeout", type=int, default=900,
+        help="seconds to wait for the new deployment to appear (default 900 = "
+             "15m: sample-app CI build + tag-bump commit, then ArgoCD sync)",
     )
     parser.add_argument(
         "--assess-timeout", type=int, default=1200,
@@ -200,7 +227,7 @@ def main() -> int:
     mutated = False
     try:
         if not args.skip_trigger:
-            log(f"Step 1/4: pushing ERROR_RATE=0.3 to {args.sample_app_repo}/deploy/payments/deployment.yaml")
+            log(f"Step 1/4: pushing ERROR_RATE=0.3 into {args.sample_app_repo}/payments/app.py")
             mutated, pushed_sha = set_error_rate("0.3", args.sample_app_repo)
             if not mutated:
                 log("FAIL — ERROR_RATE was already 0.3 (a prior run's cleanup likely failed); "
@@ -214,6 +241,10 @@ def main() -> int:
         log("Step 2/4: waiting for a new deployment to appear via ArgoCD sync")
 
         def find_new_deployment():
+            # CI has to build the image and push a tag-bump commit before
+            # ArgoCD has anything new to sync — keep nudging it so we don't
+            # wait out its (observed ~18min) git-poll once that lands.
+            nudge_argocd_refresh()
             rows = http_get(f"{args.ingest_url}/api/deployments?service={SERVICE}&limit=5")
             newer = [r for r in rows if r["id"] > baseline_id]
             return newer[0] if newer else None
@@ -260,7 +291,7 @@ def main() -> int:
             try:
                 set_error_rate("0", args.sample_app_repo)
             except Exception as exc:
-                log(f"cleanup FAILED — manually revert deploy/payments/deployment.yaml "
+                log(f"cleanup FAILED — manually revert payments/app.py "
                     f"in {args.sample_app_repo}: {exc}")
 
 

@@ -111,14 +111,25 @@ data:
             }
           }
 
+  # oncePer: app.status.sync.revision — without this, argocd-notifications
+  # dedups by (trigger, app) and only ever fires ONCE per app, so a second
+  # deploy of the same Application never reaches the KubeX webhook. Keying
+  # on the synced revision makes "once per deployment" the dedup unit.
   trigger.on-sync-running: |
     - when: app.status.operationState.phase in ['Running']
+      oncePer: app.status.sync.revision
       send: [kubex-on-sync-running]
 
+  # Wait for health == Healthy, not just the sync operation finishing:
+  # ArgoCD's status.summary.images is computed from live pods, and during
+  # the rollout it still lists the previous image — firing on Succeeded
+  # alone gave KubeX the old image tag and broke CI↔CD correlation.
   trigger.on-sync-succeeded: |
-    - when: app.status.operationState.phase in ['Succeeded']
+    - when: app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+      oncePer: app.status.sync.revision
       send: [kubex-on-sync-succeeded]
 
   trigger.on-sync-failed: |
     - when: app.status.operationState.phase in ['Failed', 'Error']
+      oncePer: app.status.sync.revision
       send: [kubex-on-sync-failed]

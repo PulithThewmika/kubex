@@ -90,20 +90,43 @@ def extract_image_tag(head_sha: str | None) -> str | None:
 def extract_image_tag_from_images(images_str: str | None) -> str | None:
     """Extract the short image tag from ArgoCD's summary.images field.
 
-    ArgoCD renders summary.images as a comma-separated string of image
-    references (e.g. "ghcr.io/org/app-frontend:abc1234,ghcr.io/org/app-orders:abc1234").
-    All images in a single sync share the same tag, so we take the first one.
+    ArgoCD has rendered summary.images two ways across versions: a
+    comma-separated string ("ghcr.io/org/app-frontend:abc1234,...-orders:abc1234")
+    and a Go-slice string ("[ghcr.io/org/app-frontend:abc1234 ...-orders:abc1234]").
+    A CI tag-bump moves every app service to the same new tag, so the
+    right answer is the tag shared by the most images — during a rolling
+    update summary.images briefly lists both the old and new image of the
+    service still rolling, and blindly taking the first/last one there
+    picked the stale tag and broke CI↔CD correlation.
+
     Returns None if the string is empty or contains no parseable tag.
     """
     if not images_str or not images_str.strip():
         return None
-    first_image = images_str.split(",")[0].strip().strip("[]")
-    if ":" not in first_image:
+    # Split on whitespace and/or commas, drop the Go-slice brackets.
+    tokens = images_str.strip().strip("[]").replace(",", " ").split()
+    tags: list[str] = []
+    for token in tokens:
+        ref = token.strip()
+        if ":" not in ref:
+            continue
+        name, _, tag = ref.rpartition(":")
+        if "/" in tag:  # the ":" was a port in the registry host, not a tag
+            continue
+        if not tag or tag == "latest":
+            continue
+        tags.append(tag)
+    if not tags:
         return None
-    tag = first_image.rsplit(":", 1)[1]
-    if not tag or tag == "latest":
-        return None
-    return tag
+    # Most common tag wins; ties resolve to first-seen (Counter is stable).
+    # ponytail: majority vote across all app images, correct when a deploy
+    # bumps every service to one tag (the CI tag-bump does); a partial
+    # deploy of a subset of services can still be outvoted by the
+    # unchanged services' shared tag — upgrade to per-prom_component tag
+    # tracking when partial deploys need exact CI↔CD correlation.
+    from collections import Counter
+
+    return Counter(tags).most_common(1)[0][0]
 
 
 @dataclass

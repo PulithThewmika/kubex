@@ -20,8 +20,10 @@ from ..correlation.engine import (
 from ..db import get_session
 from ..models.deployment import Deployment
 from ..models.installation import Installation
+from ..models.org_membership import OrgMembership
 from ..models.organization import Organization
 from ..models.pipeline_event import PipelineEvent
+from ..models.user import User
 from .webhooks_github import process_workflow_run
 
 # GitHub Deployments API states -> DeployLens lifecycle states. "queued" and
@@ -60,13 +62,48 @@ async def _resolve_org_by_github_org_id(session: AsyncSession, github_org_id: in
     return result.scalar_one_or_none()
 
 
+async def _resolve_org_for_installation_account(session: AsyncSession, account: dict) -> uuid.UUID | None:
+    """Resolve the KubeX org a GitHub App installation binds to.
+
+    A GitHub *org* install matches Organization.github_org_id. A *personal
+    account* install (account.type == "User") has no github_org_id to match
+    — GitHub personal orgs are the auto-created ones with a NULL
+    github_org_id (auth.py::_upsert_organization) — so fall back to the
+    personal org owned by the user whose github_id is the account id.
+    """
+    account_id = account.get("id")
+    org_id = await _resolve_org_by_github_org_id(session, account_id)
+    if org_id is not None or account_id is None:
+        return org_id
+
+    if account.get("type") == "User":
+        row = (
+            await session.execute(
+                select(OrgMembership.org_id)
+                .join(User, User.id == OrgMembership.user_id)
+                .join(Organization, Organization.id == OrgMembership.org_id)
+                .where(
+                    User.github_id == account_id,
+                    OrgMembership.role == "owner",
+                    Organization.github_org_id.is_(None),
+                )
+            )
+        ).scalars().all()
+        # Only bind when it's unambiguous — a user could own several
+        # personal-scoped orgs in theory; guessing one would be a
+        # cross-tenant hazard (CLAUDE.md decision 9).
+        if len(row) == 1:
+            return row[0]
+    return None
+
+
 async def _handle_installation(session: AsyncSession, action: str, payload: dict) -> dict:
     installation_data = payload.get("installation", {})
     github_installation_id = installation_data.get("id")
     account = installation_data.get("account", {})
     account_login = account.get("login", "")
 
-    org_id = await _resolve_org_by_github_org_id(session, account.get("id"))
+    org_id = await _resolve_org_for_installation_account(session, account)
     await _log_event(session, org_id, "github_app", "installation", payload)
 
     if org_id is None:
