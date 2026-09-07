@@ -19,11 +19,6 @@ export function Onboarding() {
   const [deployMethod, setDeployMethod] = useState<DeployMethod | null>(null)
   const [metricsMethod, setMetricsMethod] = useState<MetricsMethod | null>(null)
   const [webhookApiKey, setWebhookApiKey] = useState<string | null>(null)
-  // ponytail: the health-check URL is captured but not persisted — there's
-  // no service to attach it to during onboarding. Wire it to
-  // PUT /api/services/:name/health-check once the org's first deployment
-  // exists.
-  const [healthCheckUrl, setHealthCheckUrl] = useState('')
   const [showAddCluster, setShowAddCluster] = useState(false)
 
   const { data: installations } = useInstallations()
@@ -86,8 +81,6 @@ export function Onboarding() {
             value={metricsMethod}
             onChange={setMetricsMethod}
             onAddCluster={() => setShowAddCluster(true)}
-            healthCheckUrl={healthCheckUrl}
-            onHealthCheckUrlChange={setHealthCheckUrl}
           />
         )}
         {step === 3 && (
