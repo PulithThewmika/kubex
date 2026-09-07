@@ -112,7 +112,7 @@ describe('Services page', () => {
     await screen.findByText('orders')
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zzz' } })
 
-    expect(screen.getByText(/no services match the current filters/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /no matching services/i })).toBeInTheDocument()
   })
 
   it('shows an error state when the services request fails', async () => {
