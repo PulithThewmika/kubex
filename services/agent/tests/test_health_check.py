@@ -97,7 +97,7 @@ async def test_run_health_checks_skips_service_not_yet_due():
 
 
 @pytest.mark.asyncio
-async def test_run_health_checks_pings_due_services_concurrently():
+async def test_run_health_checks_pings_due_services_concurrently() -> None:
     """A slow/unreachable endpoint must not serialize the whole tick —
     max_instances=1 on the scheduler job means an overrun tick is silently
     dropped, not queued (run.py)."""
@@ -111,7 +111,7 @@ async def test_run_health_checks_pings_due_services_concurrently():
     ]
     session.execute = AsyncMock(return_value=result)
 
-    async def slow_ping(url):
+    async def slow_ping(url: str) -> hc.HealthCheckResult:
         await asyncio.sleep(0.2)
         return hc.HealthCheckResult(
             checked_at=datetime.now(timezone.utc), status_code=200, response_time_ms=200,
