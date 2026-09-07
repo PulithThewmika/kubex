@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 type GrafanaPanelProps = {
   uid: string
@@ -57,8 +58,17 @@ export function GrafanaPanel({ uid, panelId, service, from = 'now-6h', to = 'now
         </div>
       )}
       {status === 'error' && (
-        <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-sm text-failed">
-          Failed to load {title} panel.
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 p-4 text-center">
+          <p className="text-sm font-medium text-text">Metrics unavailable</p>
+          <p className="text-xs text-text-muted">
+            The {title} panel couldn't load. If this service has no metrics source yet, connect one.
+          </p>
+          <Link
+            to="/app/settings?tab=connections"
+            className="mt-1 text-xs font-medium text-accent hover:underline"
+          >
+            Connect Prometheus
+          </Link>
         </div>
       )}
       <iframe

@@ -27,6 +27,7 @@ describe('AuthContext', () => {
       org_id: '2',
       org_name: 'Acme',
       org_slug: 'acme',
+      onboarding_completed: true,
     }
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(me), { status: 200 })))
 
@@ -57,6 +58,7 @@ describe('AuthContext', () => {
       org_id: '2',
       org_name: 'Acme',
       org_slug: 'acme',
+      onboarding_completed: true,
     }
     const fetchMock = vi
       .fn()
@@ -82,6 +84,7 @@ describe('AuthContext', () => {
       org_id: '2',
       org_name: 'Acme',
       org_slug: 'acme',
+      onboarding_completed: true,
     }
     const fetchMock = vi
       .fn()
