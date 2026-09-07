@@ -30,10 +30,7 @@ def prepare_database_url(url: str) -> tuple[str, dict]:
 
     connect_args: dict = {}
     if "supabase" in url:
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        connect_args["ssl"] = ssl_context
+        connect_args["ssl"] = ssl._create_unverified_context()
         if ":6543" in url:
             connect_args["statement_cache_size"] = 0
     return url, connect_args

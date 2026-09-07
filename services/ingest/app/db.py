@@ -29,10 +29,7 @@ def prepare_database_url(url: str) -> tuple[str, dict]:
 
     connect_args: dict = {}
     if "supabase" in url:
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        connect_args["ssl"] = ssl_context
+        connect_args["ssl"] = ssl._create_unverified_context()
         # Transaction-mode pooler (port 6543) doesn't support asyncpg's
         # server-side prepared statements. We default to the session
         # pooler (5432), but disable statement caching unconditionally
