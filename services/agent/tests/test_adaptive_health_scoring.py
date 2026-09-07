@@ -8,7 +8,7 @@ import pytest
 
 from agent import health_check as hc
 from agent.health_check import HealthCheckResult
-from agent.health_score import compute_health_check_score, no_metrics_score, compute_health_score
+from agent.health_score import compute_health_check_score, no_metrics_score, compute_health_score, _coverage
 
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -33,6 +33,37 @@ class TestPrometheusSource:
         _, _, details = compute_health_score(metrics)
         assert details["metrics_source"] == "prometheus"
         assert details["low_confidence"] is False
+
+    def test_low_confidence_on_prometheus_data_gap(self) -> None:
+        """E23-T4-S10: <50% of the per-component queries returned data in
+        either window -> low_confidence, even with an otherwise healthy
+        score (coverage defaults to 1.0 when omitted, see the test above)."""
+        metrics = {
+            "error_rate_base": 0.01, "error_rate_post": 0.01,
+            "latency_p99_base_ms": 100.0, "latency_p99_post_ms": 100.0,
+            "restarts_base": 0.0, "restarts_post": 0.0,
+            "request_rate_base": 10.0, "request_rate_post": 10.0,
+            "coverage_base": 1.0, "coverage_post": 0.25,
+        }
+        _, _, details = compute_health_score(metrics)
+        assert details["low_confidence"] is True
+        assert details["coverage"]["post"] == 0.25
+
+    def test_coverage_ignores_traffic_dependent_none_values(self) -> None:
+        """_coverage() must not flag a genuinely quiet component (zero
+        traffic -> error_rate/latency_p99/request_rate legitimately None)
+        as a data gap -- only "restarts" (kube-state-metrics, unrelated to
+        app traffic) is used as the scrape-presence signal."""
+        quiet_component = {
+            "error_rate": None, "latency_p99": None, "restarts": 0.0, "request_rate": None,
+        }
+        assert _coverage([quiet_component]) == 1.0
+
+    def test_coverage_flags_real_scrape_gap(self) -> None:
+        gapped_component = {
+            "error_rate": None, "latency_p99": None, "restarts": None, "request_rate": None,
+        }
+        assert _coverage([gapped_component]) == 0.0
 
 
 class TestHealthCheckSource:
@@ -77,6 +108,36 @@ class TestHealthCheckSource:
         )
         assert details["low_confidence"] is True
         assert details["coverage"]["post"] == 0.0
+
+    def test_unreachable_after_three_consecutive_failures(self) -> None:
+        """E23-T4-S9: 3+ consecutive failed pings at the end of the
+        observation window -> scored as 100% error and flagged unreachable,
+        regardless of how many earlier pings in the window succeeded."""
+        base = [_result(BASE_START + timedelta(minutes=i), 200, 50) for i in range(10)]
+        post = (
+            [_result(OBS_START + timedelta(minutes=i), 200, 50) for i in range(7)]
+            + [_result(OBS_START + timedelta(minutes=7 + i), None, 50) for i in range(3)]
+        )
+        _, verdict, details = compute_health_check_score(
+            base + post, BASE_START, BASE_END, OBS_START, OBS_END, interval_s=180,
+        )
+        assert details["unreachable"] is True
+        assert details["raw_metrics"]["error_rate_post"] == pytest.approx(1.0)
+        # error_rate weight (40) * penalty(1.0) = 40 -> score 60 -> degraded,
+        # not failed: response_time barely moves since only the tail failed.
+        assert verdict == "degraded"
+
+    def test_not_unreachable_below_threshold(self) -> None:
+        base = [_result(BASE_START + timedelta(minutes=i), 200, 50) for i in range(10)]
+        post = (
+            [_result(OBS_START + timedelta(minutes=i), 200, 50) for i in range(8)]
+            + [_result(OBS_START + timedelta(minutes=8 + i), None, 50) for i in range(2)]
+        )
+        _, _, details = compute_health_check_score(
+            base + post, BASE_START, BASE_END, OBS_START, OBS_END, interval_s=180,
+        )
+        assert details["unreachable"] is False
+        assert details["raw_metrics"]["error_rate_post"] == pytest.approx(0.2)
 
     def test_no_results_in_either_window(self) -> None:
         score, verdict, details = compute_health_check_score(
