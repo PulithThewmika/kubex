@@ -127,12 +127,18 @@ async def test_run_health_checks_pings_due_services_concurrently() -> None:
 
 
 def test_ring_buffer_caps_at_configured_size():
-    for i in range(hc.HEALTH_CHECK_RING_BUFFER_SIZE + 5):
+    """Capacity is whichever is larger: HEALTH_CHECK_RING_BUFFER_SIZE, or
+    enough to span baseline+observation windows at this service's interval
+    (E23-T2 needs to read back that far to score) — see _buffer_capacity.
+    """
+    interval_s = 30
+    capacity = hc._buffer_capacity(interval_s)
+    for i in range(capacity + 5):
         hc.record_result(3, hc.HealthCheckResult(
             checked_at=datetime.now(timezone.utc) + timedelta(seconds=i),
             status_code=200, response_time_ms=i,
-        ))
+        ), interval_s)
 
     stored = hc.get_results(3)
-    assert len(stored) == hc.HEALTH_CHECK_RING_BUFFER_SIZE
-    assert stored[-1].response_time_ms == hc.HEALTH_CHECK_RING_BUFFER_SIZE + 4
+    assert len(stored) == capacity
+    assert stored[-1].response_time_ms == capacity + 4

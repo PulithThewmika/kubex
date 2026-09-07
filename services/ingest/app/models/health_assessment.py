@@ -20,7 +20,7 @@ class HealthAssessment(Base):
     deployment_id: Mapped[int] = mapped_column(
         ForeignKey("deployments.id", ondelete="CASCADE"), unique=True, nullable=False
     )
-    score: Mapped[int] = mapped_column(Integer, nullable=False)
+    score: Mapped[int | None] = mapped_column(Integer)
     verdict: Mapped[str] = mapped_column(String, nullable=False)
     error_rate_base: Mapped[float | None] = mapped_column(Float)
     error_rate_post: Mapped[float | None] = mapped_column(Float)
