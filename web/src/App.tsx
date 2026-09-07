@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthErrorState } from './components/auth/AuthErrorState'
 import { RequireAuth } from './components/auth/RequireAuth'
 import { AppLayout } from './components/layout/AppLayout'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ToastProvider } from './contexts/ToastContext'
 import { OnboardingGate } from './components/onboarding/OnboardingGate'
@@ -34,36 +35,38 @@ function App() {
       <ToastProvider>
         <AuthProvider>
           <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<RootRoute />} />
-              <Route path="/login" element={<Login />} />
-              <Route
-                path="/app"
-                element={
-                  <RequireAuth>
-                    <AppLayout />
-                  </RequireAuth>
-                }
-              >
+            <ErrorBoundary>
+              <Routes>
+                <Route path="/" element={<RootRoute />} />
+                <Route path="/login" element={<Login />} />
                 <Route
-                  index
+                  path="/app"
                   element={
-                    <OnboardingGate>
-                      <Overview />
-                    </OnboardingGate>
+                    <RequireAuth>
+                      <AppLayout />
+                    </RequireAuth>
                   }
-                />
-                <Route path="onboarding" element={<Onboarding />} />
-                <Route path="services" element={<Services />} />
-                <Route path="services/:name" element={<ServiceDeepDive />} />
-                <Route path="alerts" element={<Alerts />} />
-                <Route path="deployments/:id" element={<DeployDetail />} />
-                <Route path="chat" element={<Chat />} />
-                <Route path="settings" element={<Settings />} />
+                >
+                  <Route
+                    index
+                    element={
+                      <OnboardingGate>
+                        <Overview />
+                      </OnboardingGate>
+                    }
+                  />
+                  <Route path="onboarding" element={<Onboarding />} />
+                  <Route path="services" element={<Services />} />
+                  <Route path="services/:name" element={<ServiceDeepDive />} />
+                  <Route path="alerts" element={<Alerts />} />
+                  <Route path="deployments/:id" element={<DeployDetail />} />
+                  <Route path="chat" element={<Chat />} />
+                  <Route path="settings" element={<Settings />} />
+                  <Route path="*" element={<NotFound />} />
+                </Route>
                 <Route path="*" element={<NotFound />} />
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+              </Routes>
+            </ErrorBoundary>
           </BrowserRouter>
         </AuthProvider>
       </ToastProvider>
