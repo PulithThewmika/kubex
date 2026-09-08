@@ -19,7 +19,7 @@ export function Login() {
     <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-background px-4">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(55%_100%_at_50%_0%,rgba(249,115,22,0.10),transparent_70%)]"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(55%_100%_at_50%_0%,rgba(0,230,118,0.10),transparent_70%)]"
       />
       <div className="relative w-full max-w-sm rounded-xl border border-border bg-surface-raised p-8 text-center shadow-raised">
         <Logo className="justify-center" markClassName="h-9 w-9" />

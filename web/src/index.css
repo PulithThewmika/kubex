@@ -86,6 +86,36 @@
       -webkit-text-stroke-width: 3px;
     }
   }
+
+  /* Infinite marquee. Track holds the content twice; -50% loops seamlessly.
+     Pauses on hover. Reduced-motion is handled by the global block below,
+     which freezes it at the start (still legible — the content is doubled). */
+  .marquee {
+    overflow: hidden;
+  }
+
+  .marquee-track {
+    display: inline-flex;
+    white-space: nowrap;
+    animation: marquee 38s linear infinite;
+  }
+
+  .marquee-track--rev {
+    animation-direction: reverse;
+  }
+
+  .marquee:hover .marquee-track {
+    animation-play-state: paused;
+  }
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
