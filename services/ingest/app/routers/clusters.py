@@ -164,7 +164,10 @@ async def list_pending_queries(
         .where(ClusterQuery.cluster_id == cluster.id, ClusterQuery.status == "pending")
         .order_by(ClusterQuery.requested_at)
     )
-    return [ClusterQueryResponse(id=str(q.id), promql=q.promql) for q in result.scalars().all()]
+    return [
+        ClusterQueryResponse(id=str(q.id), promql=q.promql, kind=q.kind or "instant", params=q.params)
+        for q in result.scalars().all()
+    ]
 
 
 @router.post("/{cluster_id}/results", status_code=204, response_model=None)

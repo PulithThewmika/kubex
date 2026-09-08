@@ -137,6 +137,9 @@ services:
       SUPABASE_DB_NAME: ${SUPABASE_DB_NAME:-postgres}
       SUPABASE_GRAFANA_RO_USER: ${SUPABASE_GRAFANA_RO_USER:-}
       SUPABASE_GRAFANA_RO_PASSWORD: ${SUPABASE_GRAFANA_RO_PASSWORD:-}
+      # Bearer the kubex-prometheus datasource sends to ingest's /api/prom
+      # relay (#832). Must match ingest's GRAFANA_DATASOURCE_TOKEN.
+      GRAFANA_DATASOURCE_TOKEN: ${GRAFANA_DATASOURCE_TOKEN:-}
     volumes:
       - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro

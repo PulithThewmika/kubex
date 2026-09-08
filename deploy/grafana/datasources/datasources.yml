@@ -1,17 +1,26 @@
 apiVersion: 1
 
 datasources:
-  # ── Prometheus (metrics from Kind cluster, port-forwarded to host) ──
+  # ── Prometheus (org-scoped, via the ingest cluster-agent relay, #832) ──
+  # NOT a Prometheus — ingest's /api/prom speaks the Prometheus HTTP API
+  # but resolves the caller's org (org_id="..." matcher, injected by the
+  # panel proxy) to that org's connected cluster and relays the query
+  # through cluster_queries. The bearer is what makes the in-query org id
+  # trustworthy (see app/auth.py::verify_grafana_datasource_token).
   - name: Prometheus
     uid: kubex-prometheus
     type: prometheus
     access: proxy
-    url: http://host.docker.internal:9090
+    url: http://ingest:8000/api/prom
     isDefault: true
     editable: false
     jsonData:
-      httpMethod: POST
+      # GET so the relay endpoint only has to read query params.
+      httpMethod: GET
       timeInterval: "15s"
+      httpHeaderName1: Authorization
+    secureJsonData:
+      httpHeaderValue1: "Bearer $__env{GRAFANA_DATASOURCE_TOKEN}"
 
   # ── Loki (logs from Kind cluster, port-forwarded to host) ──────────
   - name: Loki
