@@ -1,0 +1,68 @@
+name: Deploy to Demo VM
+
+# Redeploys the single-VM demo stack (ingest + agent + mcp-server + grafana,
+# behind Caddy) on every push to main that touches a service or the compose
+# config. The VM builds images from source — it does not pull ghcr — so this
+# is just: pull main, `compose up -d --build`.
+#
+# Required repo secrets:
+#   VM_SSH_HOST    - e.g. 4.194.194.0
+#   VM_SSH_USER    - e.g. azureuser
+#   VM_SSH_KEY     - private key (PEM) whose public half is in the VM's authorized_keys
+#   VM_DEPLOY_DIR  - absolute path to the kubex checkout on the VM, e.g. /home/azureuser/kubex
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "deploy/docker-compose.yml"
+      - "deploy/docker-compose.azure.yml"
+      - "deploy/Caddyfile"
+      - ".github/workflows/deploy-vm.yml"
+  workflow_dispatch:
+
+# Never run two deploys at once against the same box.
+concurrency:
+  group: deploy-vm
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH deploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_SSH_HOST }}
+          username: ${{ secrets.VM_SSH_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.VM_DEPLOY_DIR }}"
+            git fetch --prune origin
+            git checkout main
+            git reset --hard origin/main
+            cd deploy
+            docker compose -f docker-compose.yml -f docker-compose.azure.yml up -d --build
+            docker image prune -f
+
+      - name: Verify OAuth redirect_uri points at the shell origin
+        run: |
+          set -euo pipefail
+          # Give the container a moment to come up.
+          for i in $(seq 1 10); do
+            body=$(curl -fsS -i "https://kubex-demo-pt.southeastasia.cloudapp.azure.com/auth/github" || true)
+            redirect=$(printf '%s' "$body" | grep -oi 'redirect_uri=[^&]*' | head -1 || true)
+            [ -n "$redirect" ] && break
+            sleep 6
+          done
+          echo "served: $redirect"
+          case "$redirect" in
+            *kubex-nu.vercel.app*) echo "ok" ;;
+            *) echo "::error::redirect_uri is not the shell origin — check SHELL_URL on the VM"; exit 1 ;;
+          esac
