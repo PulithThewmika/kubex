@@ -116,7 +116,7 @@ export function SummaryStep({
         type="button"
         onClick={onFinish}
         disabled={finishing}
-        className="w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90 disabled:opacity-50"
+        className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px disabled:opacity-50"
       >
         {finishing ? 'Finishing…' : 'Go to Dashboard'}
       </button>
