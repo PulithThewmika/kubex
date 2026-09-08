@@ -1,3 +1,4 @@
+import { HandwritingText } from '@/components/ui/handwriting-text'
 import { Reveal } from '../components/landing/Reveal'
 import { Ticker } from '../components/landing/Ticker'
 import { TornEdge } from '../components/landing/TornEdge'
@@ -88,8 +89,17 @@ function Hero({ cta }: { cta: Cta }) {
               <span className="block text-[14vw] leading-[0.8] text-outline text-text sm:text-[11vw] lg:text-[6.4rem]">
                 last deploy
               </span>
-              <span className="block text-[14vw] leading-[0.82] sm:text-[11vw] lg:text-[6.4rem]">
-                made it worse
+              {/* Pen writes the verdict, then inks it in — the one script note
+                  against the block caps. Degrades to plain text if the CDN
+                  font can't load. */}
+              <span className="mt-1 block normal-case text-[15vw] leading-none text-accent sm:text-[12vw] lg:text-[5.5rem]">
+                <HandwritingText
+                  words={['made it worse.', 'made it better.', 'shipped clean.', 'broke prod.']}
+                  interval={3600}
+                  duration={1.8}
+                  height="1em"
+                  className="text-accent"
+                />
               </span>
             </h1>
             <p className="mt-10 max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
