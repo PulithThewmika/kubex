@@ -24,14 +24,14 @@ export function ApiKeyCreateModal({ onClose }: ApiKeyCreateModalProps) {
     <Modal titleId="create-api-key-title" title="Create API key" onClose={handleClose}>
       {created ? (
         <div className="mt-4 flex flex-col gap-4">
-          <p className="text-sm text-text-muted">
+          <p className="font-body text-xs font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
             Copy this key now — it's shown only once. If you lose it, revoke it and create a new one.
           </p>
           <CodeBlock code={created.token} />
           <button
             type="button"
             onClick={onClose}
-            className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px"
+            className="w-fit border-2 border-accent bg-accent px-5 py-2.5 font-body text-xs font-bold uppercase tracking-wide text-background transition-colors hover:bg-accent-hover active:translate-y-px"
           >
             Done
           </button>
@@ -45,24 +45,26 @@ export function ApiKeyCreateModal({ onClose }: ApiKeyCreateModalProps) {
             createMutation.mutate(name.trim(), { onSuccess: setCreated })
           }}
         >
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-text">Key name</span>
+          <label className="flex flex-col gap-2 font-body text-xs font-bold uppercase tracking-wide">
+            <span className="text-text">Key name</span>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="CI pipeline"
               autoFocus
-              className="rounded-md border border-border-strong bg-background px-3 py-2 text-sm text-text focus:border-accent focus:outline-none"
+              className="border-2 border-border-strong bg-background px-3 py-2.5 font-body text-sm normal-case tracking-normal text-text focus:border-accent focus:outline-none"
             />
           </label>
           {createMutation.isError && (
-            <p className="text-sm text-failed">{(createMutation.error as Error).message}</p>
+            <p className="font-body text-xs font-bold uppercase tracking-wide text-failed">
+              {(createMutation.error as Error).message}
+            </p>
           )}
           <button
             type="submit"
             disabled={name.trim().length === 0 || createMutation.isPending}
-            className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px disabled:opacity-50"
+            className="w-fit border-2 border-accent bg-accent px-5 py-2.5 font-body text-xs font-bold uppercase tracking-wide text-background transition-colors hover:bg-accent-hover active:translate-y-px disabled:opacity-50"
           >
             {createMutation.isPending ? 'Creating…' : 'Create key'}
           </button>
