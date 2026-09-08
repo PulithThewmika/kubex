@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import ALERTMANAGER_URL
+from .notify import notify_slack
 
 logger = logging.getLogger("kubex.agent.alerting")
 
@@ -148,11 +149,21 @@ async def fire_alert(
     except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
         logger.warning("Failed to post alert to Alertmanager (alert still in DB): %s", e)
 
+    await notify_slack(org_id, "deploy_health", f"{title}\n{description}", service_id=service_id)
+
     return alert_id
 
 
-async def resolve_alert(session: AsyncSession, alert_id: int, service_name: str, deployment_id: int) -> None:
-    """Send endsAt to Alertmanager and update alerts.resolved_at."""
+async def resolve_alert(
+    session: AsyncSession, alert_id: int, service_name: str, deployment_id: int, org_id=None, service_id=None,
+) -> None:
+    """Send endsAt to Alertmanager and update alerts.resolved_at.
+
+    org_id/service_id are optional only for backward compatibility with any
+    caller that predates the Slack notify call below — every real caller
+    (reconciliation.py) already has both in hand from its own alert row
+    query and should always pass them.
+    """
     now = datetime.now(timezone.utc)
 
     # Fetch severity from the alert row so the resolution label set matches the firing payload
@@ -191,3 +202,8 @@ async def resolve_alert(session: AsyncSession, alert_id: int, service_name: str,
         logger.info("Alert resolution sent to Alertmanager for deployment %d", deployment_id)
     except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
         logger.warning("Failed to send resolution to Alertmanager (DB already updated): %s", e)
+
+    if org_id is not None:
+        await notify_slack(
+            org_id, "deploy_health", f"✅ Deploy #{deployment_id} of {service_name} recovered", service_id=service_id,
+        )
