@@ -116,6 +116,21 @@
       transform: translateX(-50%);
     }
   }
+
+  /* One pulse travelling each hub→node connector in the integration graph.
+     dashoffset runs from the node end of the line to just past the hub. */
+  .graph-flow {
+    animation: graph-flow 2.6s linear infinite;
+  }
+
+  @keyframes graph-flow {
+    from {
+      stroke-dashoffset: 132;
+    }
+    to {
+      stroke-dashoffset: -14;
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
