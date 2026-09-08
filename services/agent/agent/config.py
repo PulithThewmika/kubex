@@ -88,6 +88,14 @@ PROM_URL = os.environ.get("PROM_URL", "http://localhost:9090")
 
 ALERTMANAGER_URL = os.environ.get("ALERTMANAGER_URL", "http://localhost:9093")
 
+# Slack delivery (via ingest's /internal/notify, app/routers/notify_internal.py)
+# — ingest owns the Slack OAuth tokens and notification_channels; the agent
+# only fires/resolves alerts and asks ingest to deliver them. Same shared
+# secret ingest already uses for MCP-server -> ingest internal calls
+# (auth.verify_internal_token), reused here in the agent -> ingest direction.
+INGEST_URL = os.environ.get("INGEST_URL", "http://ingest:8000")
+MCP_INTERNAL_TOKEN = os.environ.get("MCP_INTERNAL_TOKEN", "")
+
 BASELINE_WINDOW = os.environ.get("BASELINE_WINDOW", "30m")
 BASELINE_WINDOW_SECONDS = _parse_duration(BASELINE_WINDOW)
 
