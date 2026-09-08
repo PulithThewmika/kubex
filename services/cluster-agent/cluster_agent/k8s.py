@@ -92,11 +92,14 @@ def _find_deployment_sync(name_substrings: tuple[str, ...]) -> tuple[str, str] |
     return None
 
 
-def _find_service_sync(name_substrings: tuple[str, ...]) -> tuple[str, str] | None:
+def _find_service_sync(
+    name_substrings: tuple[str, ...], exclude_substrings: tuple[str, ...] = (),
+) -> tuple[str, str] | None:
     services = _call(_core_v1().list_service_for_all_namespaces)
     for svc in services.items:
-        if any(sub in svc.metadata.name for sub in name_substrings):
-            return svc.metadata.namespace, svc.metadata.name
+        name = svc.metadata.name
+        if any(sub in name for sub in name_substrings) and not any(ex in name for ex in exclude_substrings):
+            return svc.metadata.namespace, name
     return None
 
 
@@ -125,9 +128,18 @@ async def find_prometheus() -> tuple[str, str] | None:
 async def find_loki() -> tuple[str, str] | None:
     """Discover a Loki Service (#840). Grafana's single-binary Helm chart
     names it 'loki'; distributed-mode installs commonly expose
-    'loki-gateway'; the older loki-stack chart uses 'loki-stack'."""
+    'loki-gateway'; the older loki-stack chart uses 'loki-stack'.
+
+    Excludes 'canary'/'memberlist' — the standard Loki Helm chart's
+    companion services (loki-canary: a synthetic-monitoring sidecar,
+    loki-*-memberlist: gossip-ring discovery) both contain 'loki' as a
+    substring and are not query-capable; matching one of them instead of
+    the real Loki service silently breaks every relayed LogQL query
+    (found in review, #840, before this ever shipped)."""
     return await asyncio.to_thread(
-        _find_service_sync, ("loki-gateway", "loki-stack", "loki")
+        _find_service_sync,
+        ("loki-gateway", "loki-stack", "loki"),
+        ("canary", "memberlist"),
     )
 
 

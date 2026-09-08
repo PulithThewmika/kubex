@@ -251,8 +251,9 @@ async def test_unreachable_alert_skipped_without_crashing_batch(mock_session):
 
         await reconcile_active_alerts(mock_session)
 
-        # orders' counter is untouched, not reset to 0 and not incremented —
-        # this cycle simply didn't produce data for it.
-        assert 50 not in _recovery_counters
+        # orders' counter is reset to 0, same treatment as a low_confidence
+        # cycle — "consecutive" healthy cycles must stay genuinely
+        # consecutive, not skip over a gap with no information.
+        assert _recovery_counters[50] == 0
         # payments (a different, reachable cluster) still got processed.
         assert _recovery_counters[51] == 1
