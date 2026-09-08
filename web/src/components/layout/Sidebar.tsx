@@ -78,8 +78,55 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/app/services', label: 'Services', icon: ServicesIcon },
   { to: '/app/alerts', label: 'Alerts', icon: AlertsIcon },
   { to: '/app/chat', label: 'Chat', icon: ChatIcon },
-  { to: '/app/settings', label: 'Settings', icon: SettingsIcon },
 ]
+
+const SETTINGS_ITEM: NavItem = { to: '/app/settings', label: 'Settings', icon: SettingsIcon }
+
+// Styled after the landing header's "Sign in with GitHub" CTA — a bordered
+// square that's always visible, fills orange when active, inverts to the dark
+// surface and lifts on hover.
+const navItemClass = ({ isActive }: { isActive: boolean }) =>
+  `group relative flex items-center justify-center gap-3 border-2 border-background px-3 py-2.5 font-body text-xs font-bold uppercase tracking-[0.15em] transition-all duration-300 motion-reduce:transform-none lg:justify-start ${
+    isActive
+      ? 'bg-accent text-background'
+      : 'bg-text text-background/60 hover:-translate-y-0.5 hover:scale-[1.03] hover:bg-background hover:text-text'
+  }`
+
+function NavRow({ item, badge }: { item: NavItem; badge: number | null }) {
+  const { to, label, icon: Icon } = item
+  return (
+    <NavLink
+      to={to}
+      end={to === '/app'}
+      aria-label={badge ? `${label}, ${badge} active` : label}
+      title={label}
+      className={navItemClass}
+    >
+      <span className="relative shrink-0">
+        <Icon className="h-5 w-5" />
+        {badge && (
+          <span
+            className="absolute -right-1.5 -top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-failed px-1 text-[10px] font-bold leading-none text-white lg:hidden"
+            aria-hidden="true"
+          >
+            {badge > 9 ? '9+' : badge}
+          </span>
+        )}
+      </span>
+      <span className="hidden lg:inline" aria-hidden="true">
+        {label}
+      </span>
+      {badge && (
+        <span
+          className="ml-auto hidden bg-failed px-1.5 py-0.5 text-xs font-bold tabular-nums text-white lg:inline"
+          aria-hidden="true"
+        >
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
+    </NavLink>
+  )
+}
 
 export function Sidebar() {
   // Derived from the per-service active_alert_count already on /api/services
@@ -93,49 +140,16 @@ export function Sidebar() {
       <div className="flex h-14 items-center justify-center border-b-2 border-background px-3 lg:justify-start lg:px-4">
         <img src="/header-logo.png" alt="KubeX Platform" className="h-8 w-auto select-none" />
       </div>
-      <nav className="flex flex-1 flex-col gap-1 p-2 lg:p-3">
-        {NAV_ITEMS.map(({ to, label, icon: Icon }) => {
-          const badge = to === '/app/alerts' && activeAlertCount > 0 ? activeAlertCount : null
-          return (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/app'}
-              aria-label={badge ? `${label}, ${badge} active` : label}
-              title={label}
-              className={({ isActive }) =>
-                `group relative flex items-center justify-center gap-3 border-2 px-3 py-2.5 font-body text-xs font-bold uppercase tracking-[0.15em] transition-colors lg:justify-start ${
-                  isActive
-                    ? 'border-background bg-accent text-background'
-                    : 'border-transparent text-background/55 hover:border-background/30 hover:text-accent'
-                }`
-              }
-            >
-              <span className="relative shrink-0">
-                <Icon className="h-5 w-5" />
-                {badge && (
-                  <span
-                    className="absolute -right-1.5 -top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-failed px-1 text-[10px] font-bold leading-none text-white lg:hidden"
-                    aria-hidden="true"
-                  >
-                    {badge > 9 ? '9+' : badge}
-                  </span>
-                )}
-              </span>
-              <span className="hidden lg:inline" aria-hidden="true">
-                {label}
-              </span>
-              {badge && (
-                <span
-                  className="ml-auto hidden bg-failed px-1.5 py-0.5 text-xs font-bold tabular-nums text-white lg:inline"
-                  aria-hidden="true"
-                >
-                  {badge > 99 ? '99+' : badge}
-                </span>
-              )}
-            </NavLink>
-          )
-        })}
+      <nav className="flex flex-1 flex-col gap-2 p-2 lg:p-3">
+        {NAV_ITEMS.map((item) => (
+          <NavRow
+            key={item.to}
+            item={item}
+            badge={item.to === '/app/alerts' && activeAlertCount > 0 ? activeAlertCount : null}
+          />
+        ))}
+        <div className="flex-1" aria-hidden="true" />
+        <NavRow item={SETTINGS_ITEM} badge={null} />
       </nav>
     </aside>
   )

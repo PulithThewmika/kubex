@@ -61,7 +61,7 @@ export function ClustersSection({ onAddCluster, onRotateToken }: ClustersSection
   const { data: clusters, isLoading, isError } = useClusters()
 
   return (
-    <section className="mt-10">
+    <section className="mt-8">
       <div className="flex items-center justify-between">
         <h2 className="font-body text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">Clusters</h2>
         <button
