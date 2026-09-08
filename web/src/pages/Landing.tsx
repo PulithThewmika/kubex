@@ -1,4 +1,5 @@
 import { HandwritingText } from '@/components/ui/handwriting-text'
+import { IntegrationGraph } from '@/components/ui/integration-graph'
 import { Reveal } from '../components/landing/Reveal'
 import { Ticker } from '../components/landing/Ticker'
 import { TornEdge } from '../components/landing/TornEdge'
@@ -43,32 +44,6 @@ function Nav({ cta }: { cta: Cta }) {
         </a>
       </div>
     </header>
-  )
-}
-
-// The KubeX mark, framed like a printed plate: an offset accent block behind
-// a stencilled border, halftone wash, registration ticks in the corners.
-function LogoPlate() {
-  return (
-    <div className="relative w-fit" style={{ transform: 'rotate(-3deg)' }}>
-      <div aria-hidden="true" className="absolute inset-0 translate-x-3 translate-y-3 bg-accent sm:translate-x-4 sm:translate-y-4" />
-      <div className="relative border-2 border-text bg-background p-8 sm:p-12">
-        <div aria-hidden="true" className="absolute inset-0 text-accent/25 halftone" />
-        {['left-1.5 top-1.5', 'right-1.5 top-1.5 rotate-90', 'right-1.5 bottom-1.5 rotate-180', 'left-1.5 bottom-1.5 -rotate-90'].map((p) => (
-          <span key={p} className={`absolute z-10 h-3 w-3 border-l-2 border-t-2 border-accent ${p}`} aria-hidden="true" />
-        ))}
-        <img
-          src="/kubex-logo.png"
-          alt="KubeX"
-          width={256}
-          height={256}
-          className="relative z-10 h-44 w-44 object-contain drop-shadow-[0_8px_28px_rgba(255,87,34,0.35)] sm:h-64 sm:w-64"
-        />
-      </div>
-      <div className="absolute -bottom-3 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap border-2 border-text bg-accent px-3 py-1 font-display text-xs uppercase tracking-[0.2em] text-background">
-        One record per deploy
-      </div>
-    </div>
   )
 }
 
@@ -124,8 +99,8 @@ function Hero({ cta }: { cta: Cta }) {
               </a>
             </div>
           </Reveal>
-          <Reveal delayMs={120} className="flex justify-center lg:justify-end">
-            <LogoPlate />
+          <Reveal delayMs={120} className="w-full">
+            <IntegrationGraph />
           </Reveal>
         </div>
       </div>
