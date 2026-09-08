@@ -232,7 +232,7 @@ export function CinematicFooter({ cta }: { cta: Cta }) {
           <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-1 flex-col items-center justify-center px-6">
             <h2
               ref={headingRef}
-              className="mb-12 text-center font-display text-6xl uppercase leading-[0.82] tracking-tight text-background md:text-8xl"
+              className="mb-12 text-center font-display text-6xl uppercase leading-[0.82] tracking-tight text-background sm:text-8xl lg:text-9xl"
             >
               See every <span className="text-accent">deploy.</span>
             </h2>
@@ -242,18 +242,18 @@ export function CinematicFooter({ cta }: { cta: Cta }) {
                 <MagneticButton
                   as="a"
                   href={cta.href}
-                  className="group flex items-center gap-3 border-2 border-background bg-background px-8 py-4 font-display text-sm uppercase tracking-wide text-text transition-colors hover:bg-accent hover:text-background md:text-base"
+                  className="group flex items-center gap-3 border-2 border-background bg-background px-8 py-4 font-display text-xl uppercase tracking-wide text-text transition-colors hover:bg-accent hover:text-background md:text-2xl"
                 >
-                  <LogIn className="h-5 w-5" />
+                  <LogIn className="h-6 w-6" />
                   {cta.label}
                 </MagneticButton>
                 <MagneticButton
                   as="a"
                   href="#how"
-                  className="group flex items-center gap-3 border-2 border-background px-8 py-4 font-display text-sm uppercase tracking-wide text-background transition-colors hover:bg-background hover:text-text md:text-base"
+                  className="group flex items-center gap-3 border-2 border-background px-8 py-4 font-display text-xl uppercase tracking-wide text-background transition-colors hover:bg-background hover:text-text md:text-2xl"
                 >
                   How it works
-                  <ArrowRight className="h-5 w-5" />
+                  <ArrowRight className="h-6 w-6" />
                 </MagneticButton>
               </div>
 
@@ -263,7 +263,7 @@ export function CinematicFooter({ cta }: { cta: Cta }) {
                     key={l.label}
                     as="a"
                     href={l.href}
-                    className="border-2 border-background px-5 py-2.5 font-body text-xs font-bold uppercase tracking-widest text-background transition-colors hover:bg-accent hover:text-background md:text-sm"
+                    className="border-2 border-background px-6 py-3 font-body text-sm font-bold uppercase tracking-widest text-background transition-colors hover:bg-accent hover:text-background md:text-base"
                   >
                     {l.label}
                   </MagneticButton>
@@ -272,18 +272,18 @@ export function CinematicFooter({ cta }: { cta: Cta }) {
             </div>
           </div>
 
-          {/* Bottom bar */}
-          <div className="relative z-20 flex w-full flex-col items-center justify-between gap-6 border-t-2 border-background/20 px-6 py-6 md:flex-row md:px-12">
-            <div className="order-2 font-body text-[10px] font-bold uppercase tracking-widest text-background/60 md:order-1 md:text-xs">
+          {/* Bottom bar — black strip */}
+          <div className="relative z-20 flex w-full flex-col items-center justify-between gap-6 border-t-2 border-background bg-background px-6 py-6 text-text md:flex-row md:px-12">
+            <div className="order-2 font-body text-[10px] font-bold uppercase tracking-widest text-text/60 md:order-1 md:text-xs">
               © 2026 KubeX
             </div>
 
-            <div className="order-1 flex items-center gap-2 border-2 border-background px-5 py-2.5 md:order-2">
-              <span className="font-body text-[10px] font-bold uppercase tracking-widest text-background/70 md:text-xs">
+            <div className="order-1 flex items-center gap-2 border-2 border-text px-5 py-2.5 md:order-2">
+              <span className="font-body text-[10px] font-bold uppercase tracking-widest text-text/70 md:text-xs">
                 Built with
               </span>
               <Heart className="kx-anim-heartbeat h-4 w-4 fill-accent text-accent" />
-              <span className="font-body text-[10px] font-bold uppercase tracking-widest text-background/70 md:text-xs">
+              <span className="font-body text-[10px] font-bold uppercase tracking-widest text-text/70 md:text-xs">
                 for shipping teams
               </span>
             </div>
@@ -292,7 +292,7 @@ export function CinematicFooter({ cta }: { cta: Cta }) {
               as="button"
               onClick={scrollToTop}
               aria-label="Back to top"
-              className="group order-3 flex h-11 w-11 items-center justify-center border-2 border-background text-background transition-colors hover:bg-accent hover:text-background"
+              className="group order-3 flex h-11 w-11 items-center justify-center border-2 border-text text-text transition-colors hover:bg-accent hover:text-background"
             >
               <ArrowUp className="h-5 w-5 transition-transform duration-300 group-hover:-translate-y-1" />
             </MagneticButton>
