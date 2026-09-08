@@ -5,6 +5,8 @@
 @layer base {
   html {
     scroll-behavior: smooth;
+    /* keep anchor targets clear of the sticky header (native fallback + keyboard nav) */
+    scroll-padding-top: 5.5rem;
   }
 
   body {
@@ -58,6 +60,98 @@
   code,
   .font-mono {
     font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  /* Newsprint halftone — a dot screen that tints to `currentColor`. Put it on
+     an element whose text colour is set (accent / text / background). */
+  .halftone {
+    background-image: radial-gradient(currentColor 1.1px, transparent 1.4px);
+    background-size: 7px 7px;
+  }
+
+  .halftone-lg {
+    background-image: radial-gradient(currentColor 2px, transparent 2.6px);
+    background-size: 13px 13px;
+  }
+
+  /* Outlined poster type — transparent fill, stroked edge. Keep a text colour
+     class alongside it (e.g. text-accent); that drives the stroke colour. */
+  .text-outline {
+    -webkit-text-stroke-width: 2px;
+    -webkit-text-fill-color: transparent;
+  }
+
+  @media (min-width: 1024px) {
+    .text-outline {
+      -webkit-text-stroke-width: 3px;
+    }
+  }
+
+  /* Infinite marquee. Track holds the content twice; -50% loops seamlessly.
+     Pauses on hover. Reduced-motion is handled by the global block below,
+     which freezes it at the start (still legible — the content is doubled). */
+  .marquee {
+    overflow: hidden;
+  }
+
+  .marquee-track {
+    display: inline-flex;
+    white-space: nowrap;
+    animation: marquee 38s linear infinite;
+  }
+
+  .marquee-track--rev {
+    animation-direction: reverse;
+  }
+
+  .marquee:hover .marquee-track {
+    animation-play-state: paused;
+  }
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  /* A glowing comet travelling each node→hub connector in the integration
+     graph. Paths carry pathLength="1", so the dash maths is length-independent
+     and every connector, long or short, takes the same time. */
+  .graph-flow {
+    animation: graph-flow 3s linear infinite;
+  }
+
+  @keyframes graph-flow {
+    from {
+      stroke-dashoffset: 1;
+    }
+    to {
+      stroke-dashoffset: -0.16;
+    }
+  }
+
+  .graph-glow {
+    filter: drop-shadow(0 0 2px #ff5722) drop-shadow(0 0 6px rgba(255, 87, 34, 0.55));
+  }
+
+  /* Nodes drift so the graph never sits perfectly still. */
+  .graph-float {
+    animation: graph-float 5s ease-in-out infinite;
+  }
+
+  @keyframes graph-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-7px);
+    }
   }
 }
 

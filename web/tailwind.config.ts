@@ -2,7 +2,7 @@ import type { Config } from 'tailwindcss'
 
 // KubeX design system — dark-tech observability.
 // Direction: a single cool-tinted near-black surface ladder (not pure black),
-// the brand orange as the one accent, and a GitHub-Primer-adjacent status
+// a luminous green as the one accent, and a GitHub-Primer-adjacent status
 // palette (green/amber/red/blue) that the SRE audience already reads fluently
 // and that clears WCAG AA on the dark surfaces. Dark-only by design — dark is
 // the product's identity, not a mode.
@@ -18,9 +18,12 @@ export default {
         border: '#262A31',
         'border-strong': '#363B44',
 
-        // The one accent.
-        accent: '#F97316',
-        'accent-hover': '#FB9A4B',
+        // The one accent — a warm poster orange (Material Deep Orange 500).
+        // Warmer and easier on the eye than a neon green over long reading,
+        // and it's the maximalist landing's single hot colour. Kept clear of
+        // the muted `healthy` status green so it never reads as state.
+        accent: '#FF5722',
+        'accent-hover': '#FF7A50',
 
         // Text ladder.
         text: '#E6E8EB',
@@ -35,6 +38,9 @@ export default {
         info: '#58A6FF',
       },
       fontFamily: {
+        // Maximalist poster display face for the marketing site — condensed,
+        // heavy, all-caps. Never used inside the app shell.
+        display: ['Anton', 'Impact', 'Haettenschweiler', 'system-ui', 'sans-serif'],
         heading: ['Mohave', 'system-ui', 'sans-serif'],
         body: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
