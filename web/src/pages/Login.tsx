@@ -1,4 +1,5 @@
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Logo } from '../components/layout/Logo'
 import { safeRedirectPath } from '../lib/safeRedirect'
 
 function GitHubIcon() {
@@ -15,18 +16,33 @@ export function Login() {
   const githubHref = `/auth/github?redirect=${encodeURIComponent(redirect)}`
 
   return (
-    <div className="flex h-dvh items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-8 text-center shadow-sm">
-        <h1 className="font-heading text-2xl font-semibold tracking-wide text-text">KubeX</h1>
-        <p className="mt-2 text-sm text-text-muted">Deployment-aware observability, in one place.</p>
+    <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-background px-4">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(55%_100%_at_50%_0%,rgba(249,115,22,0.10),transparent_70%)]"
+      />
+      <div className="relative w-full max-w-sm rounded-xl border border-border bg-surface-raised p-8 text-center shadow-raised">
+        <Logo className="justify-center" markClassName="h-9 w-9" />
+        <p className="mt-4 text-sm leading-relaxed text-text-muted">
+          Deployment-aware observability, in one place.
+        </p>
         <a
           href={githubHref}
-          className="mt-6 flex w-full items-center justify-center gap-2 rounded-md bg-text px-4 py-2.5 text-sm font-medium text-background transition-colors hover:opacity-90"
+          className="mt-6 flex w-full items-center justify-center gap-2 rounded-md border border-border-strong bg-surface px-4 py-2.5 text-sm font-semibold text-text transition-colors hover:border-accent hover:text-accent"
         >
           <GitHubIcon />
           Sign in with GitHub
         </a>
+        <p className="mt-4 text-xs text-text-faint">
+          KubeX only requests the access it needs to read your workflow runs.
+        </p>
       </div>
+      <Link
+        to="/"
+        className="relative mt-6 text-sm text-text-muted transition-colors hover:text-text"
+      >
+        Back to home
+      </Link>
     </div>
   )
 }
