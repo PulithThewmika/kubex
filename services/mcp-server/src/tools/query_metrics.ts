@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { queryOne } from "../clients/postgres.js";
 import { rangeQuery, type PromRangeResult } from "../clients/prometheus.js";
+import { orgFilter } from "./org-filter.js";
 
 const METRIC_NAMES = [
   "error_rate",
@@ -212,15 +213,16 @@ function formatValue(v: number, metric: MetricName): string {
 
 // ── Service lookup ─────────────────────────────────────────────
 
-interface ServiceRow {
+export interface ServiceRow {
   name: string;
   namespace: string;
 }
 
-async function resolveService(name: string): Promise<ServiceRow | null> {
+export async function resolveService(name: string, orgId: string | null): Promise<ServiceRow | null> {
+  const org = orgFilter(orgId, 2, "org_id");
   return queryOne<ServiceRow>(
-    `SELECT name, namespace FROM services WHERE name = $1`,
-    [name],
+    `SELECT name, namespace FROM services WHERE name = $1 ${org.clause}`,
+    [name, ...org.params],
   );
 }
 
@@ -232,8 +234,8 @@ export async function queryMetrics(input: {
   from: string;
   to?: string;
   step?: string;
-}): Promise<{ content: { type: "text"; text: string }[] }> {
-  const svc = await resolveService(input.service);
+}, orgId: string | null): Promise<{ content: { type: "text"; text: string }[] }> {
+  const svc = await resolveService(input.service, orgId);
   if (!svc) {
     return {
       content: [{
@@ -284,6 +286,7 @@ export async function queryMetrics(input: {
       startEpoch.toString(),
       endEpoch.toString(),
       step,
+      orgId,
     );
   } catch (err) {
     return {

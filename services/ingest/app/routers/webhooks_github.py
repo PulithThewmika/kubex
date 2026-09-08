@@ -1,5 +1,6 @@
 import json
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import case
@@ -10,14 +11,17 @@ from ..auth import verify_github_signature
 from ..correlation.engine import (
     extract_image_tag,
     parse_iso_timestamp,
+    resolve_org_id,
     resolve_service,
     utcnow,
 )
 from ..db import get_session
 from ..models.deployment import Deployment
 from ..models.pipeline_event import PipelineEvent
+from ..models.safety_score import SafetyScore
+from ..safety_score import compute_safety_score
 
-logger = logging.getLogger("deploylens.webhooks.github")
+logger = logging.getLogger("kubex.webhooks.github")
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -31,9 +35,16 @@ async def github_webhook(
     payload = json.loads(body)
 
     event_type = request.headers.get("X-GitHub-Event", "unknown")
+    repo_full_name = payload.get("repository", {}).get("full_name", "")
+
+    # Read-only lookup (no auto-registration) so a non-workflow_run event
+    # for an unknown repo doesn't create a service row before we even know
+    # whether this event type is one we act on.
+    org_id = await resolve_org_id(session, repo=repo_full_name or None)
 
     await session.execute(
         PipelineEvent.__table__.insert().values(
+            org_id=org_id,
             source="github_actions",
             event_type=event_type,
             payload=payload,
@@ -45,15 +56,24 @@ async def github_webhook(
         logger.info("Received non-workflow_run event '%s', stored in pipeline_events only", event_type)
         return {"status": "ignored", "reason": f"event type '{event_type}' not handled"}
 
-    action = payload.get("action")
-    workflow_run = payload.get("workflow_run", {})
-    repo_full_name = payload.get("repository", {}).get("full_name", "")
-
     if not repo_full_name:
         await session.commit()
         return {"status": "ignored", "reason": "missing repository.full_name"}
 
-    service_id = await resolve_service(session, repo=repo_full_name)
+    return await process_workflow_run(session, org_id, repo_full_name, payload)
+
+
+async def process_workflow_run(
+    session: AsyncSession, org_id: uuid.UUID, repo_full_name: str, payload: dict,
+) -> dict:
+    """Shared by the classic per-repo webhook and the GitHub App webhook
+    (E21-T2) — org_id is resolved differently by each caller (repo lookup
+    vs. installation_id -> installations table), everything after that is
+    identical."""
+    action = payload.get("action")
+    workflow_run = payload.get("workflow_run", {})
+
+    service_id, org_id = await resolve_service(session, org_id=org_id, repo=repo_full_name)
     workflow_run_id = workflow_run.get("id")
     commit_sha = workflow_run.get("head_sha")
     branch = workflow_run.get("head_branch")
@@ -67,6 +87,7 @@ async def github_webhook(
 
     if action == "requested":
         stmt = pg_insert(Deployment).values(
+            org_id=org_id,
             service_id=service_id,
             commit_sha=commit_sha,
             branch=branch,
@@ -92,13 +113,42 @@ async def github_webhook(
                 "image_tag": stmt.excluded.image_tag,
             },
         )
-        await session.execute(stmt)
+        stmt = stmt.returning(Deployment.id)
+        deployment_id = (await session.execute(stmt)).scalar_one()
+
+        # Safety scoring is a stretch feature (E14) layered on top of core
+        # deployment tracking (M1/M2) — a bug or transient failure in it
+        # (a bad CFR query, GitHub/Prometheus being unreachable) must never
+        # prevent the deployment itself from being recorded. Isolate it in
+        # a savepoint so a failure here rolls back only the safety-score
+        # work, not the deployment insert above.
+        score = None
+        try:
+            async with session.begin_nested():
+                score, factors = await compute_safety_score(session, service_id, commit_sha, payload)
+                safety_stmt = pg_insert(SafetyScore).values(
+                    deployment_id=deployment_id,
+                    score=score,
+                    risk_factors=factors,
+                )
+                safety_stmt = safety_stmt.on_conflict_do_update(
+                    index_elements=["deployment_id"],
+                    set_={"score": safety_stmt.excluded.score, "risk_factors": safety_stmt.excluded.risk_factors},
+                )
+                await session.execute(safety_stmt)
+        except Exception as e:
+            logger.warning(
+                "Safety score computation failed for deployment_id=%d, continuing without it: %s",
+                deployment_id, e,
+            )
+            score = None
+
         await session.commit()
         logger.info(
-            "Deployment building: service_id=%d workflow_run_id=%s commit=%s branch=%s",
-            service_id, workflow_run_id, commit_sha, branch,
+            "Deployment building: service_id=%d workflow_run_id=%s commit=%s branch=%s (safety_score=%s)",
+            service_id, workflow_run_id, commit_sha, branch, score,
         )
-        return {"status": "ok", "deployment_status": "building"}
+        return {"status": "ok", "deployment_status": "building", "safety_score": score}
 
     elif action == "completed":
         conclusion = workflow_run.get("conclusion")
@@ -117,6 +167,7 @@ async def github_webhook(
             new_build_status = conclusion or "failure"
 
         stmt = pg_insert(Deployment).values(
+            org_id=org_id,
             service_id=service_id,
             commit_sha=commit_sha,
             branch=branch,
@@ -134,10 +185,26 @@ async def github_webhook(
             index_elements=["workflow_run_id"],
             index_where=Deployment.workflow_run_id.is_not(None),
             set_={
-                "status": new_status,
+                # ArgoCD can sync (and fire its own webhook) before this
+                # "completed" event arrives, if its poll happens to land
+                # while the build is still running. Don't let a late build
+                # completion regress a deployment ArgoCD has already
+                # advanced past the build phase (e.g. back from "deployed"
+                # to "built") — only apply status/finished_at while the
+                # deployment is still pre-sync. "build_failed" is included
+                # (unlike the "requested" branch's guard) because a manual
+                # GitHub Actions re-run reuses the same workflow_run_id and
+                # must still be able to transition build_failed -> built.
+                "status": case(
+                    (Deployment.status.in_(["pending", "building", "build_failed"]), new_status),
+                    else_=Deployment.status,
+                ),
                 "build_status": new_build_status,
                 "build_duration_s": build_duration_s,
-                "finished_at": utcnow(),
+                "finished_at": case(
+                    (Deployment.status.in_(["pending", "building", "build_failed"]), utcnow()),
+                    else_=Deployment.finished_at,
+                ),
                 "image_tag": stmt.excluded.image_tag,
             },
         )

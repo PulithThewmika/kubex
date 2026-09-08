@@ -1,21 +1,26 @@
 services:
-  # ── PostgreSQL 16 ──────────────────────────────────────────────
-  # The central database — every DeployLens component reads/writes here.
-  # Creates the "deploylens" database automatically on first start.
+  # ── PostgreSQL 16 (opt-in local escape hatch) ───────────────────
+  # The platform database is managed Supabase Postgres by default (see
+  # DATABASE_URL in .env, #817) — this container is NOT started unless
+  # you explicitly opt in with:
+  #   docker compose --profile local-db up
+  # and point DATABASE_URL at postgresql+asyncpg://kubex:<pw>@postgres:5432/kubex
+  # yourself for offline/no-Supabase dev.
   postgres:
     image: postgres:16
-    container_name: deploylens-postgres
+    container_name: kubex-postgres
     restart: unless-stopped
+    profiles: ["local-db"]
     environment:
-      POSTGRES_DB: deploylens
-      POSTGRES_USER: deploylens
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-deploylens}
+      POSTGRES_DB: kubex
+      POSTGRES_USER: kubex
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kubex}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U deploylens -d deploylens"]
+      test: ["CMD-SHELL", "pg_isready -U kubex -d kubex"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -28,14 +33,16 @@ services:
     build:
       context: ../services/ingest
       dockerfile: Dockerfile
-    container_name: deploylens-ingest
+    container_name: kubex-ingest
     restart: unless-stopped
     ports:
       - "8000:8000"
     env_file:
       - ../.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://deploylens:${POSTGRES_PASSWORD:-deploylens}@postgres:5432/deploylens
+      # DATABASE_URL itself comes from env_file above (Supabase by
+      # default — see .env's Supabase section). Only override it here
+      # when explicitly running the local-db profile.
       PROM_URL: ${PROM_URL:-http://host.docker.internal:9090}
       OBSERVATION_WINDOW: ${OBSERVATION_WINDOW:-15m}
       BASELINE_WINDOW: ${BASELINE_WINDOW:-30m}
@@ -46,6 +53,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+        required: false
       mcp-server:
         condition: service_started
       grafana:
@@ -59,12 +67,12 @@ services:
     build:
       context: ../services/agent
       dockerfile: Dockerfile
-    container_name: deploylens-agent
+    container_name: kubex-agent
     restart: unless-stopped
     env_file:
       - ../.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://deploylens:${POSTGRES_PASSWORD:-deploylens}@postgres:5432/deploylens
+      # DATABASE_URL comes from env_file above — see the ingest block.
       PROM_URL: ${PROM_URL:-http://host.docker.internal:9090}
       ALERTMANAGER_URL: ${ALERTMANAGER_URL:-http://host.docker.internal:9093}
       BASELINE_WINDOW: ${BASELINE_WINDOW:-30m}
@@ -72,6 +80,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+        required: false
 
   # ── MCP Server ─────────────────────────────────────────────────
   # Model Context Protocol server exposing deployment, metrics,
@@ -80,17 +89,28 @@ services:
     build:
       context: ../services/mcp-server
       dockerfile: Dockerfile
-    container_name: deploylens-mcp
+    container_name: kubex-mcp
     restart: unless-stopped
+    env_file:
+      - ../.env
     environment:
-      DATABASE_URL: postgresql://deploylens:${POSTGRES_PASSWORD:-deploylens}@postgres:5432/deploylens
-      PROM_URL: ${PROM_URL:-http://host.docker.internal:9090}
-      LOKI_URL: ${LOKI_URL:-http://host.docker.internal:3100}
+      # DATABASE_URL and MCP_INTERNAL_TOKEN come from env_file above —
+      # don't redeclare MCP_INTERNAL_TOKEN as ${MCP_INTERNAL_TOKEN} here,
+      # it resolves empty without an explicit --env-file flag and
+      # crash-loops the server.
+      # PROM_URL/LOKI_URL removed (#840) — this server no longer talks to
+      # Prometheus/Loki directly, it relays through ingest's
+      # /internal/relay/* endpoints (see INGEST_URL below).
+      INGEST_URL: ${INGEST_URL:-http://ingest:8000}
       MCP_TRANSPORT: http
       MCP_HTTP_PORT: "3001"
+      # MCP_INTERNAL_TOKEN comes from env_file (../.env) above — don't
+      # redeclare it here as ${MCP_INTERNAL_TOKEN}, which resolves blank
+      # and crash-loops the server when compose runs without --env-file.
     depends_on:
       postgres:
         condition: service_healthy
+        required: false
 
   # ── Grafana ────────────────────────────────────────────────────
   # Visualization layer — provisioned datasources (Prometheus, Loki,
@@ -98,25 +118,57 @@ services:
   # Embedding enabled for the React shell iframe integration.
   grafana:
     image: grafana/grafana:11.6.0
-    container_name: deploylens-grafana
+    container_name: kubex-grafana
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-deploylens}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-kubex}
       GF_SECURITY_ALLOW_EMBEDDING: "true"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_SECURITY_COOKIE_SAMESITE: lax
       GF_SERVER_SERVE_FROM_SUB_PATH: "false"
+      # Only the fields datasources.yml's $__env{} expansion needs —
+      # deliberately NOT `env_file: ../.env`, which would hand this
+      # container every ingest secret (ANTHROPIC_API_KEY,
+      # MCP_INTERNAL_TOKEN, JWT_SECRET, GitHub OAuth/App secrets) it has
+      # no reason to hold.
+      SUPABASE_DB_HOST: ${SUPABASE_DB_HOST:-}
+      SUPABASE_DB_PORT: ${SUPABASE_DB_PORT:-5432}
+      SUPABASE_DB_NAME: ${SUPABASE_DB_NAME:-postgres}
+      SUPABASE_GRAFANA_RO_USER: ${SUPABASE_GRAFANA_RO_USER:-}
+      SUPABASE_GRAFANA_RO_PASSWORD: ${SUPABASE_GRAFANA_RO_PASSWORD:-}
+      # Bearer the kubex-prometheus datasource sends to ingest's /api/prom
+      # relay (#832). Must match ingest's GRAFANA_DATASOURCE_TOKEN.
+      GRAFANA_DATASOURCE_TOKEN: ${GRAFANA_DATASOURCE_TOKEN:-}
+      # Server-side PNG rendering (#835). The embedded panels are static
+      # 256px images in the shell — rendering them to PNG sidesteps the
+      # /d-solo/ HTML's relative-path asset 404s (E11-T2). Grafana calls
+      # the renderer, which loads the panel back from GF_RENDERING_CALLBACK_URL.
+      GF_RENDERING_SERVER_URL: http://renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana:3000/
     volumes:
       - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./certs/supabase-root-2021-ca.pem:/etc/grafana/certs/supabase-root-2021-ca.pem:ro
       - grafana_data:/var/lib/grafana
     depends_on:
       postgres:
         condition: service_healthy
+        required: false
+
+  renderer:
+    image: grafana/grafana-image-renderer:3.11.6
+    container_name: kubex-grafana-renderer
+    restart: unless-stopped
+    environment:
+      ENABLE_METRICS: "false"
+      # The renderer only ever needs to reach Grafana on the compose net.
+      RENDERING_MODE: default
+    expose:
+      - "8081"
 
 volumes:
-  pgdata:
+  pgdata:  # only populated when running --profile local-db
   grafana_data:

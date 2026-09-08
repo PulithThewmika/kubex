@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, Request
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +10,7 @@ from ..correlation.engine import (
     extract_image_tag,
     extract_image_tag_from_images,
     find_matching_deployment,
+    resolve_org_id,
     resolve_service,
     utcnow,
 )
@@ -16,7 +18,7 @@ from ..db import get_session
 from ..models.deployment import Deployment
 from ..models.pipeline_event import PipelineEvent
 
-logger = logging.getLogger("deploylens.webhooks.argocd")
+logger = logging.getLogger("kubex.webhooks.argocd")
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -36,8 +38,14 @@ async def argocd_webhook(
     operation_state = app_data.get("status", {}).get("operationState", {})
     event_type = payload.get("type", "unknown")
 
+    # Read-only lookup (no auto-registration) so an event for an unknown
+    # app doesn't create a service row before we even know whether this
+    # event has a usable revision.
+    org_id = await resolve_org_id(session, argocd_app=app_name or None)
+
     await session.execute(
         PipelineEvent.__table__.insert().values(
+            org_id=org_id,
             source="argocd",
             event_type=event_type,
             payload=payload,
@@ -48,7 +56,7 @@ async def argocd_webhook(
         await session.commit()
         return {"status": "ignored", "reason": "missing app.metadata.name"}
 
-    service_id = await resolve_service(session, argocd_app=app_name)
+    service_id, org_id = await resolve_service(session, org_id=org_id, argocd_app=app_name)
 
     if not revision:
         revision = operation_state.get("syncResult", {}).get("revision", "")
@@ -68,6 +76,52 @@ async def argocd_webhook(
         session, service_id, commit_sha=revision, image_tag=image_tag,
     )
 
+    if existing:
+        # A prior ArgoCD event for this same revision may have already fired
+        # before the real deployment could be identified (e.g. on-sync-running
+        # arriving before the GitHub workflow_run completes), creating an
+        # orphan row that claimed (argocd_revision, service_id). Now that a
+        # later event has correlated this revision to the real deployment
+        # via commit_sha/image_tag, that orphan is a stale duplicate of the
+        # same physical deployment — remove it so the merge below doesn't
+        # collide with the unique index on (argocd_revision, service_id).
+        stale_orphan = (
+            await session.execute(
+                select(Deployment).where(
+                    Deployment.service_id == service_id,
+                    Deployment.argocd_revision == revision,
+                    Deployment.id != existing.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if stale_orphan is not None:
+            if stale_orphan.status == "assessed":
+                # The orphan already has a health assessment (and possibly
+                # an alert) attached — deleting it would cascade-delete that
+                # real data. This means it sat unmerged long enough for the
+                # agent to score it (ArgoCD stuck between on-sync-running
+                # and on-sync-succeeded for a full OBSERVATION_WINDOW),
+                # unusual enough that we bail out here rather than either
+                # losing that history or crashing on the unique-index
+                # collision the merge below would otherwise hit.
+                await session.commit()
+                logger.warning(
+                    "Stale orphan deployment_id=%d (revision=%s) already assessed — "
+                    "skipping merge into deployment_id=%d to avoid losing its health "
+                    "assessment; needs manual reconciliation",
+                    stale_orphan.id, revision, existing.id,
+                )
+                return {
+                    "status": "ignored",
+                    "reason": f"revision {revision} already assessed on a different deployment "
+                              f"(id={stale_orphan.id}); manual reconciliation required",
+                }
+            logger.info(
+                "Reconciling stale orphan deployment_id=%d (revision=%s) into deployment_id=%d",
+                stale_orphan.id, revision, existing.id,
+            )
+            await session.delete(stale_orphan)
+
     if event_type == "on-sync-running":
         if existing:
             existing.status = "syncing"
@@ -81,6 +135,7 @@ async def argocd_webhook(
             return {"status": "ok", "deployment_status": "syncing", "correlation": correlation_method}
 
         stmt = pg_insert(Deployment).values(
+            org_id=org_id,
             service_id=service_id,
             commit_sha=revision,
             status="syncing",
@@ -119,6 +174,7 @@ async def argocd_webhook(
             return {"status": "ok", "deployment_status": "deployed", "correlation": correlation_method}
 
         stmt = pg_insert(Deployment).values(
+            org_id=org_id,
             service_id=service_id,
             commit_sha=revision,
             status="deployed",
@@ -159,6 +215,7 @@ async def argocd_webhook(
             return {"status": "ok", "deployment_status": "sync_failed", "correlation": correlation_method}
 
         stmt = pg_insert(Deployment).values(
+            org_id=org_id,
             service_id=service_id,
             commit_sha=revision,
             status="sync_failed",

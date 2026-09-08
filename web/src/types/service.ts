@@ -10,6 +10,16 @@ export type HealthSummary = {
   verdict: string | null
 }
 
+export type CDSource = 'argocd' | 'github_deployments' | 'webhook'
+export type MetricsSource = 'prometheus' | 'health_check'
+
+export type IntegrationStatus = {
+  ci: boolean
+  cd: CDSource | null
+  metrics: MetricsSource | null
+  available_features: string[]
+}
+
 export type Service = {
   id: number
   name: string
@@ -19,4 +29,8 @@ export type Service = {
   latest_deploy: LatestDeployInfo | null
   health: HealthSummary | null
   active_alert_count: number
+  deploy_count_30d: number
+  cluster_id: string | null
+  cluster_name: string | null
+  integration_status: IntegrationStatus
 }

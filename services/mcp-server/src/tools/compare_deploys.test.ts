@@ -19,7 +19,7 @@ const makeRow = (overrides: Partial<Record<string, unknown>> = {}) => ({
   id: 1,
   service_id: 1,
   service_name: "orders",
-  namespace: "deploylens",
+  namespace: "kubex",
   status: "deployed",
   finished_at: new Date("2026-08-29T10:00:00Z"),
   commit_sha: "abc123",
@@ -44,7 +44,7 @@ describe("compareDeploys", () => {
       { metric: {}, value: [1700000000, "0.02"] },
     ]);
 
-    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 });
+    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.summary).toContain("Comparing orders deploys #1");
@@ -58,7 +58,7 @@ describe("compareDeploys", () => {
   it("returns an error when one deployment is not found", async () => {
     mockedQuery.mockResolvedValue([makeRow({ id: 1 })]);
 
-    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 999 });
+    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 999 }, null);
     const parsed = parseResult(result);
 
     expect(parsed).toEqual({
@@ -73,7 +73,7 @@ describe("compareDeploys", () => {
       makeRow({ id: 2, service_id: 2, service_name: "payments" }),
     ]);
 
-    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 });
+    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.error).toBe("Both deployments must belong to the same service");
@@ -87,11 +87,25 @@ describe("compareDeploys", () => {
       makeRow({ id: 2 }),
     ]);
 
-    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 });
+    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.error).toBe("Both deployments must have finished_at timestamps");
     expect(parsed.summary).toContain("have not finished yet");
+  });
+
+  it("scopes the query to the given org_id", async () => {
+    mockedQuery.mockResolvedValue([
+      makeRow({ id: 1, health_score: 92, health_verdict: "healthy" }),
+      makeRow({ id: 2, health_score: 60, health_verdict: "degraded" }),
+    ]);
+    mockedInstantQuery.mockResolvedValue([]);
+
+    await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 }, "org-a");
+
+    const [sql, params] = mockedQuery.mock.calls[0];
+    expect(sql).toContain("s.org_id = $3");
+    expect(params).toEqual([1, 2, "org-a"]);
   });
 
   it("returns comparison with a Prometheus-unreachable warning and adapted summary", async () => {
@@ -101,7 +115,7 @@ describe("compareDeploys", () => {
     ]);
     mockedInstantQuery.mockRejectedValue(new Error("connection refused"));
 
-    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 });
+    const result = await compareDeploys({ deployment_id_a: 1, deployment_id_b: 2 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.warning).toBe("Prometheus unreachable — metric values are null");

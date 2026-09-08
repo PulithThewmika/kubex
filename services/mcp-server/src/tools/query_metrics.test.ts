@@ -1,4 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { queryOne } from "../clients/postgres.js";
+import { rangeQuery } from "../clients/prometheus.js";
 import {
   buildPromQL,
   parseRelativeSeconds,
@@ -6,7 +8,25 @@ import {
   autoStep,
   formatResults,
   sanitizeLabel,
+  queryMetrics,
 } from "./query_metrics.js";
+import { parseResult } from "./test-utils.js";
+
+vi.mock("../clients/postgres.js", () => ({
+  queryOne: vi.fn(),
+}));
+
+vi.mock("../clients/prometheus.js", () => ({
+  rangeQuery: vi.fn(),
+}));
+
+const mockedQueryOne = vi.mocked(queryOne);
+const mockedRangeQuery = vi.mocked(rangeQuery);
+
+beforeEach(() => {
+  mockedQueryOne.mockReset();
+  mockedRangeQuery.mockReset();
+});
 
 describe("sanitizeLabel", () => {
   it("escapes backslash and double quotes", () => {
@@ -25,16 +45,16 @@ describe("sanitizeLabel", () => {
 
 describe("buildPromQL", () => {
   it("builds error_rate query with service and namespace filters", () => {
-    const q = buildPromQL("error_rate", "orders", "deploylens", "5m");
+    const q = buildPromQL("error_rate", "orders", "kubex", "5m");
     expect(q).toContain('service="orders"');
-    expect(q).toContain('namespace="deploylens"');
+    expect(q).toContain('namespace="kubex"');
     expect(q).toContain('status=~"5.."');
     expect(q).toContain("[5m]");
     expect(q).toContain("rate(http_requests_total");
   });
 
   it("builds latency_p99 query with histogram_quantile", () => {
-    const q = buildPromQL("latency_p99", "payments", "deploylens", "10m");
+    const q = buildPromQL("latency_p99", "payments", "kubex", "10m");
     expect(q).toContain("histogram_quantile(0.99");
     expect(q).toContain("http_request_duration_seconds_bucket");
     expect(q).toContain('service="payments"');
@@ -42,25 +62,25 @@ describe("buildPromQL", () => {
   });
 
   it("builds cpu query with container_cpu_usage_seconds_total", () => {
-    const q = buildPromQL("cpu", "frontend", "deploylens", "5m");
+    const q = buildPromQL("cpu", "frontend", "kubex", "5m");
     expect(q).toContain("container_cpu_usage_seconds_total");
     expect(q).toContain('container="frontend"');
   });
 
   it("builds memory query with container_memory_working_set_bytes", () => {
-    const q = buildPromQL("memory", "orders", "deploylens", "5m");
+    const q = buildPromQL("memory", "orders", "kubex", "5m");
     expect(q).toContain("container_memory_working_set_bytes");
     expect(q).not.toContain("[5m]");
   });
 
   it("builds restarts query with kube_pod_container_status_restarts_total", () => {
-    const q = buildPromQL("restarts", "orders", "deploylens", "15m");
+    const q = buildPromQL("restarts", "orders", "kubex", "15m");
     expect(q).toContain("kube_pod_container_status_restarts_total");
     expect(q).toContain("increase(");
   });
 
   it("builds request_rate query", () => {
-    const q = buildPromQL("request_rate", "frontend", "deploylens", "5m");
+    const q = buildPromQL("request_rate", "frontend", "kubex", "5m");
     expect(q).toContain("rate(http_requests_total");
     expect(q).not.toContain("5..");
   });
@@ -167,5 +187,64 @@ describe("formatResults", () => {
     }];
     const points = formatResults(results, "restarts");
     expect(points[0].v).toBe(0);
+  });
+});
+
+describe("queryMetrics", () => {
+  it("returns a data series with unit and summary on the happy path", async () => {
+    mockedQueryOne.mockResolvedValue({ name: "orders", namespace: "kubex" });
+    mockedRangeQuery.mockResolvedValue([
+      { metric: {}, values: [[1700000000, "0.02"], [1700000060, "0.04"]] },
+    ]);
+
+    const result = await queryMetrics({ service: "orders", metric: "error_rate", from: "-1h" }, null);
+    const parsed = parseResult(result);
+
+    expect(parsed).toMatchObject({
+      service: "orders",
+      metric: "error_rate",
+      unit: "fraction",
+      from: "-1h",
+      to: "now",
+    });
+    expect(parsed.data).toHaveLength(2);
+    expect(typeof parsed.summary).toBe("string");
+    expect(typeof parsed.promql).toBe("string");
+  });
+
+  it("scopes the service lookup to the given org_id", async () => {
+    mockedQueryOne.mockResolvedValue({ name: "orders", namespace: "kubex" });
+    mockedRangeQuery.mockResolvedValue([]);
+
+    await queryMetrics({ service: "orders", metric: "error_rate", from: "-1h" }, "org-a");
+
+    const [sql, params] = mockedQueryOne.mock.calls[0];
+    expect(sql).toContain("org_id = $2");
+    expect(params).toEqual(["orders", "org-a"]);
+  });
+
+  it("returns an error object (not a thrown exception) when Prometheus is unreachable", async () => {
+    mockedQueryOne.mockResolvedValue({ name: "orders", namespace: "kubex" });
+    mockedRangeQuery.mockRejectedValue(new Error("connect ECONNREFUSED"));
+
+    const result = await queryMetrics({ service: "orders", metric: "error_rate", from: "-1h" }, null);
+    const parsed = parseResult(result);
+
+    expect(parsed.error).toContain("Prometheus query failed");
+    expect(parsed.summary).toBe("query_metrics failed: Prometheus unreachable or query error");
+    expect(parsed.data).toBeUndefined();
+  });
+
+  it("returns an error object when the service does not exist", async () => {
+    mockedQueryOne.mockResolvedValue(null);
+
+    const result = await queryMetrics({ service: "nonexistent", metric: "error_rate", from: "-1h" }, null);
+    const parsed = parseResult(result);
+
+    expect(parsed).toEqual({
+      error: 'Service "nonexistent" not found',
+      summary: 'query_metrics failed: service "nonexistent" not found',
+    });
+    expect(mockedRangeQuery).not.toHaveBeenCalled();
   });
 });

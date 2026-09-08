@@ -132,3 +132,10 @@ def test_validate_auth_tokens_raises_on_empty_alertmanager():
     with patch("app.auth.ALERTMANAGER_WEBHOOK_TOKEN", ""):
         with pytest.raises(RuntimeError, match="ALERTMANAGER_WEBHOOK_TOKEN"):
             validate_auth_tokens()
+
+
+def test_validate_auth_tokens_raises_on_empty_mcp_internal_token():
+    """Startup rejects empty MCP_INTERNAL_TOKEN (#840 — internal relay auth)."""
+    with patch("app.auth.MCP_INTERNAL_TOKEN", ""):
+        with pytest.raises(RuntimeError, match="MCP_INTERNAL_TOKEN"):
+            validate_auth_tokens()

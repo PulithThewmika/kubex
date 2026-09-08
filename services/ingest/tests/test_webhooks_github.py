@@ -1,9 +1,11 @@
 """Tests for the GitHub webhook handler."""
 
 import json
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.dialects import postgresql
 
 
 def _workflow_run_payload(action="requested", conclusion=None, head_sha="abc1234567890", run_id=12345):
@@ -21,7 +23,7 @@ def _workflow_run_payload(action="requested", conclusion=None, head_sha="abc1234
     return {
         "action": action,
         "workflow_run": wr,
-        "repository": {"full_name": "PulithThewmika/deploylens"},
+        "repository": {"full_name": "PulithThewmika/kubex"},
     }
 
 
@@ -49,6 +51,24 @@ async def test_requested_creates_building(client, sign_github_payload):
 
 
 @pytest.mark.asyncio
+async def test_requested_still_creates_deployment_when_safety_score_fails(client, mock_session, sign_github_payload):
+    """A bug or transient failure in safety scoring (a stretch feature) must
+    never prevent the core deployment record from being created."""
+    with patch(
+        "app.routers.webhooks_github.compute_safety_score",
+        AsyncMock(side_effect=RuntimeError("CFR query failed")),
+    ):
+        resp = await _post_github(client, _workflow_run_payload("requested"), sign_github_payload)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["deployment_status"] == "building"
+    assert data["safety_score"] is None
+    mock_session.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
 async def test_completed_success_creates_built(client, sign_github_payload):
     resp = await _post_github(
         client,
@@ -57,6 +77,43 @@ async def test_completed_success_creates_built(client, sign_github_payload):
     )
     assert resp.status_code == 200
     assert resp.json()["deployment_status"] == "built"
+
+
+@pytest.mark.asyncio
+async def test_completed_does_not_regress_status_past_built(client, mock_session, sign_github_payload):
+    """Regression test: live E2E testing showed ArgoCD can sync (and fire its
+    on-sync-succeeded webhook) before a slower-arriving 'completed' GitHub
+    event lands, if ArgoCD's poll happens to catch the manifest change while
+    the build is still running. A late 'completed' event must not regress
+    the deployment's status/finished_at back from 'deployed' to 'built' —
+    the UPDATE must guard status/finished_at with the same CASE the
+    'requested' branch already uses, only applying while still
+    pending/building."""
+    executed_statements = []
+    original_execute = mock_session.execute
+
+    async def capture_execute(stmt):
+        executed_statements.append(stmt)
+        return await original_execute(stmt)
+
+    mock_session.execute = capture_execute
+
+    resp = await _post_github(
+        client, _workflow_run_payload("completed", conclusion="success"), sign_github_payload,
+    )
+    assert resp.status_code == 200
+
+    deployment_stmts = [
+        s for s in executed_statements if getattr(getattr(s, "table", None), "name", None) == "deployments"
+    ]
+    assert len(deployment_stmts) == 1
+    compiled = str(deployment_stmts[0].compile(dialect=postgresql.dialect()))
+    # Both status and finished_at must be guarded by the same "only while
+    # still pending/building" CASE the "requested" branch uses — a bare
+    # unconditional assignment here is exactly what let ArgoCD's
+    # already-"deployed" status get regressed back to "built".
+    assert "status = CASE WHEN (deployments.status IN" in compiled
+    assert "finished_at = CASE WHEN (deployments.status IN" in compiled
 
 
 @pytest.mark.asyncio
@@ -106,3 +163,34 @@ async def test_unknown_action_ignored(client, sign_github_payload):
     )
     assert resp.status_code == 200
     assert resp.json()["status"] == "ignored"
+
+
+@pytest.mark.asyncio
+async def test_duplicate_workflow_run_delivery_is_idempotent(client, mock_session, sign_github_payload):
+    """Redelivered webhooks must upsert via ON CONFLICT, never a bare insert (see
+    partial unique index on deployments(workflow_run_id))."""
+    executed_statements = []
+    original_execute = mock_session.execute
+
+    async def capture_execute(stmt):
+        executed_statements.append(stmt)
+        return await original_execute(stmt)
+
+    mock_session.execute = capture_execute
+
+    payload = _workflow_run_payload("requested", run_id=99999)
+    resp1 = await _post_github(client, payload, sign_github_payload)
+    resp2 = await _post_github(client, payload, sign_github_payload)
+
+    assert resp1.status_code == 200
+    assert resp2.status_code == 200
+    assert resp1.json() == resp2.json()
+    assert resp1.json()["status"] == "ok"
+    assert resp1.json()["deployment_status"] == "building"
+
+    deployment_stmts = [s for s in executed_statements if getattr(getattr(s, "table", None), "name", None) == "deployments"]
+    assert len(deployment_stmts) == 2
+    for stmt in deployment_stmts:
+        compiled = str(stmt.compile(dialect=postgresql.dialect()))
+        assert "ON CONFLICT" in compiled
+        assert "workflow_run_id" in compiled
