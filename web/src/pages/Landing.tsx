@@ -61,7 +61,7 @@ function LogoPlate() {
           alt="KubeX"
           width={256}
           height={256}
-          className="relative z-10 h-44 w-44 object-contain drop-shadow-[0_8px_28px_rgba(0,230,118,0.35)] sm:h-64 sm:w-64"
+          className="relative z-10 h-44 w-44 object-contain drop-shadow-[0_8px_28px_rgba(0,255,127,0.35)] sm:h-64 sm:w-64"
         />
       </div>
       <div className="absolute -bottom-3 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap border-2 border-text bg-accent px-3 py-1 font-display text-xs uppercase tracking-[0.2em] text-background">
