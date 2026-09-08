@@ -50,6 +50,9 @@ _POLL_INTERVAL = 0.5
 # parser — fine for the dashboard-generated queries that reach this path;
 # revisit if arbitrary user PromQL is ever relayed.
 _ORG_MATCHER = re.compile(r'\borg_id\s*=\s*"([0-9a-fA-F-]{36})"')
+# Optional: a multi-cluster org's customer dashboard can pin a panel to a
+# specific cluster with a cluster="<uuid>" matcher (#836).
+_CLUSTER_MATCHER = re.compile(r'\bcluster\s*=\s*"([0-9a-fA-F-]{36})"')
 
 
 def _error(errtype: str, message: str, status_code: int = 400) -> JSONResponse:
@@ -59,37 +62,48 @@ def _error(errtype: str, message: str, status_code: int = 400) -> JSONResponse:
     )
 
 
-def _extract_org(query: str) -> tuple[str | None, str]:
+def _tidy(query: str) -> str:
+    query = re.sub(r",\s*,", ",", query)  # a, , b -> a,b
+    query = re.sub(r"\{\s*,\s*", "{", query)  # {, x -> {x
+    query = re.sub(r"\s*,\s*\}", "}", query)  # x , } -> x}
+    query = re.sub(r"\{\s+\}", "{}", query)  # {  } -> {}
+    return re.sub(r"\s{2,}", " ", query)  # collapse the gap left behind
+
+
+def _extract_org(query: str) -> tuple[str | None, str | None, str]:
+    """Returns (org_id, cluster_id | None, promql-with-both-matchers-stripped)."""
     m = _ORG_MATCHER.search(query)
     if not m:
-        return None, query
+        return None, None, query
     cleaned = _ORG_MATCHER.sub("", query, count=1)
-    # tidy the separators around the hole we just left
-    cleaned = re.sub(r",\s*,", ",", cleaned)  # a, , b -> a, b
-    cleaned = re.sub(r"\{\s*,\s*", "{", cleaned)  # {, x -> {x
-    cleaned = re.sub(r"\s*,\s*\}", "}", cleaned)  # x , } -> x}
-    cleaned = re.sub(r"\{\s+\}", "{}", cleaned)  # {  } -> {}
-    cleaned = re.sub(r"\s{2,}", " ", cleaned)  # collapse the gap left behind
-    return m.group(1), cleaned
+    cm = _CLUSTER_MATCHER.search(cleaned)
+    cluster = cm.group(1) if cm else None
+    if cm:
+        cleaned = _CLUSTER_MATCHER.sub("", cleaned, count=1)
+    return m.group(1), cluster, _tidy(cleaned)
 
 
 async def _relay(session: AsyncSession, raw_query: str, kind: str, params: dict) -> JSONResponse:
-    org_str, promql = _extract_org(raw_query)
+    org_str, cluster_str, promql = _extract_org(raw_query)
     if org_str is None:
         return _error("bad_data", "query is missing the org_id label matcher")
     try:
         org_id = uuid.UUID(org_str)
+        pinned = uuid.UUID(cluster_str) if cluster_str else None
     except ValueError:
-        return _error("bad_data", "malformed org_id")
+        return _error("bad_data", "malformed org_id or cluster")
 
+    # A pinned cluster still has to belong to the caller's org and be
+    # connected; otherwise fall back to the org's newest connected cluster.
+    conditions = [Cluster.org_id == org_id, Cluster.status == "connected"]
+    if pinned is not None:
+        conditions.append(Cluster.id == pinned)
     cluster_id = await session.scalar(
-        select(Cluster.id)
-        .where(Cluster.org_id == org_id, Cluster.status == "connected")
-        .order_by(Cluster.last_heartbeat.desc().nullslast())
-        .limit(1)
+        select(Cluster.id).where(*conditions).order_by(Cluster.last_heartbeat.desc().nullslast()).limit(1)
     )
     if cluster_id is None:
-        return _error("no_metrics_source", "org has no connected cluster", status_code=502)
+        detail = "pinned cluster is not a connected cluster of this org" if pinned else "org has no connected cluster"
+        return _error("no_metrics_source", detail, status_code=502)
 
     query_id = await session.scalar(
         pg_insert(ClusterQuery)

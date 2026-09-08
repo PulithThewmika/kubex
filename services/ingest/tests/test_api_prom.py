@@ -13,22 +13,30 @@ _AUTH = {"Authorization": "Bearer testtok"}
 
 
 def test_extract_org_strips_the_matcher():
-    org, cleaned = prom._extract_org(
+    org, cluster, cleaned = prom._extract_org(
         f'http_requests_total{{service=~"a|b", org_id="{_ORG}", status=~"5.."}}'
     )
     assert org == _ORG
+    assert cluster is None
     assert "org_id" not in cleaned
     assert cleaned == 'http_requests_total{service=~"a|b", status=~"5.."}'
 
 
 def test_extract_org_trailing_position():
-    org, cleaned = prom._extract_org(f'up{{service="x",org_id="{_ORG}"}}')
+    org, _cluster, cleaned = prom._extract_org(f'up{{service="x",org_id="{_ORG}"}}')
     assert org == _ORG
     assert cleaned == 'up{service="x"}'
 
 
 def test_extract_org_absent():
-    assert prom._extract_org("up{service=\"x\"}") == (None, 'up{service="x"}')
+    assert prom._extract_org('up{service="x"}') == (None, None, 'up{service="x"}')
+
+
+def test_extract_org_with_cluster_pin():
+    cid = "22222222-2222-2222-2222-222222222222"
+    org, cluster, cleaned = prom._extract_org(f'up{{org_id="{_ORG}", cluster="{cid}"}}')
+    assert (org, cluster) == (_ORG, cid)
+    assert "cluster" not in cleaned and "org_id" not in cleaned
 
 
 @pytest.fixture

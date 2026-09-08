@@ -35,6 +35,8 @@ class Cluster(Base):
     argocd_version: Mapped[str | None] = mapped_column(Text)
     argocd_status: Mapped[str | None] = mapped_column(Text)
     prometheus_status: Mapped[str | None] = mapped_column(Text)
+    prometheus_namespace: Mapped[str | None] = mapped_column(Text)
+    prometheus_service: Mapped[str | None] = mapped_column(Text)
     last_heartbeat: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default="now()")

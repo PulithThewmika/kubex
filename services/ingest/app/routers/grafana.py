@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import uuid
 from collections.abc import AsyncIterator
 from urllib.parse import quote
 
@@ -30,6 +31,13 @@ GRAFANA_SERVICE_ACCOUNT_TOKEN = os.environ.get("GRAFANA_SERVICE_ACCOUNT_TOKEN", 
 EMBEDDABLE_DASHBOARD_UIDS = {"deploy-timeline", "customer-dora-scorecard"}
 
 _RE2_META = re.compile(r"([\\.+*?()|\[\]{}^$])")
+
+
+def _as_uuid(value: str) -> uuid.UUID:
+    try:
+        return uuid.UUID(value)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Unknown cluster") from None
 
 
 def _re2_quote(value: str) -> str:
@@ -63,6 +71,7 @@ async def grafana_proxy(
     theme: str = Query(default="light"),
     width: int = Query(default=1000, ge=100, le=3000),
     height: int = Query(default=300, ge=100, le=2000),
+    cluster: str | None = Query(default=None, alias="var-cluster"),
     user: UserContext = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
@@ -116,6 +125,16 @@ async def grafana_proxy(
     if has_source is None:
         raise HTTPException(status_code=503, detail="no metrics source connected")
 
+    # Optional multi-cluster pin (#836): must be one of the caller's own
+    # clusters. The customer dashboards don't expose a picker yet, but the
+    # relay honours a cluster="$cluster" matcher when one is set.
+    if cluster is not None:
+        owns = await session.scalar(
+            select(Cluster.id).where(Cluster.id == _as_uuid(cluster), Cluster.org_id == user.org_id)
+        )
+        if owns is None:
+            raise HTTPException(status_code=404, detail="Unknown cluster")
+
     params = {
         "panelId": panelId,
         # Prometheus panels match service=~"$service" (RE2, auto-anchored);
@@ -128,6 +147,8 @@ async def grafana_proxy(
         "width": width,
         "height": height,
     }
+    if cluster is not None:
+        params["var-cluster"] = cluster
     headers = {"Authorization": f"Bearer {GRAFANA_SERVICE_ACCOUNT_TOKEN}"}
 
     client = _get_client()
