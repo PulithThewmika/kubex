@@ -14,6 +14,7 @@ import uuid
 from collections.abc import AsyncIterator
 
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
 
 from .chat_prompt import SYSTEM_PROMPT
@@ -27,6 +28,16 @@ CHAT_MODEL = os.environ.get("CHAT_MODEL", "gemini-flash-latest")
 MAX_TOKENS = 1024
 # Guards against a runaway tool-call loop (a model that never stops calling tools).
 MAX_TOOL_ITERATIONS = 8
+
+# Gemini's free tier returns these under transient load (observed live,
+# 2026-09-08: two straight 503 UNAVAILABLE "high demand" responses before a
+# third attempt succeeded) — worth a short retry rather than failing the
+# whole chat turn on a moment's congestion. 429 (rate limit) gets the same
+# treatment. Anything else (400 bad request, 401/403 auth) fails immediately
+# — retrying those just wastes the user's wait on an error that won't change.
+_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+_MAX_RETRIES = 2  # up to 3 attempts total
+_RETRY_BASE_DELAY_SECONDS = 1.0
 
 
 def sse(event: str, data: dict) -> str:
@@ -91,27 +102,47 @@ async def run_chat_turn(
     )
 
     for _ in range(MAX_TOOL_ITERATIONS):
-        accumulated_parts: list[types.Part] = []
-        try:
-            stream = await client.aio.models.generate_content_stream(
-                model=CHAT_MODEL,
-                contents=current_contents,
-                config=config,
-            )
-            async for chunk in stream:
-                if chunk.text:
-                    yield sse("text", {"text": chunk.text})
-                if chunk.candidates and chunk.candidates[0].content:
-                    accumulated_parts.extend(chunk.candidates[0].content.parts or [])
-        except Exception:
-            # Headers are already committed to 200 by the time we're
-            # streaming, so a mid-stream LLM failure can't become an
-            # HTTP 502 — it becomes part of the stream instead. A
-            # pre-flight check in routers/chat.py catches the common
-            # case (missing API key) before the response starts.
-            logger.exception("Gemini API error mid-stream")
-            yield sse("error", {"error": "LLM service unavailable"})
-            return
+        sent_any_output = False
+        for retry_attempt in range(_MAX_RETRIES + 1):
+            accumulated_parts: list[types.Part] = []
+            try:
+                stream = await client.aio.models.generate_content_stream(
+                    model=CHAT_MODEL,
+                    contents=current_contents,
+                    config=config,
+                )
+                async for chunk in stream:
+                    if chunk.text:
+                        sent_any_output = True
+                        yield sse("text", {"text": chunk.text})
+                    if chunk.candidates and chunk.candidates[0].content:
+                        accumulated_parts.extend(chunk.candidates[0].content.parts or [])
+                break  # success — stop retrying
+            except genai_errors.APIError as e:
+                # Only retry a clean failure with nothing sent yet this
+                # attempt — once any text has reached the client, headers
+                # and partial content are already committed, so retrying
+                # would duplicate output rather than replace it.
+                if e.code in _RETRYABLE_STATUS_CODES and not sent_any_output and retry_attempt < _MAX_RETRIES:
+                    delay = _RETRY_BASE_DELAY_SECONDS * (2**retry_attempt)
+                    logger.warning(
+                        "Gemini API error %s, retrying in %.1fs (attempt %d/%d)",
+                        e.code, delay, retry_attempt + 1, _MAX_RETRIES,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                logger.exception("Gemini API error mid-stream")
+                yield sse("error", {"error": "LLM service unavailable"})
+                return
+            except Exception:
+                # Headers are already committed to 200 by the time we're
+                # streaming, so a mid-stream LLM failure can't become an
+                # HTTP 502 — it becomes part of the stream instead. A
+                # pre-flight check in routers/chat.py catches the common
+                # case (missing API key) before the response starts.
+                logger.exception("Gemini API error mid-stream")
+                yield sse("error", {"error": "LLM service unavailable"})
+                return
 
         current_contents.append(types.Content(role="model", parts=accumulated_parts))
 
