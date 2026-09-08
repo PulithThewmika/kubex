@@ -156,7 +156,7 @@ function HowItWorks() {
       <TornEdge tone="text" className="-mt-4 sm:-mt-8" />
       <div className="mx-auto max-w-6xl px-4 pb-24 pt-6 sm:px-6">
         <Reveal>
-          <h2 className="font-display text-6xl uppercase leading-[0.82] text-accent sm:text-8xl lg:text-9xl">
+          <h2 className="font-display text-6xl uppercase leading-[0.82] text-flare sm:text-8xl lg:text-9xl">
             How it works
           </h2>
         </Reveal>
@@ -164,7 +164,7 @@ function HowItWorks() {
           {STEPS.map((s, i) => (
             <Reveal key={s.no} delayMs={i * 110}>
               <div className="flex h-full flex-col bg-text p-6">
-                <span className="font-display text-7xl leading-none tabular-nums text-accent">{s.no}</span>
+                <span className="font-display text-7xl leading-none tabular-nums text-flare">{s.no}</span>
                 <h3 className="mt-3 font-display text-3xl uppercase leading-none text-background">{s.title}</h3>
                 <p className="mt-3 font-body text-sm leading-relaxed text-background/70">{s.body}</p>
               </div>
