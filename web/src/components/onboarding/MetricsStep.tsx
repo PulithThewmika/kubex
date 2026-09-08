@@ -16,10 +16,10 @@ type MetricsStepProps = {
 
 export function MetricsStep({ value, onChange, onAddCluster }: MetricsStepProps) {
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h2 className="font-heading text-xl font-semibold text-text">Connect your metrics</h2>
-        <p className="text-sm text-text-muted">
+        <h2 className="font-display text-3xl uppercase leading-none text-text sm:text-4xl">Connect your metrics</h2>
+        <p className="max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
           KubeX scores each deployment by comparing error rate, latency and restarts before and after. That
           needs a metrics source.
         </p>
@@ -36,13 +36,13 @@ export function MetricsStep({ value, onChange, onAddCluster }: MetricsStepProps)
           <button
             type="button"
             onClick={onAddCluster}
-            className="w-fit rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text transition-colors hover:bg-surface"
+            className="w-fit border-2 border-text-muted px-3.5 py-2 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent"
           >
             Add a cluster
           </button>
         )}
         {value === 'healthcheck' && (
-          <p className="text-xs text-text-muted">
+          <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
             You'll set a check URL from each service's page once your first deployment lands — there's no
             service to attach one to yet.
           </p>
