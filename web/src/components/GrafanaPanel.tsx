@@ -69,22 +69,22 @@ export function GrafanaPanel({ uid, panelId, service, from = 'now-6h', to = 'now
   }, [src])
 
   return (
-    <div className="relative h-64 overflow-hidden rounded-xl border border-border bg-surface shadow-card">
+    <div className="relative h-64 overflow-hidden border-2 border-border-strong bg-surface">
       {status === 'loading' && (
-        <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-text-muted">
+        <div className="absolute inset-0 flex items-center justify-center gap-2 font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
           <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-border border-t-accent" aria-hidden="true" />
           Loading {title}
         </div>
       )}
       {status === 'no-source' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 p-4 text-center">
-          <p className="text-sm font-medium text-text">No metrics source connected</p>
-          <p className="text-xs text-text-muted">
+          <p className="font-heading text-sm font-bold uppercase tracking-tight text-text">No metrics source connected</p>
+          <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
             {title} needs a connected cluster. Connect one to start seeing metrics.
           </p>
           <Link
             to="/app/settings?tab=connections"
-            className="mt-1 text-xs font-medium text-accent hover:underline"
+            className="mt-1 font-body text-xs font-bold uppercase tracking-wide text-accent hover:underline"
           >
             Connect a cluster
           </Link>
@@ -92,8 +92,10 @@ export function GrafanaPanel({ uid, panelId, service, from = 'now-6h', to = 'now
       )}
       {status === 'error' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 p-4 text-center">
-          <p className="text-sm font-medium text-text">Panel failed to load</p>
-          <p className="text-xs text-text-muted">The {title} panel couldn't be rendered. Try again shortly.</p>
+          <p className="font-heading text-sm font-bold uppercase tracking-tight text-text">Panel failed to load</p>
+          <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+            The {title} panel couldn't be rendered. Try again shortly.
+          </p>
         </div>
       )}
       {imgUrl && (
