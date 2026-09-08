@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from agent.reconciliation import reconcile_active_alerts, _recovery_counters
 
-TEST_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
-
 
 def _make_alert_row(alert_id=1, deployment_id=1, service_id=1,
                     service_name="orders", namespace="kubex",
-                    prom_components=None, org_id=TEST_ORG_ID):
+                    prom_components=None):
     row = MagicMock()
     row.id = alert_id
     row.deployment_id = deployment_id
@@ -22,7 +19,6 @@ def _make_alert_row(alert_id=1, deployment_id=1, service_id=1,
     row.service_name = service_name
     row.namespace = namespace
     row.prom_components = prom_components
-    row.org_id = org_id
     return row
 
 
@@ -92,9 +88,7 @@ async def test_resolve_after_two_healthy_cycles(mock_session):
         # Cycle 2: still healthy → resolved
         resolved = await reconcile_active_alerts(mock_session)
         assert resolved == 1
-        mock_resolve.assert_awaited_once_with(
-            mock_session, 10, "orders", 1, org_id=TEST_ORG_ID, service_id=1,
-        )
+        mock_resolve.assert_awaited_once_with(mock_session, 10, "orders", 1)
         assert 10 not in _recovery_counters
 
 
