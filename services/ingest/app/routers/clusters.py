@@ -66,6 +66,8 @@ def _to_response(cluster: Cluster) -> ClusterResponse:
         argocd_version=cluster.argocd_version,
         argocd_status=cluster.argocd_status,
         prometheus_status=cluster.prometheus_status,
+        prometheus_namespace=cluster.prometheus_namespace,
+        prometheus_service=cluster.prometheus_service,
         last_heartbeat=cluster.last_heartbeat,
         created_at=cluster.created_at,
     )
@@ -135,6 +137,10 @@ async def cluster_heartbeat(
         values["argocd_status"] = body.argocd_status
     if body.prometheus_status is not None:
         values["prometheus_status"] = body.prometheus_status
+    if body.prometheus_namespace is not None:
+        values["prometheus_namespace"] = body.prometheus_namespace
+    if body.prometheus_service is not None:
+        values["prometheus_service"] = body.prometheus_service
 
     # A Core UPDATE, not ORM attribute assignment: if a concurrent
     # disconnect-sweep (app.cluster_monitor) commits 'disconnected'

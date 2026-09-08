@@ -96,6 +96,8 @@ def pg() -> AsyncGenerator[tuple[str, str], None]:
             argocd_version       TEXT,
             argocd_status        TEXT,
             prometheus_status    TEXT,
+            prometheus_namespace TEXT,
+            prometheus_service   TEXT,
             last_heartbeat       TIMESTAMPTZ,
             status               TEXT NOT NULL DEFAULT 'pending',
             created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
