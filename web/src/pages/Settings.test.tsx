@@ -71,7 +71,7 @@ describe('Settings page', () => {
     fireEvent.click(await screen.findByRole('tab', { name: 'Connections' }))
 
     const link = await screen.findByRole('link', { name: /connect github/i })
-    expect(link).toHaveAttribute('href', 'https://github.com/apps/deploylens/installations/new')
+    expect(link).toHaveAttribute('href', 'https://github.com/apps/kubex-dev/installations/new')
     expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=connections')
   })
 
