@@ -23,6 +23,7 @@ export function Overview() {
         </div>
       ) : !isLoading && services?.length === 0 ? (
         <EmptyState
+          image="/Noservice.png"
           title="No services yet"
           description="Services show up here once a deployment webhook fires. Connect a repository to get started."
           action={{ label: 'Connect a repository', to: '/app/settings?tab=connections' }}
