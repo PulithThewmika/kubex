@@ -169,7 +169,7 @@ export function SlackSection() {
   const disconnect = useDisconnectSlack()
 
   return (
-    <section className="mt-10">
+    <section className="mt-8">
       <h2 className="font-body text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">Slack</h2>
       <p className="mt-1 font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
         Get deploy health alerts in your own Slack workspace. Optional — deployments are still tracked
