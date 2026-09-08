@@ -22,6 +22,13 @@ class ClusterQuery(Base):
         UUID(as_uuid=True), ForeignKey("clusters.id", ondelete="CASCADE"), nullable=False
     )
     promql: Mapped[str] = mapped_column(Text, nullable=False)
+    # kind/params (#840, migration V032 - self-sufficient, doesn't require
+    # V031 to have landed first): "instant" (default) or "range" for
+    # Prometheus, "logql" for Loki. params carries the extra fields a
+    # range/logql query needs (start/end/step or start/end/limit/direction)
+    # that a bare instant query doesn't.
+    kind: Mapped[str] = mapped_column(Text, nullable=False, server_default="instant")
+    params: Mapped[Any | None] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
     result: Mapped[Any | None] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
     requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default="now()")
