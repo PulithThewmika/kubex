@@ -1,8 +1,9 @@
 import { IllustratedEmpty } from './IllustratedEmpty'
 
-export function NoServicesEmpty() {
+export function NoServicesEmpty({ variant = 'center' }: { variant?: 'center' | 'split' }) {
   return (
     <IllustratedEmpty
+      variant={variant}
       image="/Noservice.png"
       title="No services yet"
       lines={[
