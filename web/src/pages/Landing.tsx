@@ -1,8 +1,9 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useRef, type MouseEvent } from 'react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { CinematicFooter } from '@/components/ui/motion-footer'
 import { DISTANCE, DURATION, EASE, prefersReducedMotion } from '@/lib/motion'
+import { headerOffset, smoothScrollTo } from '@/lib/smooth-scroll'
 import { Reveal } from '../components/landing/Reveal'
 import { Ticker } from '../components/landing/Ticker'
 import { TornEdge } from '../components/landing/TornEdge'
@@ -27,6 +28,17 @@ const NAV_LINKS = [
   { label: 'How it works', href: '#how' },
 ]
 
+// Intercept in-page anchor clicks for an eased scroll that clears the sticky
+// header. Native `scroll-behavior: smooth` is disabled under reduced motion
+// (and jumps under the header) — this is consistent everywhere.
+function anchorScroll(e: MouseEvent<HTMLAnchorElement>) {
+  const href = e.currentTarget.getAttribute('href')
+  if (!href || !href.startsWith('#')) return
+  e.preventDefault()
+  smoothScrollTo(href === '#top' ? 0 : href, href === '#top' ? 0 : headerOffset())
+  history.replaceState(null, '', href === '#top' ? window.location.pathname : href)
+}
+
 function Nav({ cta }: { cta: Cta }) {
   const innerRef = useRef<HTMLDivElement>(null)
 
@@ -50,7 +62,11 @@ function Nav({ cta }: { cta: Cta }) {
         ref={innerRef}
         className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:h-20 sm:px-6 lg:px-4"
       >
-        <a href="#top" className="shrink-0 transition-transform duration-300 hover:scale-[1.02] motion-reduce:transform-none">
+        <a
+          href="#top"
+          onClick={anchorScroll}
+          className="shrink-0 transition-transform duration-300 hover:scale-[1.02] motion-reduce:transform-none"
+        >
           <img
             src="/header-logo.png"
             alt="KubeX Platform"
@@ -62,6 +78,7 @@ function Nav({ cta }: { cta: Cta }) {
             <a
               key={l.label}
               href={l.href}
+              onClick={anchorScroll}
               className="relative font-body text-xs font-bold uppercase tracking-[0.15em] text-background/60 transition-colors after:absolute after:-bottom-1.5 after:left-0 after:h-0.5 after:w-full after:origin-left after:scale-x-0 after:bg-accent after:transition-transform after:duration-300 hover:text-accent hover:after:scale-x-100 motion-reduce:after:transition-none"
             >
               {l.label}

@@ -5,6 +5,8 @@
 @layer base {
   html {
     scroll-behavior: smooth;
+    /* keep anchor targets clear of the sticky header (native fallback + keyboard nav) */
+    scroll-padding-top: 5.5rem;
   }
 
   body {
