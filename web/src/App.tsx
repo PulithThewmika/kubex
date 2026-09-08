@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
+import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthErrorState } from './components/auth/AuthErrorState'
 import { RequireAuth } from './components/auth/RequireAuth'
 import { AppLayout } from './components/layout/AppLayout'
@@ -29,12 +30,31 @@ function RoutedErrorBoundary({ children }: { children: ReactNode }) {
   return <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
 }
 
+// Scroll back to the top on every navigation — without this, deep-linking
+// from a scrolled list into a detail page lands you mid-page.
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    // jsdom has no real scroll; guard so tests don't trip on "Not implemented".
+    if (typeof window.scrollTo === 'function') {
+      try {
+        window.scrollTo(0, 0)
+      } catch {
+        /* no-op */
+      }
+    }
+  }, [pathname])
+  return null
+}
+
+// The landing page is the front door for everyone. A logged-in visitor still
+// sees it at `/` and clicks through to the app (the hero CTA becomes "Go to
+// dashboard"); only a genuine backend failure short-circuits to the retry state.
 function RootRoute() {
   const { isAuthenticated, isLoading, isError, refetch } = useAuth()
   if (isLoading) return null
   if (isError) return <AuthErrorState onRetry={() => refetch()} />
-  if (isAuthenticated) return <Navigate to="/app" replace />
-  return <Landing />
+  return <Landing isAuthenticated={isAuthenticated} />
 }
 
 function App() {
@@ -43,6 +63,7 @@ function App() {
       <ToastProvider>
         <AuthProvider>
           <BrowserRouter>
+            <ScrollToTop />
             <RoutedErrorBoundary>
               <Routes>
                 <Route path="/" element={<RootRoute />} />

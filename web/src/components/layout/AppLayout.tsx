@@ -11,9 +11,11 @@ export function AppLayout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />
         <main className="flex-1 overflow-y-auto">
-          <ErrorBoundary resetKey={location.pathname}>
-            <Outlet />
-          </ErrorBoundary>
+          <div className="mx-auto max-w-7xl animate-fade-in">
+            <ErrorBoundary resetKey={location.pathname}>
+              <Outlet />
+            </ErrorBoundary>
+          </div>
         </main>
       </div>
     </div>

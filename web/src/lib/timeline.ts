@@ -21,10 +21,10 @@ export function normalizeStageStatus(status: string): NormalizedStatus {
 }
 
 export const STAGE_STATUS_COLORS: Record<NormalizedStatus, string> = {
-  success: '#22C55E',
-  failure: '#EF4444',
-  'in-progress': '#3B82F6',
-  pending: '#6B7280',
+  success: '#3FB950',
+  failure: '#F85149',
+  'in-progress': '#58A6FF',
+  pending: '#484F5A',
 }
 
 /**

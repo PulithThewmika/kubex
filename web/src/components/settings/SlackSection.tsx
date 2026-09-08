@@ -179,7 +179,7 @@ export function SlackSection() {
       {data && !data.connected && (
         <a
           href={INSTALL_URL}
-          className="mt-4 flex w-fit items-center gap-2 rounded-md bg-text px-4 py-2.5 text-sm font-medium text-background transition-colors hover:opacity-90"
+          className="mt-4 flex w-fit items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px"
         >
           <SlackIcon />
           Add to Slack
