@@ -61,6 +61,33 @@
   }
 }
 
+@layer utilities {
+  /* Newsprint halftone — a dot screen that tints to `currentColor`. Put it on
+     an element whose text colour is set (accent / text / background). */
+  .halftone {
+    background-image: radial-gradient(currentColor 1.1px, transparent 1.4px);
+    background-size: 7px 7px;
+  }
+
+  .halftone-lg {
+    background-image: radial-gradient(currentColor 2px, transparent 2.6px);
+    background-size: 13px 13px;
+  }
+
+  /* Outlined poster type — transparent fill, stroked edge. Keep a text colour
+     class alongside it (e.g. text-accent); that drives the stroke colour. */
+  .text-outline {
+    -webkit-text-stroke-width: 2px;
+    -webkit-text-fill-color: transparent;
+  }
+
+  @media (min-width: 1024px) {
+    .text-outline {
+      -webkit-text-stroke-width: 3px;
+    }
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

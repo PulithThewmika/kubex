@@ -35,6 +35,9 @@ export default {
         info: '#58A6FF',
       },
       fontFamily: {
+        // Maximalist poster display face for the marketing site — condensed,
+        // heavy, all-caps. Never used inside the app shell.
+        display: ['Anton', 'Impact', 'Haettenschweiler', 'system-ui', 'sans-serif'],
         heading: ['Mohave', 'system-ui', 'sans-serif'],
         body: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
