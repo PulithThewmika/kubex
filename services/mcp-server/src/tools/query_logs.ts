@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { queryRange, type LokiStream } from "../clients/loki.js";
-import { resolveTimestamp, sanitizeLabel } from "./query_metrics.js";
+import { resolveTimestamp, resolveService } from "./query_metrics.js";
 
 const LOG_LEVELS = [
   "error", "warn", "info", "debug", "trace", "fatal", "panic",
@@ -33,6 +33,12 @@ export const queryLogsSchema = {
 };
 
 // ── LogQL construction ─────────────────────────────────────────
+
+// Mirrors query_metrics.ts's sanitizeLabel — same escaping rule (LogQL
+// label matchers use the same quoting as PromQL's).
+function sanitizeLabel(value: string): string {
+  return value.replace(/[\\"\n\r]/g, (m) => "\\" + m);
+}
 
 export function buildLogQL(
   service: string,
@@ -136,7 +142,28 @@ export async function queryLogs(input: {
   from: string;
   to?: string;
   limit: number;
-}): Promise<{ content: { type: "text"; text: string }[] }> {
+}, orgId: string | null): Promise<{ content: { type: "text"; text: string }[] }> {
+  // Resolve against Postgres with the caller's org filter BEFORE building
+  // any LogQL — bug fix (#840/H5): this tool used to build {app="<raw
+  // input>"} straight from the client-supplied service name with no check
+  // that the service belongs to the caller's org, unlike query_metrics
+  // (which already resolves through Postgres first). A user in org A could
+  // read org B's logs by naming org B's service. Loki itself has no org
+  // concept, so this Postgres lookup is the only place that check can
+  // happen — matching query_metrics.ts's resolveService pattern exactly.
+  const svc = await resolveService(input.service, orgId);
+  if (!svc) {
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          error: `Service "${input.service}" not found`,
+          summary: `query_logs failed: service "${input.service}" not found`,
+        }),
+      }],
+    };
+  }
+
   const nowEpoch = Date.now() / 1000;
   const fromStr = input.from;
   const toStr = input.to ?? "now";
@@ -167,7 +194,7 @@ export async function queryLogs(input: {
     };
   }
 
-  const logql = buildLogQL(input.service, input.keyword, input.level);
+  const logql = buildLogQL(svc.name, input.keyword, input.level);
   const limit = Math.min(input.limit, 200);
 
   let streams: LokiStream[];
@@ -176,6 +203,7 @@ export async function queryLogs(input: {
       logql,
       startEpoch.toString(),
       endEpoch.toString(),
+      orgId,
       limit,
     );
   } catch (err) {

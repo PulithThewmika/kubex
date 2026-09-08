@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { apiFetch } from '../lib/apiFetch'
 import { parseSSEStream } from '../lib/sse'
 import type { ChatMessage, ChatRequestMessage } from '../types/chat'
 
@@ -85,7 +86,7 @@ export function useChatSession() {
     setIsStreaming(true)
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await apiFetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: toWireFormat(historyForRequest) }),

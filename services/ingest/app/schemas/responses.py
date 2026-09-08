@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from ..integration_status import CDSource, MetricsSource
+
 
 class ServiceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -28,6 +30,13 @@ class HealthSummary(BaseModel):
     verdict: str | None = None
 
 
+class IntegrationStatusResponse(BaseModel):
+    ci: bool
+    cd: CDSource | None = None
+    metrics: MetricsSource | None = None
+    available_features: list[str] = []
+
+
 class ServiceWithStatusResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -39,6 +48,10 @@ class ServiceWithStatusResponse(BaseModel):
     latest_deploy: LatestDeployInfo | None = None
     health: HealthSummary | None = None
     active_alert_count: int = 0
+    deploy_count_30d: int = 0
+    cluster_id: str | None = None
+    cluster_name: str | None = None
+    integration_status: IntegrationStatusResponse
 
 
 class DeploymentResponse(BaseModel):
@@ -60,7 +73,7 @@ class HealthAssessmentResponse(BaseModel):
 
     id: int
     deployment_id: int
-    score: int
+    score: int | None = None
     verdict: str
     error_rate_base: float | None = None
     error_rate_post: float | None = None
@@ -90,6 +103,7 @@ class AlertResponse(BaseModel):
     id: int
     deployment_id: int
     service_id: int
+    service_name: str
     severity: str
     title: str
     description: str | None = None

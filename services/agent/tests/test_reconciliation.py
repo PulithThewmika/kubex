@@ -10,7 +10,7 @@ from agent.reconciliation import reconcile_active_alerts, _recovery_counters
 
 
 def _make_alert_row(alert_id=1, deployment_id=1, service_id=1,
-                    service_name="orders", namespace="deploylens",
+                    service_name="orders", namespace="kubex",
                     prom_components=None):
     row = MagicMock()
     row.id = alert_id
@@ -29,6 +29,7 @@ def _healthy_aggregated():
         "latency_p99": 110.0,
         "restarts": 0.0,
         "request_rate": 10.0,
+        "coverage": 1.0,
     }
 
 
@@ -39,6 +40,7 @@ def _degraded_aggregated():
         "latency_p99": 500.0,
         "restarts": 5.0,
         "request_rate": 10.0,
+        "coverage": 1.0,
     }
 
 
@@ -105,8 +107,8 @@ async def test_resolve_with_realistic_nonzero_metrics(mock_session):
     with patch("agent.reconciliation._aggregate_metrics", new_callable=AsyncMock) as mock_agg, \
          patch("agent.reconciliation.resolve_alert", new_callable=AsyncMock) as mock_resolve:
 
-        base = {"error_rate": 0.002, "latency_p99": 100.0, "restarts": 0.0, "request_rate": 12.0}
-        post = {"error_rate": 0.003, "latency_p99": 105.0, "restarts": 0.0, "request_rate": 11.0}
+        base = {"error_rate": 0.002, "latency_p99": 100.0, "restarts": 0.0, "request_rate": 12.0, "coverage": 1.0}
+        post = {"error_rate": 0.003, "latency_p99": 105.0, "restarts": 0.0, "request_rate": 11.0, "coverage": 1.0}
         mock_agg.side_effect = [base, post, base, post]
 
         resolved = await reconcile_active_alerts(mock_session)
@@ -167,6 +169,36 @@ async def test_still_degraded_stays_at_zero(mock_session):
 
 
 @pytest.mark.asyncio
+async def test_low_coverage_does_not_count_toward_recovery(mock_session: AsyncMock) -> None:
+    """A healthy-looking score from a Prometheus data gap (coverage < 50%,
+    E23-T4-S10) must not advance the recovery counter -- otherwise a
+    service still failing behind a scrape gap gets its alert resolved just
+    because there's no data to penalize it with. Reconciles twice (the full
+    2-cycle threshold) to prove the counter never advances at all, not just
+    that a single cycle doesn't resolve immediately."""
+    result = MagicMock()
+    result.fetchall.return_value = [_make_alert_row(alert_id=50)]
+    mock_session.execute.return_value = result
+
+    low_coverage = dict(_healthy_aggregated(), coverage=0.2)
+
+    with patch("agent.reconciliation._aggregate_metrics", new_callable=AsyncMock) as mock_agg, \
+         patch("agent.reconciliation.resolve_alert", new_callable=AsyncMock) as mock_resolve:
+
+        mock_agg.return_value = low_coverage
+
+        resolved = await reconcile_active_alerts(mock_session)
+        assert resolved == 0
+        assert _recovery_counters.get(50, 0) == 0
+        mock_resolve.assert_not_called()
+
+        resolved = await reconcile_active_alerts(mock_session)
+        assert resolved == 0
+        assert _recovery_counters.get(50, 0) == 0
+        mock_resolve.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_multiple_alerts_independent(mock_session):
     """Each alert has its own recovery counter."""
     result = MagicMock()
@@ -176,7 +208,7 @@ async def test_multiple_alerts_independent(mock_session):
     ]
     mock_session.execute.return_value = result
 
-    async def agg_side_effect(components, namespace, window, timestamp):
+    async def agg_side_effect(components, namespace, window, timestamp, **_kwargs):
         if components == ["orders"]:
             return _healthy_aggregated()
         # payments: baseline healthy, observation degraded → penalty fires
@@ -192,3 +224,36 @@ async def test_multiple_alerts_independent(mock_session):
 
         assert _recovery_counters[40] == 1  # orders: healthy
         assert _recovery_counters[41] == 0  # payments: still degraded
+
+
+@pytest.mark.asyncio
+async def test_unreachable_alert_skipped_without_crashing_batch(mock_session):
+    """#840: one alert's cluster relay timing out must not stop every
+    other alert (including local/legacy ones) from being reconciled this
+    cycle."""
+    from agent import promql
+
+    result = MagicMock()
+    result.fetchall.return_value = [
+        _make_alert_row(alert_id=50, service_name="orders"),
+        _make_alert_row(alert_id=51, service_name="payments"),
+    ]
+    mock_session.execute.return_value = result
+
+    async def agg_side_effect(components, namespace, window, timestamp, **_kwargs):
+        if components == ["orders"]:
+            raise promql.MetricsUnreachableError("timed out")
+        return _healthy_aggregated()
+
+    with patch("agent.reconciliation._aggregate_metrics", new_callable=AsyncMock,
+               side_effect=agg_side_effect), \
+         patch("agent.reconciliation.resolve_alert", new_callable=AsyncMock):
+
+        await reconcile_active_alerts(mock_session)
+
+        # orders' counter is reset to 0, same treatment as a low_confidence
+        # cycle — "consecutive" healthy cycles must stay genuinely
+        # consecutive, not skip over a gap with no information.
+        assert _recovery_counters[50] == 0
+        # payments (a different, reachable cluster) still got processed.
+        assert _recovery_counters[51] == 1

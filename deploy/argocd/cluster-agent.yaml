@@ -1,0 +1,41 @@
+# Example ArgoCD Application for a GitOps-managed cluster-agent install
+# (E22-T4-S7). Copy this into the customer's own GitOps repo (or apply it
+# directly) and fill in the two placeholders below.
+#
+# The bearer token is cluster-specific secret material — it must NOT be
+# committed to Git in plaintext. Supply it via whatever secret-injection
+# ArgoCD is already set up with in that cluster (a Sealed Secret, External
+# Secrets Operator, Vault plugin, etc.) rather than hardcoding it here;
+# .spec.source.helm.valuesObject.token is a placeholder to be replaced by
+# that mechanism, not a literal value to commit.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubex-cluster-agent
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/PulithThewmika/kubex.git
+    targetRevision: main
+    path: deploy/helm/cluster-agent
+    helm:
+      valuesObject:
+        token: "REPLACE_WITH_CLUSTER_TOKEN"     # from POST /api/clusters or the Add Cluster wizard
+        endpoint: "https://REPLACE_WITH_YOUR_INGEST_HOST"
+        image:
+          # Pin an immutable short-SHA tag (see the ghcr.io package page,
+          # or the sha of the commit you want deployed) and bump it via a
+          # Git commit here — required() in the chart rejects an empty
+          # value, and a mutable "latest" would never trigger a rollout
+          # when a new image is published (CodeRabbit, PR #802).
+          tag: "REPLACE_WITH_IMAGE_SHA_TAG"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kubex-agent
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

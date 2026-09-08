@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,6 +14,8 @@ from agent.alerting import (
     fire_alert,
     resolve_alert,
 )
+
+TEST_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
 
 
 SAMPLE_DETAILS = {
@@ -82,15 +85,18 @@ def mock_session():
 async def test_fire_alert_inserts_db_and_posts(mock_session, mock_alertmanager):
     """fire_alert inserts an alerts row and posts to Alertmanager."""
     alert_id = await fire_alert(
-        mock_session, "orders", 1, 52, 68, "degraded", SAMPLE_DETAILS
+        mock_session, "orders", 1, 52, 68, "degraded", SAMPLE_DETAILS, TEST_ORG_ID
     )
     assert alert_id == 42
 
-    # DB insert called
+    # DB insert called, with org_id explicitly set (not left to the
+    # column DEFAULT — see E20-T2)
     assert mock_session.execute.call_count == 1
     call_args = mock_session.execute.call_args
     sql = str(call_args[0][0])
     assert "INSERT INTO alerts" in sql
+    assert "org_id" in sql
+    assert call_args[0][1]["org_id"] == TEST_ORG_ID
 
     # Alertmanager post called
     mock_alertmanager.post.assert_called_once()
@@ -106,7 +112,7 @@ async def test_fire_alert_handles_alertmanager_down(mock_session):
     client.post.side_effect = httpx.ConnectError("Connection refused")
     with patch("agent.alerting._client", client):
         alert_id = await fire_alert(
-            mock_session, "orders", 1, 52, 68, "degraded", SAMPLE_DETAILS
+            mock_session, "orders", 1, 52, 68, "degraded", SAMPLE_DETAILS, TEST_ORG_ID
         )
     assert alert_id == 42  # DB row still created
 

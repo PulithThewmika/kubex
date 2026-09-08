@@ -14,11 +14,13 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import promql
 from .alerting import resolve_alert
 from .config import BASELINE_WINDOW, BASELINE_WINDOW_SECONDS, OBSERVATION_WINDOW, OBSERVATION_WINDOW_SECONDS
+from .notifications import notify_deploy_recovered
 from .health_score import compute_health_score, _aggregate_metrics
 
-logger = logging.getLogger("deploylens.agent.reconciliation")
+logger = logging.getLogger("kubex.agent.reconciliation")
 
 HEALTHY_THRESHOLD = 80
 
@@ -29,9 +31,9 @@ async def _fetch_active_alerts(session: AsyncSession):
     """Fetch all unresolved alerts with their service info."""
     result = await session.execute(
         text("""
-            SELECT a.id, a.deployment_id, a.service_id,
+            SELECT a.id, a.deployment_id, a.service_id, a.org_id,
                    s.name AS service_name, s.namespace,
-                   s.prom_components
+                   s.prom_components, s.cluster_id
             FROM alerts a
             JOIN services s ON s.id = a.service_id
             WHERE a.resolved_at IS NULL
@@ -57,6 +59,7 @@ async def reconcile_active_alerts(session: AsyncSession) -> int:
     baseline_end = now - timedelta(seconds=OBSERVATION_WINDOW_SECONDS)
     resolved_count = 0
     seen_alert_ids = set()
+    recovered_notices: list[dict] = []
 
     for row in rows:
         alert_id = row.id
@@ -66,8 +69,31 @@ async def reconcile_active_alerts(session: AsyncSession) -> int:
         components = row.prom_components if row.prom_components is not None else [service_name]
         seen_alert_ids.add(alert_id)
 
-        base = await _aggregate_metrics(components, namespace, BASELINE_WINDOW, baseline_end)
-        post = await _aggregate_metrics(components, namespace, OBSERVATION_WINDOW, now)
+        try:
+            base = await _aggregate_metrics(
+                components, namespace, BASELINE_WINDOW, baseline_end,
+                session=session, cluster_id=row.cluster_id,
+            )
+            post = await _aggregate_metrics(
+                components, namespace, OBSERVATION_WINDOW, now,
+                session=session, cluster_id=row.cluster_id,
+            )
+        except promql.MetricsUnreachableError as e:
+            # Don't crash the whole reconciliation batch over one alert's
+            # unreachable relay (#840) - other alerts (including
+            # local/legacy ones) still get processed this cycle. Reset the
+            # recovery counter rather than leaving it untouched, matching
+            # how a low_confidence cycle below is handled - "consecutive"
+            # healthy cycles must mean genuinely consecutive; leaving a gap
+            # cycle's counter alone would let e.g. [healthy, unreachable,
+            # healthy] resolve an alert with no real information about the
+            # cycle in between.
+            logger.warning(
+                "Skipping reconciliation for alert #%d this cycle - metrics unreachable: %s",
+                alert_id, e,
+            )
+            _recovery_counters[alert_id] = 0
+            continue
 
         metrics = {
             "error_rate_base": base["error_rate"],
@@ -78,10 +104,16 @@ async def reconcile_active_alerts(session: AsyncSession) -> int:
             "restarts_post": post["restarts"],
             "request_rate_base": base["request_rate"],
             "request_rate_post": post["request_rate"],
+            "coverage_base": base["coverage"],
+            "coverage_post": post["coverage"],
         }
 
-        score, verdict, _ = compute_health_score(metrics)
-        recovered = score >= HEALTHY_THRESHOLD
+        score, _verdict, details = compute_health_score(metrics)
+        # A low-confidence cycle (Prometheus data gap, E23-T4-S10) must not
+        # count toward recovery — a service still failing behind a scrape
+        # gap would otherwise look "healthy" for two cycles just because
+        # there's no data to penalize it with, and get its alert resolved.
+        recovered = score >= HEALTHY_THRESHOLD and not details["low_confidence"]
 
         if recovered:
             _recovery_counters[alert_id] = _recovery_counters.get(alert_id, 0) + 1
@@ -92,6 +124,12 @@ async def reconcile_active_alerts(session: AsyncSession) -> int:
 
             if _recovery_counters[alert_id] >= 2:
                 await resolve_alert(session, alert_id, service_name, deploy_id)
+                # Queue the Slack notice — only sent once the batch commit
+                # below succeeds, so a rolled-back resolution never pings.
+                recovered_notices.append({
+                    "org_id": row.org_id, "service_id": row.service_id,
+                    "service_name": service_name, "deployment_id": deploy_id,
+                })
                 resolved_count += 1
                 _recovery_counters.pop(alert_id, None)
                 logger.info(
@@ -111,4 +149,9 @@ async def reconcile_active_alerts(session: AsyncSession) -> int:
             _recovery_counters.pop(stale_id)
 
     await session.commit()
+
+    # Post-commit: the resolutions are durable, so it's safe to announce them.
+    for notice in recovered_notices:
+        await notify_deploy_recovered(**notice)
+
     return resolved_count

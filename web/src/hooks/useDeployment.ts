@@ -1,14 +1,18 @@
 import { useQuery } from '@tanstack/react-query'
+import { apiFetch } from '../lib/apiFetch'
 import type { DeploymentDetail } from '../types/deploymentDetail'
 
 class FetchDeploymentError extends Error {
-  constructor(public status: number) {
+  status: number
+
+  constructor(status: number) {
     super(`Failed to fetch deployment: ${status}`)
+    this.status = status
   }
 }
 
 async function fetchDeployment(id: number): Promise<DeploymentDetail> {
-  const res = await fetch(`/api/deployments/${id}`)
+  const res = await apiFetch(`/api/deployments/${id}`)
   if (!res.ok) {
     throw new FetchDeploymentError(res.status)
   }

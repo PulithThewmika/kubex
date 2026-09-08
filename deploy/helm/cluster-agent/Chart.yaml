@@ -1,0 +1,19 @@
+apiVersion: v2
+name: cluster-agent
+description: >-
+  KubeX cluster agent (EPIC-022) — runs inside a customer's Kubernetes
+  cluster, discovers ArgoCD/Prometheus, patches the cluster's bearer token
+  into ArgoCD Notifications, and reports heartbeats/query results back to a
+  central KubeX platform over HTTPS. Packages services/cluster-agent.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - observability
+  - remote-connectivity
+  - kubernetes
+home: https://github.com/PulithThewmika/kubex
+sources:
+  - https://github.com/PulithThewmika/kubex
+maintainers:
+  - name: PulithThewmika

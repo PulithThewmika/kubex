@@ -1,0 +1,47 @@
+# Default values for cluster-agent.
+# Override with `helm install -f my-values.yaml` or `--set`.
+
+# ── Credentials from the KubeX platform ─────────────────────────────────
+# Both come from POST /api/clusters (shown once) — see NOTES.txt.
+# No sane default exists for either; helm template/install fails fast
+# (via the required() guard in secret.yaml/deployment.yaml) if left unset,
+# rather than silently shipping an agent that can never authenticate.
+token: ""
+# Central KubeX ingest endpoint this agent reports to. Must be https:// —
+# cluster_agent/config.py rejects a non-https endpoint unless
+# allowInsecureEndpoint is set (local/dev only, see below).
+endpoint: ""
+
+image:
+  repository: ghcr.io/puliththewmika/kubex-cluster-agent
+  # No default — a mutable :latest here would mean an image content change
+  # (agent.yml republishes it on every push to main) never changes this
+  # Deployment's pod template, so nothing ever triggers a rollout; existing
+  # Pods keep running stale code indefinitely (CodeRabbit, PR #802). Pin an
+  # immutable short-SHA tag from ghcr.io/puliththewmika/kubex-cluster-agent
+  # (same convention every other service's image already follows) and bump
+  # it through Git/`--set image.tag=...` the same way you'd bump any other
+  # pinned dependency — required() in deployment.yaml enforces this.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Local/dev only: lets the agent talk to a plain-http endpoint (e.g.
+# host.docker.internal during a Kind smoke test). A real install always
+# leaves this false — cluster_agent/config.py enforces https otherwise.
+allowInsecureEndpoint: false
+
+# Agent tuning — passed straight through as env vars; see
+# services/cluster-agent/cluster_agent/config.py for defaults/validation.
+heartbeatIntervalSeconds: 60
+queryPollIntervalSeconds: 10
+argocdRecheckIntervalSeconds: 300
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    memory: 128Mi
+
+# Applied to every resource this chart creates.
+commonLabels: {}
