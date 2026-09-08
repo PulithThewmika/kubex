@@ -3,6 +3,7 @@
     { "source": "/api/:path*", "destination": "https://kubex-demo-pt.southeastasia.cloudapp.azure.com/api/:path*" },
     { "source": "/auth/:path*", "destination": "https://kubex-demo-pt.southeastasia.cloudapp.azure.com/auth/:path*" },
     { "source": "/install/:path*", "destination": "https://kubex-demo-pt.southeastasia.cloudapp.azure.com/install/:path*" },
-    { "source": "/integrations/:path*", "destination": "https://kubex-demo-pt.southeastasia.cloudapp.azure.com/integrations/:path*" }
+    { "source": "/integrations/:path*", "destination": "https://kubex-demo-pt.southeastasia.cloudapp.azure.com/integrations/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
