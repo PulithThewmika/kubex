@@ -11,6 +11,7 @@ import '@fontsource/mohave/400.css'
 import '@fontsource/mohave/500.css'
 import '@fontsource/mohave/600.css'
 import '@fontsource/mohave/700.css'
+import '@fontsource/anton/400.css'
 
 import './index.css'
 import App from './App.tsx'

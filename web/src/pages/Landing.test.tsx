@@ -12,13 +12,22 @@ describe('Landing', () => {
     )
 
     expect(screen.getAllByRole('link', { name: /sign in with github/i }).length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: /deployment-aware/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /our integrations/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /pick your/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /how it works/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /everything you need to trust a deploy/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /start where you are/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute(
-      'href',
-      'https://github.com/PulithThewmika/kubex',
+    expect(screen.getByRole('heading', { name: /see every deploy/i })).toBeInTheDocument()
+  })
+
+  it('shows the integration tiles the platform reads from', () => {
+    render(
+      <MemoryRouter>
+        <Landing />
+      </MemoryRouter>,
     )
-    expect(screen.getByRole('link', { name: 'Docs' })).toHaveAttribute('href')
+
+    for (const name of ['GitHub Actions', 'ArgoCD', 'Kubernetes', 'Prometheus', 'Grafana', 'Slack']) {
+      expect(screen.getByRole('heading', { name })).toBeInTheDocument()
+    }
   })
 })
