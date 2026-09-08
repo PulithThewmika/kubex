@@ -87,12 +87,14 @@ def extract_image_tag(head_sha: str | None) -> str | None:
     return head_sha
 
 
-def extract_image_tag_from_images(images_str: str | None) -> str | None:
+def extract_image_tag_from_images(images_str: str | list[str] | None) -> str | None:
     """Extract the short image tag from ArgoCD's summary.images field.
 
-    ArgoCD has rendered summary.images two ways across versions: a
-    comma-separated string ("ghcr.io/org/app-frontend:abc1234,...-orders:abc1234")
-    and a Go-slice string ("[ghcr.io/org/app-frontend:abc1234 ...-orders:abc1234]").
+    ArgoCD has rendered summary.images three ways across versions/templates: a
+    comma-separated string ("ghcr.io/org/app-frontend:abc1234,...-orders:abc1234"),
+    a Go-slice string ("[ghcr.io/org/app-frontend:abc1234 ...-orders:abc1234]"),
+    and a JSON array (webhook templates using `{{toJson .app.status.summary.images}}`
+    deserialize to an actual Python list, not a string).
     A CI tag-bump moves every app service to the same new tag, so the
     right answer is the tag shared by the most images — during a rolling
     update summary.images briefly lists both the old and new image of the
@@ -101,6 +103,8 @@ def extract_image_tag_from_images(images_str: str | None) -> str | None:
 
     Returns None if the string is empty or contains no parseable tag.
     """
+    if isinstance(images_str, list):
+        images_str = " ".join(images_str)
     if not images_str or not images_str.strip():
         return None
     # Split on whitespace and/or commas, drop the Go-slice brackets.
