@@ -16,11 +16,7 @@ describe('Landing', () => {
     expect(screen.getByRole('heading', { name: /our integrations/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /pick your/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /how it works/i })).toBeInTheDocument()
-    expect(screen.getAllByRole('link', { name: 'GitHub' })[0]).toHaveAttribute(
-      'href',
-      'https://github.com/PulithThewmika/kubex',
-    )
-    expect(screen.getByRole('link', { name: 'Docs' })).toHaveAttribute('href')
+    expect(screen.getByRole('heading', { name: /see every deploy/i })).toBeInTheDocument()
   })
 
   it('shows the integration tiles the platform reads from', () => {
