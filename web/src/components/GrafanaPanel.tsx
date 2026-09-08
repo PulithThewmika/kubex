@@ -69,10 +69,11 @@ export function GrafanaPanel({ uid, panelId, service, from = 'now-6h', to = 'now
   }, [src])
 
   return (
-    <div className="relative h-64 overflow-hidden rounded-lg border border-border bg-surface">
+    <div className="relative h-64 overflow-hidden rounded-xl border border-border bg-surface shadow-card">
       {status === 'loading' && (
-        <div className="absolute inset-0 flex items-center justify-center text-sm text-text-muted">
-          Loading {title}…
+        <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-text-muted">
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-border border-t-accent" aria-hidden="true" />
+          Loading {title}
         </div>
       )}
       {status === 'no-source' && (

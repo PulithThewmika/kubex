@@ -35,11 +35,13 @@ export function Features() {
           Everything you need to trust a deploy
         </h2>
       </Reveal>
-      <div className="mt-12 grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-12 grid grid-cols-1 gap-x-8 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">
         {FEATURES.map((f, i) => (
           <Reveal key={f.title} delayMs={(i % 3) * 100}>
-            <h3 className="font-heading text-base font-medium text-text">{f.title}</h3>
-            <p className="mt-2 text-sm text-text-muted">{f.body}</p>
+            <div className="border-l-2 border-border pl-4 transition-colors hover:border-accent">
+              <h3 className="font-heading text-base font-medium text-text">{f.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-text-muted">{f.body}</p>
+            </div>
           </Reveal>
         ))}
       </div>

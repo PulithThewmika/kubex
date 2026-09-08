@@ -29,7 +29,9 @@ export function ServiceDeepDive() {
       <section className="flex flex-col gap-3">
         <h2 className="font-heading text-sm font-semibold text-text">Pipeline timeline</h2>
         {deploymentsError ? (
-          <p className="text-sm text-failed">Failed to load deployments. Retrying automatically.</p>
+          <div className="rounded-xl border border-failed/30 bg-failed/5 p-4 text-sm text-failed">
+            Failed to load deployments. Retrying automatically.
+          </div>
         ) : !deploymentsLoading && deployments?.length === 0 ? (
           <p className="text-sm text-text-muted">No deployments yet for this service.</p>
         ) : deploymentsLoading ? (
@@ -80,7 +82,7 @@ function CompareSection({ deployments }: CompareSectionProps) {
             setActive((a) => !a)
             setSelected([])
           }}
-          className="rounded border border-border px-3 py-1 text-xs text-text-muted hover:border-accent/50 hover:text-text"
+          className="rounded-md border border-border-strong px-3 py-1 text-xs font-medium text-text-muted transition-colors hover:border-accent hover:text-accent"
         >
           {active ? 'Cancel' : 'Compare deployments'}
         </button>
@@ -95,15 +97,18 @@ function CompareSection({ deployments }: CompareSectionProps) {
             return (
               <label
                 key={d.id}
-                className={`flex items-center gap-2 rounded border border-border bg-surface px-3 py-2 text-sm ${disabled ? 'opacity-50' : ''}`}
+                className={`flex items-center gap-2 rounded-md border bg-surface px-3 py-2 text-sm transition-colors ${
+                  checked ? 'border-accent/60' : 'border-border'
+                } ${disabled ? 'opacity-50' : 'hover:border-border-strong'}`}
               >
                 <input
                   type="checkbox"
                   checked={checked}
                   disabled={disabled}
                   onChange={() => toggle(d.id)}
+                  className="accent-accent"
                 />
-                <span className="font-heading text-text">{shortSha}</span>
+                <span className="font-mono text-text">{shortSha}</span>
                 <span className="text-text-muted">{d.author ?? 'unknown'}</span>
               </label>
             )
@@ -132,12 +137,16 @@ function ServiceHeader({ name, status, environment, dora }: ServiceHeaderProps) 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="font-heading text-xl font-semibold text-text">{name}</h1>
+        <h1 className="font-heading text-xl font-semibold tracking-tight text-text">{name}</h1>
         {status && (
-          <span className="rounded-full border border-border px-2 py-0.5 text-xs text-text-muted">{status}</span>
+          <span className="rounded-full border border-border-strong bg-surface px-2 py-0.5 text-xs font-medium text-text-muted">
+            {status}
+          </span>
         )}
         {environment && (
-          <span className="rounded border border-border px-1.5 py-0.5 text-xs text-text-muted">{environment}</span>
+          <span className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[11px] text-text-muted">
+            {environment}
+          </span>
         )}
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -152,9 +161,9 @@ function ServiceHeader({ name, status, environment, dora }: ServiceHeaderProps) 
 
 function DoraStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-border bg-surface p-3">
-      <div className="text-xs text-text-muted">{label}</div>
-      <div className="font-heading text-lg font-semibold text-text">{value}</div>
+    <div className="rounded-lg border border-border bg-surface p-3 shadow-card">
+      <div className="text-xs uppercase tracking-wide text-text-faint">{label}</div>
+      <div className="mt-0.5 font-heading text-lg font-semibold tabular-nums text-text">{value}</div>
     </div>
   )
 }

@@ -51,7 +51,7 @@ export function Onboarding() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
       <div className="flex items-center justify-between gap-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Get started with KubeX</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-text-faint">Get started with KubeX</p>
         <button
           type="button"
           onClick={finish}
@@ -131,7 +131,7 @@ export function Onboarding() {
             <button
               type="button"
               onClick={next}
-              className="rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-background transition-colors hover:bg-accent-hover active:translate-y-px"
             >
               Continue
             </button>

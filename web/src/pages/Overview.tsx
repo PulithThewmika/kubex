@@ -1,15 +1,26 @@
 import { EmptyState } from '../components/EmptyState'
+import { PageHeader } from '../components/PageHeader'
 import { ServiceCardGrid } from '../components/ServiceCardGrid'
 import { useServices } from '../hooks/useServices'
 
 export function Overview() {
   const { data: services, isLoading, isError } = useServices()
+  const count = services?.length ?? 0
 
   return (
     <div className="p-6">
-      <h1 className="mb-4 font-heading text-xl font-semibold text-text">Overview</h1>
+      <PageHeader
+        title="Overview"
+        description={
+          isLoading || isError
+            ? 'Every service KubeX is tracking, with its latest deployment health.'
+            : `${count} service${count === 1 ? '' : 's'} tracked.`
+        }
+      />
       {isError ? (
-        <p className="text-sm text-failed">Failed to load services. Retrying automatically.</p>
+        <div className="rounded-xl border border-failed/30 bg-failed/5 p-4 text-sm text-failed">
+          Failed to load services. Retrying automatically.
+        </div>
       ) : !isLoading && services?.length === 0 ? (
         <EmptyState
           title="No services yet"
