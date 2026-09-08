@@ -23,13 +23,13 @@ function Nav({ cta }: { cta: Cta }) {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:h-20 sm:px-6">
         <a
           href="#top"
-          className="flex items-center gap-2.5 font-display text-3xl uppercase leading-none tracking-wide text-background sm:text-4xl"
+          className="flex items-center gap-3 font-display text-3xl uppercase leading-none tracking-wide text-background sm:text-4xl"
         >
           <img
             src="/kubex-logo-black.png"
             alt=""
             aria-hidden="true"
-            className="h-8 w-8 shrink-0 select-none sm:h-10 sm:w-10"
+            className="h-11 w-11 shrink-0 select-none sm:h-14 sm:w-14"
           />
           Kube<span className="text-accent">X</span>
         </a>
