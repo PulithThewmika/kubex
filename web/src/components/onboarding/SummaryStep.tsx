@@ -21,7 +21,7 @@ function CheckIcon({ muted }: { muted: boolean }) {
   return (
     <svg
       viewBox="0 0 20 20"
-      className={`mt-0.5 h-4 w-4 shrink-0 ${muted ? 'text-text-muted' : 'text-healthy'}`}
+      className={`mt-0.5 h-4 w-4 shrink-0 ${muted ? 'text-ink-muted' : 'text-healthy'}`}
       fill="none"
       aria-hidden="true"
     >
@@ -92,19 +92,19 @@ export function SummaryStep({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h2 className="font-display text-3xl uppercase leading-none text-text sm:text-4xl">You're set</h2>
-        <p className="max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
+        <h2 className="font-display text-3xl uppercase leading-none text-ink sm:text-4xl">You're set</h2>
+        <p className="max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-ink-muted">
           Here's what's connected. Anything you skipped can be finished later from Settings.
         </p>
       </div>
 
-      <ul className="flex flex-col divide-y-2 divide-border-strong border-2 border-text">
+      <ul className="flex flex-col divide-y-2 divide-paper-line-soft border-2 border-paper-line">
         {rows.map((row) => (
           <li key={row.label} className="flex items-start gap-3 p-4">
             <CheckIcon muted={!row.done} />
             <span className="flex flex-col gap-1">
-              <span className="font-display text-base uppercase leading-none text-text">{row.label}</span>
-              <span className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+              <span className="font-display text-base uppercase leading-none text-ink">{row.label}</span>
+              <span className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
                 {row.value}
               </span>
             </span>
