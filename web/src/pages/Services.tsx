@@ -76,11 +76,13 @@ export function Services() {
     [services],
   )
 
+  const noServicesAtAll = !isLoading && !isError && (services?.length ?? 0) === 0
+
   return (
     <div className="p-6">
       <PageHeader title="Services" description="Search, filter, and sort every tracked service." />
 
-      <div className="mb-6 flex flex-wrap items-end gap-4">
+      <div className="mb-6 flex flex-wrap items-end gap-4" hidden={noServicesAtAll}>
         <label className="flex flex-col gap-1.5 font-body text-[11px] font-bold uppercase tracking-wide text-ink-muted">
           Search
           <input
@@ -151,7 +153,7 @@ export function Services() {
             }}
           />
         ) : (
-          <NoServicesEmpty />
+          <NoServicesEmpty variant="split" />
         )
       ) : (
         <ServiceCardGrid services={visible} isLoading={isLoading} />
