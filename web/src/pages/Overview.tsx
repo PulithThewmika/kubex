@@ -18,7 +18,7 @@ export function Overview() {
         }
       />
       {isError ? (
-        <div className="rounded-xl border border-failed/30 bg-failed/5 p-4 text-sm text-failed">
+        <div className="border-2 border-failed bg-failed/5 p-4 font-body text-xs font-bold uppercase tracking-wide text-failed">
           Failed to load services. Retrying automatically.
         </div>
       ) : !isLoading && services?.length === 0 ? (
