@@ -26,6 +26,7 @@ from .routers import (
     grafana,
     install,
     integrations_slack,
+    relay_internal,
     settings,
 )
 
@@ -114,6 +115,7 @@ app.include_router(integrations_slack.router)
 app.include_router(integrations_slack.api_router)
 app.include_router(integrations_slack.events_router)
 app.include_router(grafana.router)
+app.include_router(relay_internal.router)
 app.include_router(settings.router)
 app.include_router(settings.installations_router)
 app.include_router(settings.onboarding_router)
