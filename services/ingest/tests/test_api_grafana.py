@@ -109,6 +109,29 @@ async def test_proxy_expands_prom_components(client) -> None:
 
 
 @pytest.mark.asyncio
+async def test_proxy_escapes_regex_metacharacters_in_components(client) -> None:
+    grafana_client = _mock_grafana_client()
+    with (
+        _patch_session(prom_components=("api.v1", "foo|bar")),
+        patch("app.routers.grafana._get_client", return_value=grafana_client),
+    ):
+        resp = await _get(uid="deploy-timeline", panelId=1, **{"var-service": "svc"})
+
+    assert resp.status_code == 200
+    # `.` and `|` escaped so each stays a literal alternative in service=~"$component"
+    assert grafana_client.build_request.call_args.kwargs["params"]["var-component"] == (
+        r"api\.v1|foo\|bar"
+    )
+
+
+@pytest.mark.asyncio
+async def test_proxy_rejects_control_char_in_component(client) -> None:
+    with _patch_session(prom_components=("ok", "bad\nname")):
+        resp = await _get(uid="deploy-timeline", panelId=1, **{"var-service": "svc"})
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_proxy_rejects_unknown_dashboard_uid(client) -> None:
     with _patch_session():
         resp = await _get(uid="platform-overview", panelId=1, **{"var-service": "orders"})
