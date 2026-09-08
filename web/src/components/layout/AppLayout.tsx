@@ -12,7 +12,7 @@ export function AppLayout() {
         <TopBar />
         <main className="relative flex-1 overflow-y-auto bg-paper text-ink">
           <div aria-hidden="true" className="pointer-events-none fixed inset-0 text-paper-line/[0.04] halftone-lg" />
-          <div className="relative mx-auto max-w-7xl animate-fade-in">
+          <div key={location.pathname} className="relative mx-auto max-w-7xl animate-page-in">
             <ErrorBoundary resetKey={location.pathname}>
               <Outlet />
             </ErrorBoundary>
