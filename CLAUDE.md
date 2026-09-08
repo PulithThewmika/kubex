@@ -21,6 +21,14 @@ ArgoCD Notifications ──────▶ │  Ingest Service │──▶ Supa
              Grafana (embedded panels + dashboards) ────┘
 ```
 
+Grafana's customer-facing panels don't read a platform Prometheus — their
+`kubex-prometheus` datasource points at ingest's `/api/prom`, which
+resolves the caller's org (an `org_id="…"` matcher the panel proxy
+injects) to that org's connected cluster and relays the PromQL through
+the EPIC-022 `cluster_queries` poll loop, blocking for a bounded wait.
+The operator-only dashboards still read Supabase Postgres directly (DORA
+`NULL`-org views).
+
 **Two runtime zones, plus a managed database:**
 - **Kind cluster** (`kubex`): sample app (frontend → orders → payments), Prometheus stack, Loki + Fluent-Bit, ArgoCD, Alertmanager — all in-cluster.
 - **docker-compose** (central platform): ingest service, detection agent, MCP server, Grafana. Runs outside the cluster for fast iteration.
@@ -117,7 +125,7 @@ Makefile
 
 5. **Deployment lifecycle states**: `pending → building → built → syncing → deployed → assessed`, with failure branches `build_failed` and `sync_failed`. GitHub webhook drives building/built; ArgoCD webhook drives syncing/deployed; the detection agent sets `assessed` once health scoring completes (V009).
 
-6. **DORA logic lives in SQL, org-parameterized** (V017). The authoritative form is four functions `dora_deploy_frequency(p_org_id)`, `dora_lead_time(p_org_id)`, `dora_change_failure_rate(p_org_id)`, `dora_mttr(p_org_id)` — a real UUID scopes to that org, `NULL` means platform-wide. Same-named **views** are kept as thin `NULL`-org wrappers purely so the two Grafana dashboards keep working unmodified (Grafana has no org concept). API, MCP, and agent must call the *functions* with a real `org_id`. No duplicated logic in Python.
+6. **DORA logic lives in SQL, org-parameterized** (V017). The authoritative form is four functions `dora_deploy_frequency(p_org_id)`, `dora_lead_time(p_org_id)`, `dora_change_failure_rate(p_org_id)`, `dora_mttr(p_org_id)` — a real UUID scopes to that org, `NULL` means platform-wide. Same-named **views** are kept as thin `NULL`-org wrappers for the `operator/` dashboard set. API, MCP, agent, and the **`customer/` dashboard set** (`dora_*('$org'::uuid)`, #834) all call the *functions* with a real `org_id`. No duplicated logic in Python.
 
 7. **Auto-registration is org-scoped** — unknown services arriving via webhook get a `services` row automatically (resolved via `repo` for GitHub, `argocd_app` for ArgoCD), always within the caller's org. V018 made `services.name/repo/argocd_app` uniqueness per-org, so two orgs sharing a repo is schema-legal: `resolve_org_id()` **fails closed** (raises) on cross-org ambiguity rather than guessing an org. Never "fix" that by picking the lowest service id.
 
@@ -296,7 +304,7 @@ The shared principle: pick the cheapest tool that gets full-quality output, not 
 - The GitHub Actions tag-bump commit means `workflow_run.head_sha` (original commit) ≠ ArgoCD revision (bump commit). This is expected — it's why the image_tag fallback exists.
 - Prometheus `rate()` returns nothing without steady traffic — the load generator (E4-T4) must be running before health scoring can be tested.
 - Grafana provisioned datasources/dashboards only load on container start — restart the Grafana container after editing provisioning YAML.
-- Grafana dashboards are deliberately **platform-wide, not per-tenant** — they query the `dora_*` views (NULL org). Don't "fix" that by hand; it needs an org_id template variable first.
+- Grafana dashboards come in **two sets** (`deploy/grafana/dashboards/`, #834): `operator/` is platform-wide (queries the `dora_*` NULL-org views, operator-only, don't add an org filter here); `customer/` is org-scoped by construction — every SQL panel filters `org_id = '$org'`, DORA panels call `dora_*('$org'::uuid)`, and `$org` is a hidden `constant` var the ingest panel proxy sets server-side from `UserContext` (the browser can't override it). Only `customer/` uids may be embedded (`grafana.py::EMBEDDABLE_DASHBOARD_UIDS`).
 - `psql`/manual SQL inserts into `services`/`deployments`/`alerts`/`pipeline_events` need an explicit `org_id` since V016 dropped the column DEFAULT — a bare INSERT now fails with a NOT NULL violation.
 - **Supabase session pooler, not direct connection or transaction pooler** (#817): the direct connection (`db.<ref>.supabase.co:5432`) is IPv6-only unless you've paid for the IPv4 add-on; the transaction-mode pooler (`:6543`) breaks asyncpg's server-side prepared statements and doesn't support `LISTEN/NOTIFY`. `DATABASE_URL` must be the session pooler (`aws-0-<region>.pooler.supabase.com:5432`).
 - **Every non-`postgres` Supabase role needs `<role>.<project-ref>` as its pooler username**, not the bare role name — `grafana_ro` connects as `grafana_ro.<project-ref>`, not `grafana_ro`.
