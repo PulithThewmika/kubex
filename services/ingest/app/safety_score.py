@@ -159,10 +159,17 @@ async def compute_safety_score(
     # scoring — so the two independent external calls (GitHub API, Prometheus)
     # run concurrently rather than serially, to stay well under GitHub's
     # webhook delivery timeout even if one of them is slow or unreachable.
-    files_changed, cluster = await asyncio.gather(
-        _fetch_files_changed(repo_full_name, commit_sha, github_token),
-        fetch_cluster_utilization(datetime.now()),
-    )
+    if service:
+        files_changed, cluster = await asyncio.gather(
+            _fetch_files_changed(repo_full_name, commit_sha, github_token),
+            fetch_cluster_utilization(session, service.org_id, datetime.now()),
+        )
+    else:
+        # No resolved service means no org_id to relay a query under (#840)
+        # — there's nowhere to route the cluster-utilization query, so skip
+        # it rather than guessing an org.
+        files_changed = await _fetch_files_changed(repo_full_name, commit_sha, github_token)
+        cluster = {"cpu_pct": None, "mem_pct": None, "unreachable": True}
     files_points = 20 if (files_changed is not None and files_changed > FILES_CHANGED_THRESHOLD) else 0
     score += files_points
     factors["files_changed"] = {"value": files_changed, "threshold": FILES_CHANGED_THRESHOLD, "points": files_points}
@@ -183,6 +190,11 @@ async def compute_safety_score(
         "cpu_pct": cpu_pct, "mem_pct": mem_pct,
         "cpu_threshold_pct": CLUSTER_CPU_THRESHOLD_PCT, "mem_threshold_pct": CLUSTER_MEM_THRESHOLD_PCT,
         "points": cluster_points,
+        # #840: distinguishes "0 points because the relay couldn't be
+        # reached" from "0 points because the cluster is genuinely under
+        # 75%/80% load" — both would otherwise collapse into the same
+        # cpu_pct/mem_pct = None.
+        "unreachable": cluster.get("unreachable", False),
     }
 
     last_verdict = await _query_last_verdict(session, service_id)
