@@ -24,15 +24,15 @@ export function CodeBlock({ code }: CodeBlockProps) {
   }
 
   return (
-    <div className="relative border-2 border-text bg-background">
+    <div className="relative border-2 border-paper-line bg-paper">
       <button
         type="button"
         onClick={handleCopy}
-        className="absolute right-2 top-2 border-2 border-text-muted px-2.5 py-1 font-body text-[0.65rem] font-bold uppercase tracking-widest text-text-muted transition-colors hover:border-accent hover:text-accent"
+        className="absolute right-2 top-2 border-2 border-ink-muted px-2.5 py-1 font-body text-[0.65rem] font-bold uppercase tracking-widest text-ink-muted transition-colors hover:border-accent hover:text-accent"
       >
         {copied ? 'Copied' : 'Copy'}
       </button>
-      <pre className="overflow-x-auto p-4 pr-20 font-mono text-xs leading-relaxed text-text">
+      <pre className="overflow-x-auto p-4 pr-20 font-mono text-xs leading-relaxed text-ink">
         <code>{code}</code>
       </pre>
     </div>

@@ -24,7 +24,7 @@ export function ApiKeyCreateModal({ onClose }: ApiKeyCreateModalProps) {
     <Modal titleId="create-api-key-title" title="Create API key" onClose={handleClose}>
       {created ? (
         <div className="mt-4 flex flex-col gap-4">
-          <p className="font-body text-xs font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
+          <p className="font-body text-xs font-semibold uppercase leading-relaxed tracking-wide text-ink-muted">
             Copy this key now — it's shown only once. If you lose it, revoke it and create a new one.
           </p>
           <CodeBlock code={created.token} />
@@ -46,14 +46,14 @@ export function ApiKeyCreateModal({ onClose }: ApiKeyCreateModalProps) {
           }}
         >
           <label className="flex flex-col gap-2 font-body text-xs font-bold uppercase tracking-wide">
-            <span className="text-text">Key name</span>
+            <span className="text-ink">Key name</span>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="CI pipeline"
               autoFocus
-              className="border-2 border-border-strong bg-background px-3 py-2.5 font-body text-sm normal-case tracking-normal text-text focus:border-accent focus:outline-none"
+              className="border-2 border-paper-line-soft bg-paper px-3 py-2.5 font-body text-sm normal-case tracking-normal text-ink focus:border-accent focus:outline-none"
             />
           </label>
           {createMutation.isError && (
