@@ -94,3 +94,20 @@ async def query(base_url: str, promql: str) -> dict:
     resp = await client.get("/api/v1/query", params={"query": promql, "timeout": PROM_QUERY_TIMEOUT})
     resp.raise_for_status()
     return resp.json()
+
+
+async def query_range(base_url: str, promql: str, start: str, end: str, step: str) -> dict:
+    """Execute a PromQL range query (#840) — needed for the MCP server's
+    query_metrics/generate_incident_report tools, which relay
+    /api/v1/query_range through ingest's routers/relay_internal.py as a
+    "range"-kind cluster_queries row. Returns Prometheus's raw JSON
+    response body unmodified, same convention as query()."""
+    if len(promql) > MAX_PROMQL_LENGTH:
+        raise QueryTooLongError(f"PromQL string exceeds {MAX_PROMQL_LENGTH} chars ({len(promql)})")
+    client = _client_for(base_url)
+    resp = await client.get(
+        "/api/v1/query_range",
+        params={"query": promql, "start": start, "end": end, "step": step, "timeout": PROM_QUERY_TIMEOUT},
+    )
+    resp.raise_for_status()
+    return resp.json()

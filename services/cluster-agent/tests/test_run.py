@@ -90,6 +90,32 @@ async def test_query_relay_tick_executes_and_submits_pending_queries() -> None:
 
 
 @pytest.mark.asyncio
+async def test_query_relay_tick_dispatches_range_to_prometheus_query_range() -> None:
+    """A "range"-kind query (#840, needed for the MCP server's
+    query_metrics/generate_incident_report tools) calls
+    prometheus.query_range with its start/end/step params, never the
+    instant-only prometheus.query."""
+    run._state["prometheus_status"] = "found"
+    run._state["prometheus_namespace"] = "monitoring"
+    run._state["prometheus_service"] = "prometheus-operated"
+    query = {
+        "id": "q1", "promql": 'up{service="orders"}', "kind": "range",
+        "params": {"start": "0", "end": "100", "step": "15s"},
+    }
+    with (
+        patch("cluster_agent.run.ingest_client.list_queries", AsyncMock(return_value=[query])),
+        patch("cluster_agent.run.prometheus.query", AsyncMock()) as mock_instant_query,
+        patch("cluster_agent.run.prometheus.query_range", AsyncMock(return_value={"status": "success"})) as mock_range_query,
+        patch("cluster_agent.run.ingest_client.submit_result", AsyncMock()) as mock_submit,
+    ):
+        await run._query_relay_tick("cluster-1")
+
+    mock_instant_query.assert_not_called()
+    mock_range_query.assert_awaited_once_with("http://prometheus-operated.monitoring.svc.cluster.local:9090", 'up{service="orders"}', "0", "100", "15s")
+    mock_submit.assert_awaited_once_with("cluster-1", "q1", {"status": "success"})
+
+
+@pytest.mark.asyncio
 async def test_query_relay_tick_dispatches_logql_to_loki() -> None:
     """A "logql"-kind query (#840) routes to loki.query_range, never
     prometheus.query — even when Prometheus IS discovered."""
