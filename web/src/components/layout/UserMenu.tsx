@@ -30,7 +30,7 @@ export function UserMenu() {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="User menu"
-        className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-accent/10 text-xs font-medium text-accent ring-1 ring-border transition-colors hover:ring-border-strong"
+        className="flex h-8 w-8 items-center justify-center overflow-hidden border-2 border-text-muted bg-accent/10 font-body text-xs font-bold text-accent transition-colors hover:border-accent"
       >
         {user.avatar_url ? (
           <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
@@ -41,11 +41,15 @@ export function UserMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-11 z-30 w-60 origin-top-right animate-fade-in overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-raised"
+          className="absolute right-0 top-11 z-30 w-60 origin-top-right animate-fade-in overflow-hidden border-2 border-text bg-surface-raised py-1"
         >
-          <div className="border-b border-border px-3 py-2.5">
-            <p className="truncate text-sm font-medium text-text">{user.login}</p>
-            {user.org_name && <p className="truncate text-xs text-text-muted">{user.org_name}</p>}
+          <div className="border-b-2 border-text px-3 py-2.5">
+            <p className="truncate font-body text-sm font-bold text-text">{user.login}</p>
+            {user.org_name && (
+              <p className="truncate font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+                {user.org_name}
+              </p>
+            )}
           </div>
           <OrgSwitcher onSwitched={() => setOpen(false)} />
           <div className="py-1">
@@ -56,7 +60,7 @@ export function UserMenu() {
                 setOpen(false)
                 navigate('/app/settings')
               }}
-              className="block w-full px-3 py-2 text-left text-sm text-text-muted transition-colors hover:bg-surface hover:text-text"
+              className="block w-full px-3 py-2 text-left font-body text-xs font-bold uppercase tracking-wide text-text-muted transition-colors hover:bg-surface hover:text-accent"
             >
               Settings
             </button>
@@ -64,7 +68,7 @@ export function UserMenu() {
               type="button"
               role="menuitem"
               onClick={handleSignOut}
-              className="block w-full px-3 py-2 text-left text-sm text-text-muted transition-colors hover:bg-surface hover:text-text"
+              className="block w-full px-3 py-2 text-left font-body text-xs font-bold uppercase tracking-wide text-text-muted transition-colors hover:bg-surface hover:text-accent"
             >
               Sign out
             </button>
