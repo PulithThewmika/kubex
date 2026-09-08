@@ -90,33 +90,35 @@ export function SummaryStep({
   ]
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h2 className="font-heading text-xl font-semibold text-text">You're set</h2>
-        <p className="text-sm text-text-muted">
+        <h2 className="font-display text-3xl uppercase leading-none text-text sm:text-4xl">You're set</h2>
+        <p className="max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
           Here's what's connected. Anything you skipped can be finished later from Settings.
         </p>
       </div>
 
-      <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
+      <ul className="flex flex-col divide-y-2 divide-border-strong border-2 border-text">
         {rows.map((row) => (
-          <li key={row.label} className="flex items-start gap-3 p-3.5">
+          <li key={row.label} className="flex items-start gap-3 p-4">
             <CheckIcon muted={!row.done} />
-            <span className="flex flex-col gap-0.5">
-              <span className="text-sm font-medium text-text">{row.label}</span>
-              <span className="text-xs text-text-muted">{row.value}</span>
+            <span className="flex flex-col gap-1">
+              <span className="font-display text-base uppercase leading-none text-text">{row.label}</span>
+              <span className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+                {row.value}
+              </span>
             </span>
           </li>
         ))}
       </ul>
 
-      {finishError && <p className="text-sm text-failed">{finishError}</p>}
+      {finishError && <p className="font-body text-xs font-bold uppercase tracking-wide text-failed">{finishError}</p>}
 
       <button
         type="button"
         onClick={onFinish}
         disabled={finishing}
-        className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px disabled:opacity-50"
+        className="group inline-flex w-fit items-center gap-3 border-2 border-accent bg-accent px-6 py-3.5 font-display text-lg uppercase tracking-wide text-background transition-transform duration-300 hover:-translate-y-1 active:translate-y-0 active:scale-[0.98] motion-reduce:transform-none disabled:opacity-50 disabled:hover:translate-y-0"
       >
         {finishing ? 'Finishing…' : 'Go to Dashboard'}
       </button>

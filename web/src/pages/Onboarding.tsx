@@ -51,12 +51,12 @@ export function Onboarding() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
       <div className="flex items-center justify-between gap-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-text-faint">Get started with KubeX</p>
+        <p className="font-body text-xs font-bold uppercase tracking-[0.3em] text-accent">Get started with KubeX</p>
         <button
           type="button"
           onClick={finish}
           disabled={complete.isPending}
-          className="text-xs font-medium text-text-muted underline-offset-4 hover:text-text hover:underline disabled:opacity-50"
+          className="font-body text-xs font-bold uppercase tracking-[0.2em] text-text-muted transition-colors hover:text-accent disabled:opacity-50"
         >
           Skip setup
         </button>
@@ -66,7 +66,7 @@ export function Onboarding() {
         <Stepper steps={STEP_LABELS} current={step} />
       </div>
 
-      <div className="mt-8">
+      <div className="mt-10">
         {step === 0 && <ConnectReposStep installations={installations} />}
         {step === 1 && (
           <DeployMethodStep
@@ -102,28 +102,28 @@ export function Onboarding() {
       </div>
 
       {!isLast && finishError && (
-        <p className="mt-4 text-sm text-failed" role="alert">
+        <p className="mt-4 font-body text-xs font-bold uppercase tracking-wide text-failed" role="alert">
           {finishError}
         </p>
       )}
 
-      <div className="mt-8 flex items-center justify-between border-t border-border pt-5">
+      <div className="mt-10 flex items-center justify-between border-t-2 border-text pt-6">
         <button
           type="button"
           onClick={() => setStep((s) => Math.max(0, s - 1))}
           disabled={step === 0}
-          className="rounded-md px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:text-text disabled:opacity-0"
+          className="font-body text-xs font-bold uppercase tracking-[0.2em] text-text-muted transition-colors hover:text-accent disabled:opacity-0"
         >
           Back
         </button>
 
         {!isLast && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
             {step > 0 && (
               <button
                 type="button"
                 onClick={skipStep}
-                className="rounded-md px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:text-text"
+                className="font-body text-xs font-bold uppercase tracking-[0.2em] text-text-muted transition-colors hover:text-accent"
               >
                 Skip this step
               </button>
@@ -131,7 +131,7 @@ export function Onboarding() {
             <button
               type="button"
               onClick={next}
-              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-background transition-colors hover:bg-accent-hover active:translate-y-px"
+              className="border-2 border-accent bg-accent px-5 py-2.5 font-display text-base uppercase tracking-wide text-background transition-transform duration-300 hover:-translate-y-1 active:translate-y-0 active:scale-[0.98] motion-reduce:transform-none"
             >
               Continue
             </button>
