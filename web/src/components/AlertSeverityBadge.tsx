@@ -1,8 +1,8 @@
 import type { AlertSeverity } from '../types/alert'
 
 const SEVERITY_STYLES: Record<AlertSeverity, string> = {
-  critical: 'bg-failed/10 text-failed',
-  warning: 'bg-degraded/10 text-degraded',
+  critical: 'bg-failed/10 text-failed ring-1 ring-inset ring-failed/25',
+  warning: 'bg-degraded/10 text-degraded ring-1 ring-inset ring-degraded/25',
 }
 
 const SEVERITY_DOT: Record<AlertSeverity, string> = {

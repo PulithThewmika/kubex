@@ -39,7 +39,7 @@ export function Toast({ toast, onDismiss }: ToastProps) {
   return (
     <div
       role={toast.type === 'error' ? 'alert' : 'status'}
-      className={`flex items-start gap-2.5 rounded-lg border bg-surface px-3.5 py-2.5 text-sm text-text shadow-lg ${style.border}`}
+      className={`flex animate-toast-in items-start gap-2.5 rounded-lg border bg-surface-raised px-3.5 py-2.5 text-sm text-text shadow-raised ${style.border}`}
     >
       <svg viewBox="0 0 24 24" fill="none" className={`mt-0.5 h-4 w-4 shrink-0 ${style.icon}`} aria-hidden="true">
         {style.iconPath}
