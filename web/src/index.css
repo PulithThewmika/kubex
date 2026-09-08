@@ -182,6 +182,147 @@
   }
 }
 
+/* Brutalist launcher — Uiverse.io (0xnihilism), Gemini variant. Kept as given
+   (fill circle, spinning shrinking logo, rising label on hover) but sized to
+   match the chat send button's height. */
+@layer components {
+  .brutalist-button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: 2px solid #000000;
+    border-radius: 6px;
+    padding: 0;
+    text-decoration: none;
+    color: #000000;
+    font-weight: bold;
+    position: relative;
+    box-shadow: 2px 2px 0px #000000;
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    height: 46px;
+    width: 46px;
+    cursor: pointer;
+  }
+
+  .brutalist-button.gemini {
+    background-color: #1b1c3a;
+  }
+
+  .brutalist-button::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: -150%;
+    width: 300%;
+    height: 300%;
+    border-radius: 50%;
+    transform: translateX(-50%) scale(0);
+    transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+    z-index: 1;
+  }
+
+  .brutalist-button.gemini::before {
+    background-color: #2b2d6b;
+  }
+
+  .brutalist-button:hover::before {
+    transform: translateX(-50%) scale(1);
+  }
+
+  .brutalist-button:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 4px 4px 0px #000000;
+  }
+
+  .brutalist-button:active {
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 0px #000000;
+  }
+
+  .brutalist-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background-color: #0b0c1e;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    transition: all 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
+
+  .brutalist-icon {
+    width: 17px;
+    height: 17px;
+    fill: #8ab4f8;
+    transition: all 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
+
+  @keyframes brutalist-spin {
+    0% {
+      transform: translate(-50%, -50%) rotate(0deg);
+    }
+    100% {
+      transform: translate(-50%, -50%) rotate(360deg);
+    }
+  }
+
+  .brutalist-button:hover .brutalist-logo {
+    animation: brutalist-spin 5s linear infinite;
+    width: 18px;
+    height: 18px;
+    top: 24%;
+  }
+
+  .brutalist-button:hover .brutalist-icon {
+    transform: scale(0.6);
+  }
+
+  .button-text {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.15;
+    transition: all 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    text-align: center;
+    opacity: 0;
+    transform: translateY(10px);
+    z-index: 2;
+    position: absolute;
+    bottom: 4px;
+    left: 0;
+    right: 0;
+  }
+
+  .button-text span:first-child {
+    font-size: 5px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: #c7c7d9;
+  }
+
+  .button-text span:last-child {
+    font-size: 8px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #ffffff;
+  }
+
+  .brutalist-button:hover .button-text {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
