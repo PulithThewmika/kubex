@@ -61,10 +61,10 @@ export function DeployMethodStep({
   const keyMutation = useMutation({ mutationFn: createApiKey, onSuccess: (data) => onApiKeyCreated(data.token) })
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h2 className="font-heading text-xl font-semibold text-text">How do you deploy?</h2>
-        <p className="text-sm text-text-muted">
+        <h2 className="font-display text-3xl uppercase leading-none text-text sm:text-4xl">How do you deploy?</h2>
+        <p className="max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
           KubeX correlates each release across CI and CD. Tell us where your deploys come from.
         </p>
       </div>
@@ -80,20 +80,20 @@ export function DeployMethodStep({
           <button
             type="button"
             onClick={onAddCluster}
-            className="w-fit rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text transition-colors hover:bg-surface"
+            className="w-fit border-2 border-text-muted px-3.5 py-2 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent"
           >
             Add a cluster
           </button>
         )}
         {value === 'github' && (
-          <p className="text-xs text-text-muted">
+          <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
             Covered by the GitHub App from step 1 — deployment statuses flow in automatically.
           </p>
         )}
         {value === 'webhook' && (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             {ingestUrlError ? (
-              <p className="text-xs text-failed">
+              <p className="font-body text-xs font-bold uppercase tracking-wide text-failed">
                 Couldn't load this org's ingest URL, so the webhook command can't be built yet. Retry in
                 a moment or finish setup and add the webhook later.
               </p>
@@ -103,7 +103,7 @@ export function DeployMethodStep({
                   type="button"
                   disabled={keyMutation.isPending || ingestUrlLoading || !ingestPublicUrl}
                   onClick={() => keyMutation.mutate('Onboarding deploy webhook')}
-                  className="w-fit rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text transition-colors hover:bg-surface disabled:opacity-50"
+                  className="w-fit border-2 border-text-muted px-3.5 py-2 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                 >
                   {keyMutation.isPending
                     ? 'Generating…'
@@ -112,12 +112,14 @@ export function DeployMethodStep({
                       : 'Generate API key'}
                 </button>
                 {keyMutation.isError && (
-                  <p className="text-xs text-failed">{(keyMutation.error as Error).message}</p>
+                  <p className="font-body text-xs font-bold uppercase tracking-wide text-failed">
+                    {(keyMutation.error as Error).message}
+                  </p>
                 )}
               </>
             ) : (
               <>
-                <p className="text-xs text-text-muted">
+                <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
                   Copy this key now — it's shown only once. Then call the API from your pipeline:
                 </p>
                 <CodeBlock code={apiKey} />
