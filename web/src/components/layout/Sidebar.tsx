@@ -158,10 +158,7 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="flex h-dvh w-[4.5rem] shrink-0 flex-col border-r-2 border-background bg-text text-background lg:w-60">
-      <div className="flex h-14 items-center justify-center border-b-2 border-background px-3 lg:justify-start lg:px-4">
-        <img src="/header-logo.png" alt="KubeX Platform" className="h-8 w-auto select-none" />
-      </div>
+    <aside className="flex h-full w-[4.5rem] shrink-0 flex-col border-r-2 border-background bg-text text-background lg:w-60">
       <nav className="flex flex-1 flex-col gap-2 p-2 lg:p-3">
         {NAV_ITEMS.map((item) => (
           <NavRow
