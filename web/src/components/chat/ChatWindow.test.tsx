@@ -9,8 +9,8 @@ describe('ChatWindow', () => {
       { id: '1', role: 'user', content: 'hi' },
       { id: '2', role: 'assistant', parts: [] },
     ]
-    const { container } = render(<ChatWindow messages={messages} isStreaming={true} />)
-    expect(container.querySelectorAll('.animate-bounce').length).toBe(3)
+    render(<ChatWindow messages={messages} isStreaming={true} />)
+    expect(screen.getByText('KubeX is thinking…')).toBeInTheDocument()
   })
 
   it('hides the typing indicator once text has started streaming in', () => {
@@ -18,14 +18,14 @@ describe('ChatWindow', () => {
       { id: '1', role: 'user', content: 'hi' },
       { id: '2', role: 'assistant', parts: [{ type: 'text', text: 'Checking' }] },
     ]
-    const { container } = render(<ChatWindow messages={messages} isStreaming={true} />)
-    expect(container.querySelectorAll('.animate-bounce').length).toBe(0)
+    render(<ChatWindow messages={messages} isStreaming={true} />)
+    expect(screen.queryByText('KubeX is thinking…')).not.toBeInTheDocument()
     expect(screen.getByText('Checking')).toBeInTheDocument()
   })
 
   it('does not show the indicator when not streaming', () => {
     const messages: ChatMessage[] = [{ id: '1', role: 'user', content: 'hi' }]
-    const { container } = render(<ChatWindow messages={messages} isStreaming={false} />)
-    expect(container.querySelectorAll('.animate-bounce').length).toBe(0)
+    render(<ChatWindow messages={messages} isStreaming={false} />)
+    expect(screen.queryByText('KubeX is thinking…')).not.toBeInTheDocument()
   })
 })

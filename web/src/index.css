@@ -135,6 +135,33 @@
     }
   }
 
+  /* Shining text — a highlight sweeps across the label via a moving
+     background-clip gradient. Used for the chat "thinking" state; pure CSS
+     so it doesn't need the motion/framer-motion package this project
+     deliberately avoids. */
+  .text-shine {
+    background-image: linear-gradient(
+      110deg,
+      var(--shine-base, currentColor) 35%,
+      var(--shine-highlight, #ff5722) 50%,
+      var(--shine-base, currentColor) 65%
+    );
+    background-size: 200% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    animation: shine 1.8s linear infinite;
+  }
+
+  @keyframes shine {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+
   .graph-glow {
     filter: drop-shadow(0 0 2px #ff5722) drop-shadow(0 0 6px rgba(255, 87, 34, 0.55));
   }

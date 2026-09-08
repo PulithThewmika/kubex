@@ -4,8 +4,11 @@ import type { Config } from 'tailwindcss'
 // Direction: a single cool-tinted near-black surface ladder (not pure black),
 // a luminous green as the one accent, and a GitHub-Primer-adjacent status
 // palette (green/amber/red/blue) that the SRE audience already reads fluently
-// and that clears WCAG AA on the dark surfaces. Dark-only by design — dark is
-// the product's identity, not a mode.
+// and that clears WCAG AA on the dark surfaces. Dark-only by design for the
+// marketing/auth surface and the app shell's chrome (Sidebar/TopBar) — dark
+// is the product's identity there, not a mode. The one deliberate exception
+// is the app shell's *content* canvas (see the `paper`/`ink` ladder below),
+// which runs the landing page's white-maximalist treatment instead.
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
@@ -36,6 +39,21 @@ export default {
         degraded: '#D29922',
         failed: '#F85149',
         info: '#58A6FF',
+
+        // "Paper" ladder — the app shell's *content* canvas (everything
+        // Sidebar/TopBar frame — Overview through Settings, including
+        // /app/onboarding). Chrome (Sidebar, TopBar) stays on the dark
+        // ladder above; only the scrollable content region switches to
+        // this white maximalist canvas. Status colours above are reused
+        // as-is on paper — each ships with an icon/label, never colour
+        // alone, so the swap doesn't need paper-specific variants.
+        paper: '#FAFAF7',
+        'paper-raised': '#FFFFFF',
+        'paper-line': '#16171A',
+        'paper-line-soft': '#DCD8CE',
+        ink: '#16171A',
+        'ink-muted': '#57534A',
+        'ink-faint': '#8C877A',
       },
       fontFamily: {
         // Maximalist poster display face for the marketing site — condensed,
