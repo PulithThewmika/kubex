@@ -7,9 +7,9 @@ import { Logo } from '../components/layout/Logo'
 
 // gsap + ScrollTrigger are heavy and only the marketing hero needs them — keep
 // them out of the app bundle and the test import graph.
-const LipScrollZoominAnimation = lazy(() =>
-  import('@/components/ui/lip-scroll-zoomin-animation').then((m) => ({
-    default: m.LipScrollZoominAnimation,
+const ScrollZoomReveal = lazy(() =>
+  import('@/components/ui/scroll-zoom-reveal').then((m) => ({
+    default: m.ScrollZoomReveal,
   })),
 )
 
@@ -49,7 +49,7 @@ export function Landing({ isAuthenticated = false }: { isAuthenticated?: boolean
         <LandingNav cta={cta} />
         <main>
           <Suspense fallback={<div className="min-h-screen" />}>
-            <LipScrollZoominAnimation />
+            <ScrollZoomReveal />
           </Suspense>
           <HowItWorks />
           <Features />
