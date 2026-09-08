@@ -1,5 +1,6 @@
 import { useCallback, type KeyboardEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { PageHeader } from '../components/PageHeader'
 import { GeneralTab } from '../components/settings/GeneralTab'
 import { ConnectionsTab } from '../components/settings/ConnectionsTab'
 import { ApiKeysTab } from '../components/settings/ApiKeysTab'
@@ -51,14 +52,14 @@ export function Settings() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
-      <h1 className="font-display text-4xl uppercase tracking-tight text-ink sm:text-5xl">Settings</h1>
+    <div className="mx-auto max-w-3xl p-6">
+      <PageHeader title="Settings" />
 
       <div
         role="tablist"
         aria-label="Settings sections"
         onKeyDown={handleTabKeyDown}
-        className="mt-5 flex flex-wrap gap-2"
+        className="flex flex-wrap gap-2"
       >
         {TABS.map((tab) => {
           const selected = tab.id === activeTab
