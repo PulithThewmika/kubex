@@ -26,10 +26,10 @@ function GitHubIcon() {
 
 function InstallationRow({ installation }: { installation: Installation }) {
   return (
-    <li className="flex flex-col gap-2 border-2 border-border-strong bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+    <li className="flex flex-col gap-2 border-2 border-paper-line-soft bg-paper-raised p-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <p className="font-body text-sm font-bold text-text">{installation.account_login}</p>
-        <p className="mt-1 font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+        <p className="font-body text-sm font-bold text-ink">{installation.account_login}</p>
+        <p className="mt-1 font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
           {installation.repos.length > 0 ? installation.repos.join(', ') : 'No repos selected'}
         </p>
       </div>
@@ -53,15 +53,15 @@ export function ConnectionsTab({ installationId }: ConnectionsTabProps) {
     <div>
       <section>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-body text-xs font-bold uppercase tracking-[0.15em] text-text-muted">Connect GitHub</h2>
+          <h2 className="font-body text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">Connect GitHub</h2>
           <Link
             to="/app/onboarding"
-            className="font-body text-xs font-bold uppercase tracking-wide text-text-muted underline-offset-4 hover:text-accent hover:underline"
+            className="font-body text-xs font-bold uppercase tracking-wide text-ink-muted underline-offset-4 hover:text-accent hover:underline"
           >
             Re-run setup guide
           </Link>
         </div>
-        <p className="mt-1 font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+        <p className="mt-1 font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
           Install the KubeX GitHub App to automatically provision webhooks for your repos.
         </p>
 
@@ -84,7 +84,7 @@ export function ConnectionsTab({ installationId }: ConnectionsTabProps) {
 
         <div className="mt-6">
           {isLoading && (
-            <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+            <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
               Loading installations…
             </p>
           )}
@@ -94,7 +94,7 @@ export function ConnectionsTab({ installationId }: ConnectionsTabProps) {
             </p>
           )}
           {!isLoading && !isError && installations && installations.length === 0 && !installationId && (
-            <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+            <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
               No GitHub App installations yet.
             </p>
           )}
