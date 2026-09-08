@@ -1,5 +1,6 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { useServices } from '../../hooks/useServices'
+import { useAuth } from '../../contexts/AuthContext'
 
 type NavItem = {
   to: string
@@ -73,6 +74,20 @@ function SettingsIcon({ className }: { className?: string }) {
   )
 }
 
+function SignOutIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M15 12H4m0 0 3.5-3.5M4 12l3.5 3.5M14 5h4a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-4"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 const NAV_ITEMS: NavItem[] = [
   { to: '/app', label: 'Overview', icon: OverviewIcon },
   { to: '/app/services', label: 'Services', icon: ServicesIcon },
@@ -134,6 +149,13 @@ export function Sidebar() {
   // /api/alerts list on every authenticated page just for a count.
   const { data: services } = useServices()
   const activeAlertCount = services?.reduce((sum, s) => sum + s.active_alert_count, 0) ?? 0
+  const { logout } = useAuth()
+  const navigate = useNavigate()
+
+  async function handleSignOut() {
+    await logout()
+    navigate('/login')
+  }
 
   return (
     <aside className="flex h-dvh w-[4.5rem] shrink-0 flex-col border-r-2 border-background bg-text text-background lg:w-60">
@@ -150,6 +172,17 @@ export function Sidebar() {
         ))}
         <div className="flex-1" aria-hidden="true" />
         <NavRow item={SETTINGS_ITEM} badge={null} />
+        <button
+          type="button"
+          onClick={handleSignOut}
+          title="Sign out"
+          className="group relative flex items-center justify-center gap-3 border-2 border-background bg-text px-3 py-2.5 font-body text-xs font-bold uppercase tracking-[0.15em] text-background/60 transition-all duration-300 motion-reduce:transform-none hover:-translate-y-0.5 hover:scale-[1.03] hover:bg-failed hover:text-background lg:justify-start"
+        >
+          <span className="shrink-0">
+            <SignOutIcon className="h-5 w-5" />
+          </span>
+          <span className="hidden lg:inline">Sign out</span>
+        </button>
       </nav>
     </aside>
   )
