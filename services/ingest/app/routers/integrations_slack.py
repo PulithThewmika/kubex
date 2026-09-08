@@ -59,7 +59,16 @@ SLACK_BOT_SCOPES = "chat:write,chat:write.public,channels:read,groups:read"
 STATE_TTL_MINUTES = 10
 NONCE_COOKIE = "slack_oauth_nonce"
 CALLBACK_ROUTE = "slack_oauth_callback"
+_CALLBACK_PATH = "/integrations/slack/callback"
 _SETTINGS_PATH = "/app/settings"
+
+
+def _callback_url() -> str:
+    """redirect_uri from SHELL_URL, not request.url_for() — behind Vercel's
+    rewrite the request Host is the API destination, not the browser origin,
+    so url_for() would send Slack's redirect to the wrong host (see auth.py)."""
+    return urljoin(SHELL_URL, _CALLBACK_PATH)
+
 
 router = APIRouter(prefix="/integrations/slack", tags=["integrations"])
 api_router = APIRouter(prefix="/api/settings/slack", tags=["integrations"])
@@ -124,7 +133,7 @@ async def slack_install(
         {
             "client_id": SLACK_CLIENT_ID,
             "scope": SLACK_BOT_SCOPES,
-            "redirect_uri": str(request.url_for(CALLBACK_ROUTE)),
+            "redirect_uri": _callback_url(),
             "state": state,
         }
     )
@@ -181,7 +190,7 @@ async def slack_oauth_callback(
             SLACK_CLIENT_ID,
             SLACK_CLIENT_SECRET,
             code,
-            str(request.url_for(CALLBACK_ROUTE)),
+            _callback_url(),
         )
     except (httpx.HTTPError, slack_client.SlackError) as exc:
         logger.warning("Slack oauth.v2.access failed: %s", exc)
