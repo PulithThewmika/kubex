@@ -21,17 +21,12 @@ function Nav({ cta }: { cta: Cta }) {
   return (
     <header className="sticky top-0 z-50 border-b-2 border-background bg-text text-background">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:h-20 sm:px-6">
-        <a
-          href="#top"
-          className="flex items-center gap-3 font-display text-3xl uppercase leading-none tracking-wide text-background sm:text-4xl"
-        >
+        <a href="#top" aria-label="KubeX" className="shrink-0">
           <img
             src="/kubex-logo-black.png"
-            alt=""
-            aria-hidden="true"
-            className="h-11 w-11 shrink-0 select-none sm:h-14 sm:w-14"
+            alt="KubeX"
+            className="h-11 w-11 select-none sm:h-14 sm:w-14"
           />
-          Kube<span className="text-accent">X</span>
         </a>
         <nav className="hidden gap-7 md:flex">
           {NAV_LINKS.map((l) => (
