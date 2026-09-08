@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from 'react-router-dom'
 import { ErrorBoundary } from '../ErrorBoundary'
+import { WelcomeTour } from '../onboarding/WelcomeTour'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 
@@ -19,6 +20,7 @@ export function AppLayout() {
           </div>
         </main>
       </div>
+      <WelcomeTour />
     </div>
   )
 }
