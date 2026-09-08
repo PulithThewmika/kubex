@@ -13,7 +13,7 @@ export function ToolCallChip({ tool, input, result, isError }: ToolCallChipProps
 
   return (
     <div
-      className={`border-2 text-xs ${isError ? 'border-failed bg-failed/5' : 'border-border-strong bg-surface'}`}
+      className={`border-2 text-xs ${isError ? 'border-failed bg-failed/5' : 'border-paper-line-soft bg-paper-raised'}`}
     >
       <button
         type="button"
@@ -22,24 +22,24 @@ export function ToolCallChip({ tool, input, result, isError }: ToolCallChipProps
         aria-expanded={expanded}
       >
         <span className={`font-mono ${isError ? 'text-failed' : 'text-accent'}`}>{tool}</span>
-        <span className="truncate text-text-muted">{summary}</span>
+        <span className="truncate text-ink-muted">{summary}</span>
         <svg
           viewBox="0 0 24 24"
           fill="none"
-          className={`ml-auto h-3.5 w-3.5 shrink-0 text-text-muted transition-transform ${expanded ? 'rotate-180' : ''}`}
+          className={`ml-auto h-3.5 w-3.5 shrink-0 text-ink-muted transition-transform ${expanded ? 'rotate-180' : ''}`}
           aria-hidden="true"
         >
           <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
       {expanded && (
-        <div className="border-t-2 border-border-strong px-3 py-2">
-          <div className="mb-1 font-body text-[11px] font-bold uppercase tracking-wide text-text-faint">Input</div>
-          <pre className="mb-2 overflow-x-auto whitespace-pre-wrap break-words font-mono text-text">
+        <div className="border-t-2 border-paper-line-soft px-3 py-2">
+          <div className="mb-1 font-body text-[11px] font-bold uppercase tracking-wide text-ink-faint">Input</div>
+          <pre className="mb-2 overflow-x-auto whitespace-pre-wrap break-words font-mono text-ink">
             {JSON.stringify(input, null, 2)}
           </pre>
-          <div className="mb-1 font-body text-[11px] font-bold uppercase tracking-wide text-text-faint">Result</div>
-          <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-text">{result}</pre>
+          <div className="mb-1 font-body text-[11px] font-bold uppercase tracking-wide text-ink-faint">Result</div>
+          <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-ink">{result}</pre>
         </div>
       )}
     </div>

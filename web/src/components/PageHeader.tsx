@@ -10,11 +10,11 @@ type PageHeaderProps = {
 // Settings. The <h1> here is the page's real document heading.
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
-    <div className="mb-8 flex flex-wrap items-start justify-between gap-4 border-b-2 border-text pb-5">
+    <div className="mb-8 flex flex-wrap items-start justify-between gap-4 border-b-2 border-paper-line pb-5">
       <div>
-        <h1 className="font-heading text-2xl font-bold uppercase tracking-tight text-text sm:text-3xl">{title}</h1>
+        <h1 className="font-heading text-2xl font-bold uppercase tracking-tight text-ink sm:text-3xl">{title}</h1>
         {description && (
-          <p className="mt-1.5 font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+          <p className="mt-1.5 font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
             {description}
           </p>
         )}

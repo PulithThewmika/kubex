@@ -15,10 +15,10 @@ export function NotificationsStep() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h2 className="font-display text-3xl uppercase leading-none text-text sm:text-4xl">
+        <h2 className="font-display text-3xl uppercase leading-none text-ink sm:text-4xl">
           Get deploy alerts in Slack
         </h2>
-        <p className="max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
+        <p className="max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-ink-muted">
           When a deployment degrades or fails, KubeX can post the health score and evidence straight to a
           Slack channel. Entirely optional — you can connect it later from Settings.
         </p>
@@ -39,7 +39,7 @@ export function NotificationsStep() {
         </a>
       )}
 
-      <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+      <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
         Opens Slack in this tab and returns you to Settings when the install completes.
       </p>
     </div>

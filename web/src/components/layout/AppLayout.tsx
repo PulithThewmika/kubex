@@ -10,8 +10,9 @@ export function AppLayout() {
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />
-        <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-7xl animate-fade-in">
+        <main className="relative flex-1 overflow-y-auto bg-paper text-ink">
+          <div aria-hidden="true" className="pointer-events-none fixed inset-0 text-paper-line/[0.04] halftone-lg" />
+          <div className="relative mx-auto max-w-7xl animate-fade-in">
             <ErrorBoundary resetKey={location.pathname}>
               <Outlet />
             </ErrorBoundary>

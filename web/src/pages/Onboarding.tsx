@@ -56,7 +56,7 @@ export function Onboarding() {
           type="button"
           onClick={finish}
           disabled={complete.isPending}
-          className="font-body text-xs font-bold uppercase tracking-[0.2em] text-text-muted transition-colors hover:text-accent disabled:opacity-50"
+          className="font-body text-xs font-bold uppercase tracking-[0.2em] text-ink-muted transition-colors hover:text-accent disabled:opacity-50"
         >
           Skip setup
         </button>
@@ -107,12 +107,12 @@ export function Onboarding() {
         </p>
       )}
 
-      <div className="mt-10 flex items-center justify-between border-t-2 border-text pt-6">
+      <div className="mt-10 flex items-center justify-between border-t-2 border-paper-line pt-6">
         <button
           type="button"
           onClick={() => setStep((s) => Math.max(0, s - 1))}
           disabled={step === 0}
-          className="font-body text-xs font-bold uppercase tracking-[0.2em] text-text-muted transition-colors hover:text-accent disabled:opacity-0"
+          className="font-body text-xs font-bold uppercase tracking-[0.2em] text-ink-muted transition-colors hover:text-accent disabled:opacity-0"
         >
           Back
         </button>
@@ -123,7 +123,7 @@ export function Onboarding() {
               <button
                 type="button"
                 onClick={skipStep}
-                className="font-body text-xs font-bold uppercase tracking-[0.2em] text-text-muted transition-colors hover:text-accent"
+                className="font-body text-xs font-bold uppercase tracking-[0.2em] text-ink-muted transition-colors hover:text-accent"
               >
                 Skip this step
               </button>

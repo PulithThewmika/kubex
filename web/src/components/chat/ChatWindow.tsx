@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import type { CSSProperties } from 'react'
 import { MessageBubble } from './MessageBubble'
 import type { ChatMessage, MessagePart } from '../../types/chat'
 
@@ -35,10 +36,13 @@ function hasVisibleContent(part: MessagePart): boolean {
 function TypingIndicator() {
   return (
     <div className="flex justify-start">
-      <div className="flex items-center gap-1 border-2 border-border-strong bg-surface px-3.5 py-2.5">
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-muted [animation-delay:-0.3s]" />
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-muted [animation-delay:-0.15s]" />
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-muted" />
+      <div className="flex items-center gap-2 border-2 border-paper-line-soft bg-paper-raised px-3.5 py-2.5">
+        <span
+          className="text-shine font-body text-xs font-bold uppercase tracking-wide"
+          style={{ '--shine-base': '#8C877A' } as CSSProperties}
+        >
+          KubeX is thinking…
+        </span>
       </div>
     </div>
   )

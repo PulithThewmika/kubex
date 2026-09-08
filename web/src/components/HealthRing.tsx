@@ -7,7 +7,7 @@ const VERDICT_COLORS: Record<string, string> = {
   failed: '#F85149',
 }
 
-const TRACK_COLOR = tailwindConfig.theme.extend.colors.border
+const TRACK_COLOR = tailwindConfig.theme.extend.colors['paper-line-soft']
 
 type HealthRingProps = {
   score: number | null
@@ -65,7 +65,7 @@ export function HealthRing({ score, verdict, size = 56 }: HealthRingProps) {
         />
       </svg>
       <span
-        className={`absolute font-heading font-bold tabular-nums ${isUnknown ? 'text-text-muted' : 'text-text'}`}
+        className={`absolute font-heading font-bold tabular-nums ${isUnknown ? 'text-ink-muted' : 'text-ink'}`}
         style={{ fontSize: size * 0.32 }}
       >
         {isUnknown ? '?' : Math.round(clampedScore)}
