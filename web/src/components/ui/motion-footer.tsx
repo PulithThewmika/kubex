@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useEffect, useRef } from 'react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import { ArrowRight, ArrowUp, Heart, LogIn } from 'lucide-react'
+import { ArrowRight, ArrowUp, LogIn } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 if (typeof window !== 'undefined') {
@@ -19,26 +19,6 @@ const STYLES = `
 .kx-footer {
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-}
-
-.kx-giant-text {
-  font-family: 'Anton', 'Impact', sans-serif;
-  font-size: 27vw;
-  line-height: 0.72;
-  letter-spacing: -0.05em;
-  color: transparent;
-  -webkit-text-stroke: 2px rgba(255, 87, 34, 0.28);
-}
-
-@keyframes kx-footer-heartbeat {
-  0%, 100% { transform: scale(1); }
-  15%, 45% { transform: scale(1.25); }
-  30% { transform: scale(1); }
-}
-.kx-anim-heartbeat { animation: kx-footer-heartbeat 1.8s cubic-bezier(0.25, 1, 0.5, 1) infinite; }
-
-@media (prefers-reduced-motion: reduce) {
-  .kx-anim-heartbeat { animation: none; }
 }
 `
 
@@ -153,7 +133,6 @@ const SECONDARY_LINKS = [
 
 export function CinematicFooter({ cta }: { cta: Cta }) {
   const wrapperRef = useRef<HTMLDivElement>(null)
-  const giantTextRef = useRef<HTMLDivElement>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const linksRef = useRef<HTMLDivElement>(null)
 
@@ -162,22 +141,6 @@ export function CinematicFooter({ cta }: { cta: Cta }) {
     if (!wrapperRef.current) return
 
     const ctx = gsap.context(() => {
-      gsap.fromTo(
-        giantTextRef.current,
-        { y: '10vh', scale: 0.85, opacity: 0 },
-        {
-          y: '0vh',
-          scale: 1,
-          opacity: 1,
-          ease: 'power1.out',
-          scrollTrigger: {
-            trigger: wrapperRef.current,
-            start: 'top 80%',
-            end: 'bottom bottom',
-            scrub: 1,
-          },
-        },
-      )
       gsap.fromTo(
         [headingRef.current, linksRef.current],
         { y: 50, opacity: 0 },
@@ -214,14 +177,6 @@ export function CinematicFooter({ cta }: { cta: Cta }) {
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 z-0 text-background/[0.07] halftone-lg"
           />
-
-          {/* Giant background wordmark */}
-          <div
-            ref={giantTextRef}
-            className="kx-giant-text pointer-events-none absolute -bottom-[3vh] left-1/2 z-0 -translate-x-1/2 select-none whitespace-nowrap uppercase"
-          >
-            KubeX
-          </div>
 
           {/* Hero-style marquee */}
           <div className="relative z-10">
@@ -273,26 +228,16 @@ export function CinematicFooter({ cta }: { cta: Cta }) {
           </div>
 
           {/* Bottom bar — black strip */}
-          <div className="relative z-20 flex w-full flex-col items-center justify-between gap-6 border-t-2 border-background bg-background px-6 py-6 text-text md:flex-row md:px-12">
-            <div className="order-2 font-body text-[10px] font-bold uppercase tracking-widest text-text/60 md:order-1 md:text-xs">
+          <div className="relative z-20 flex w-full items-center justify-between gap-6 border-t-2 border-background bg-background px-6 py-6 text-text md:px-12">
+            <div className="font-body text-[10px] font-bold uppercase tracking-widest text-text/60 md:text-xs">
               © 2026 KubeX
-            </div>
-
-            <div className="order-1 flex items-center gap-2 border-2 border-text px-5 py-2.5 md:order-2">
-              <span className="font-body text-[10px] font-bold uppercase tracking-widest text-text/70 md:text-xs">
-                Built with
-              </span>
-              <Heart className="kx-anim-heartbeat h-4 w-4 fill-accent text-accent" />
-              <span className="font-body text-[10px] font-bold uppercase tracking-widest text-text/70 md:text-xs">
-                for shipping teams
-              </span>
             </div>
 
             <MagneticButton
               as="button"
               onClick={scrollToTop}
               aria-label="Back to top"
-              className="group order-3 flex h-11 w-11 items-center justify-center border-2 border-text text-text transition-colors hover:bg-accent hover:text-background"
+              className="group flex h-11 w-11 items-center justify-center border-2 border-text text-text transition-colors hover:bg-accent hover:text-background"
             >
               <ArrowUp className="h-5 w-5 transition-transform duration-300 group-hover:-translate-y-1" />
             </MagneticButton>
