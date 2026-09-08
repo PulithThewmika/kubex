@@ -17,7 +17,7 @@ if (typeof window !== 'undefined') {
 
 const HERO_LINES = ['Know if your', 'last deploy', 'made it worse']
 
-const GITHUB_HREF = '/auth/github?redirect=%2Fapp'
+const GITHUB_HREF = '/login?redirect=%2Fapp'
 const SOURCE_HREF = 'https://github.com/PulithThewmika/kubex'
 
 type Cta = { href: string; label: string }
