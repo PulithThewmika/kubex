@@ -1,4 +1,3 @@
-import { IntegrationGraph } from '@/components/ui/integration-graph'
 import { Reveal } from '../components/landing/Reveal'
 import { Ticker } from '../components/landing/Ticker'
 import { TornEdge } from '../components/landing/TornEdge'
@@ -83,8 +82,15 @@ function Hero({ cta }: { cta: Cta }) {
               </a>
             </div>
           </Reveal>
-          <Reveal delayMs={120} className="w-full">
-            <IntegrationGraph />
+          <Reveal delayMs={120} className="flex justify-center lg:justify-end">
+            <img
+              src="/hero-image.png"
+              alt="An analyst scanning the horizon through binoculars, deployment charts rising behind"
+              width={1080}
+              height={1147}
+              className="h-auto w-full max-w-sm select-none lg:max-w-md xl:max-w-lg"
+              draggable={false}
+            />
           </Reveal>
         </div>
       </div>
