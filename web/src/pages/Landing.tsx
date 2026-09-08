@@ -20,7 +20,7 @@ const NAV_LINKS = [
 function Nav({ cta }: { cta: Cta }) {
   return (
     <header className="sticky top-0 z-50 border-b-2 border-background bg-text text-background">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:h-20 sm:px-6">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:h-20 sm:px-6 lg:px-4">
         <a href="#top" className="shrink-0">
           <img
             src="/header-logo.png"
