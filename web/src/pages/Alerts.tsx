@@ -2,10 +2,10 @@ import { useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { formatDistanceStrict, formatDistanceToNow } from 'date-fns'
 import { AlertSeverityBadge } from '../components/AlertSeverityBadge'
-import { EmptyState } from '../components/EmptyState'
 import { IllustratedEmpty } from '../components/IllustratedEmpty'
 import { PageHeader } from '../components/PageHeader'
 import { useAlerts } from '../hooks/useAlerts'
+import { useSlackConnection } from '../hooks/useSlack'
 import type { Alert } from '../types/alert'
 
 const FILTERS = [
@@ -66,6 +66,11 @@ export function Alerts() {
   const activeFilter: FilterId = isFilterId(filterParam) ? filterParam : 'active'
 
   const { data: alerts, isLoading, isError } = useAlerts()
+  const { data: slack } = useSlackConnection()
+  const slackDisconnected = slack !== undefined && !slack.connected
+  const slackChannels = slack?.connected
+    ? [...new Set(slack.channels.filter((c) => c.enabled).map((c) => c.slack_channel_name))]
+    : []
 
   const visible = useMemo(() => {
     if (!alerts) return []
@@ -92,10 +97,33 @@ export function Alerts() {
       <PageHeader
         title="Alerts"
         actions={
-          activeCount > 0 ? (
-            <span className="border-2 border-failed bg-failed/10 px-2 py-0.5 font-body text-xs font-bold uppercase tabular-nums tracking-wide text-failed">
-              {activeCount} active
-            </span>
+          activeCount > 0 || slackDisconnected || slack?.connected ? (
+            <>
+              {activeCount > 0 && (
+                <span className="border-2 border-failed bg-failed/10 px-2 py-0.5 font-body text-xs font-bold uppercase tabular-nums tracking-wide text-failed">
+                  {activeCount} active
+                </span>
+              )}
+              {slackDisconnected && (
+                <a
+                  href="/integrations/slack/install"
+                  className="inline-block border-2 border-accent bg-accent px-5 py-2.5 font-display text-xl uppercase tracking-wide text-background transition-transform hover:-translate-y-0.5"
+                >
+                  Connect Slack →
+                </a>
+              )}
+              {slack?.connected && (
+                <span className="inline-flex items-center gap-2.5 border-2 border-healthy bg-healthy/10 px-5 py-2.5 font-display text-xl uppercase tracking-wide text-healthy">
+                  <span className="h-2 w-2 rounded-full bg-healthy" aria-hidden="true" />
+                  Slack connected
+                  {slackChannels.length > 0 && (
+                    <span className="font-mono text-sm normal-case tracking-normal text-ink-muted">
+                      {slackChannels.map((c) => `#${c}`).join(' ')}
+                    </span>
+                  )}
+                </span>
+              )}
+            </>
           ) : undefined
         }
       />
@@ -139,24 +167,28 @@ export function Alerts() {
           ))}
         </ul>
       ) : visible.length === 0 ? (
-        activeFilter === 'active' ? (
-          <IllustratedEmpty
-            image="/Noalerts.png"
-            title="All clear"
-            lines={[
-              'No active alerts. Every service is within its health thresholds.',
-              'KubeX scores each deployment and only fires an alert when error rate, latency or restarts regress against the baseline window.',
-              'Anything that has fired stays in the Resolved and All tabs with its time-to-resolve.',
-            ]}
-          />
-        ) : (
-          <EmptyState
-            title="Nothing here"
-            description={
-              activeFilter === 'resolved' ? 'No resolved alerts yet.' : 'No alerts have been recorded yet.'
-            }
-          />
-        )
+        <IllustratedEmpty
+          variant="showcase"
+          image="/Noalerts.png"
+          title={activeFilter === 'active' ? 'All clear' : activeFilter === 'resolved' ? 'Nothing resolved' : 'No alerts yet'}
+          lines={
+            activeFilter === 'active'
+              ? [
+                  'No active alerts. Every service is within its health thresholds.',
+                  'KubeX scores each deployment and only fires an alert when error rate, latency or restarts regress against the baseline window.',
+                  'Anything that has fired stays in the Resolved and All tabs with its time-to-resolve.',
+                ]
+              : activeFilter === 'resolved'
+                ? [
+                    'No alerts have resolved yet.',
+                    'Once a firing alert clears, it lands here with how long it took to recover.',
+                  ]
+                : [
+                    'No alerts have been recorded yet.',
+                    'Every alert KubeX raises — active or resolved — will show up in this list.',
+                  ]
+          }
+        />
       ) : (
         <ul className="overflow-hidden border-2 border-paper-line-soft bg-paper-raised">
           {visible.map((alert) => (
