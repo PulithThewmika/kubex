@@ -162,12 +162,12 @@ async def compute_safety_score(
     if service:
         files_changed, cluster = await asyncio.gather(
             _fetch_files_changed(repo_full_name, commit_sha, github_token),
-            fetch_cluster_utilization(session, service.org_id, datetime.now()),
+            fetch_cluster_utilization(session, service.cluster_id, datetime.now()),
         )
     else:
-        # No resolved service means no org_id to relay a query under (#840)
-        # — there's nowhere to route the cluster-utilization query, so skip
-        # it rather than guessing an org.
+        # No resolved service means no service.cluster_id to dispatch on
+        # (#840) — there's nowhere to route the cluster-utilization query
+        # (relay or direct), so skip it rather than guessing.
         files_changed = await _fetch_files_changed(repo_full_name, commit_sha, github_token)
         cluster = {"cpu_pct": None, "mem_pct": None, "unreachable": True}
     files_points = 20 if (files_changed is not None and files_changed > FILES_CHANGED_THRESHOLD) else 0

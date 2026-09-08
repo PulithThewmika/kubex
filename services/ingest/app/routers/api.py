@@ -615,7 +615,7 @@ async def compare_deployments(
     result = await session.execute(
         text("""
             SELECT d.id, d.service_id, d.finished_at,
-                   s.name AS service_name, s.namespace
+                   s.name AS service_name, s.namespace, s.cluster_id
             FROM deployments d
             JOIN services s ON s.id = d.service_id
             WHERE d.id IN (:a, :b) AND d.org_id = :org_id
@@ -646,11 +646,13 @@ async def compare_deployments(
     service_name = row_a.service_name
     namespace = row_a.namespace
 
+    # row_a and row_b are already constrained to the same service above,
+    # so they share one cluster_id.
     metrics_a = await fetch_metrics_at(
-        session, user.org_id, service_name, namespace, OBSERVATION_WINDOW, row_a.finished_at,
+        session, row_a.cluster_id, service_name, namespace, OBSERVATION_WINDOW, row_a.finished_at,
     )
     metrics_b = await fetch_metrics_at(
-        session, user.org_id, service_name, namespace, OBSERVATION_WINDOW, row_b.finished_at,
+        session, row_a.cluster_id, service_name, namespace, OBSERVATION_WINDOW, row_b.finished_at,
     )
 
     compare_metrics = []
