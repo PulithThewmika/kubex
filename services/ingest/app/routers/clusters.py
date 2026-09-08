@@ -39,6 +39,9 @@ from ..schemas.cluster import (
 )
 
 ROTATE_GRACE_PERIOD = timedelta(minutes=10)
+# A relayed PromQL query older than this has no one waiting on it (see
+# prom.py) — don't hand it to the agent to run.
+STALE_QUERY_AGE = timedelta(seconds=60)
 
 
 def _require_own_cluster(path_cluster_id: str, cluster: Cluster) -> None:
@@ -165,9 +168,18 @@ async def list_pending_queries(
 ) -> list[ClusterQueryResponse]:
     _require_own_cluster(cluster_id, cluster)
 
+    # Skip rows nobody is waiting on any more: /api/prom deletes its row on
+    # timeout, but an agent that was offline during the outage shouldn't
+    # execute a backlog of stale queries against the customer's Prometheus
+    # the moment it reconnects (prom.py's RELAY_TIMEOUT is 20s).
+    cutoff = datetime.now(timezone.utc) - STALE_QUERY_AGE
     result = await session.execute(
         select(ClusterQuery)
-        .where(ClusterQuery.cluster_id == cluster.id, ClusterQuery.status == "pending")
+        .where(
+            ClusterQuery.cluster_id == cluster.id,
+            ClusterQuery.status == "pending",
+            ClusterQuery.requested_at >= cutoff,
+        )
         .order_by(ClusterQuery.requested_at)
     )
     return [
