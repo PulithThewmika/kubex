@@ -39,6 +39,9 @@ from ..schemas.cluster import (
 )
 
 ROTATE_GRACE_PERIOD = timedelta(minutes=10)
+# A relayed PromQL query older than this has no one waiting on it (see
+# prom.py) — don't hand it to the agent to run.
+STALE_QUERY_AGE = timedelta(seconds=60)
 
 
 def _require_own_cluster(path_cluster_id: str, cluster: Cluster) -> None:
@@ -66,6 +69,8 @@ def _to_response(cluster: Cluster) -> ClusterResponse:
         argocd_version=cluster.argocd_version,
         argocd_status=cluster.argocd_status,
         prometheus_status=cluster.prometheus_status,
+        prometheus_namespace=cluster.prometheus_namespace,
+        prometheus_service=cluster.prometheus_service,
         last_heartbeat=cluster.last_heartbeat,
         created_at=cluster.created_at,
     )
@@ -135,6 +140,10 @@ async def cluster_heartbeat(
         values["argocd_status"] = body.argocd_status
     if body.prometheus_status is not None:
         values["prometheus_status"] = body.prometheus_status
+    if body.prometheus_namespace is not None:
+        values["prometheus_namespace"] = body.prometheus_namespace
+    if body.prometheus_service is not None:
+        values["prometheus_service"] = body.prometheus_service
 
     # A Core UPDATE, not ORM attribute assignment: if a concurrent
     # disconnect-sweep (app.cluster_monitor) commits 'disconnected'
@@ -159,12 +168,24 @@ async def list_pending_queries(
 ) -> list[ClusterQueryResponse]:
     _require_own_cluster(cluster_id, cluster)
 
+    # Skip rows nobody is waiting on any more: /api/prom deletes its row on
+    # timeout, but an agent that was offline during the outage shouldn't
+    # execute a backlog of stale queries against the customer's Prometheus
+    # the moment it reconnects (prom.py's RELAY_TIMEOUT is 20s).
+    cutoff = datetime.now(timezone.utc) - STALE_QUERY_AGE
     result = await session.execute(
         select(ClusterQuery)
-        .where(ClusterQuery.cluster_id == cluster.id, ClusterQuery.status == "pending")
+        .where(
+            ClusterQuery.cluster_id == cluster.id,
+            ClusterQuery.status == "pending",
+            ClusterQuery.requested_at >= cutoff,
+        )
         .order_by(ClusterQuery.requested_at)
     )
-    return [ClusterQueryResponse(id=str(q.id), promql=q.promql) for q in result.scalars().all()]
+    return [
+        ClusterQueryResponse(id=str(q.id), promql=q.promql, kind=q.kind or "instant", params=q.params)
+        for q in result.scalars().all()
+    ]
 
 
 @router.post("/{cluster_id}/results", status_code=204, response_model=None)

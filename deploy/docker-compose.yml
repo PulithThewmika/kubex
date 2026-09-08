@@ -137,6 +137,15 @@ services:
       SUPABASE_DB_NAME: ${SUPABASE_DB_NAME:-postgres}
       SUPABASE_GRAFANA_RO_USER: ${SUPABASE_GRAFANA_RO_USER:-}
       SUPABASE_GRAFANA_RO_PASSWORD: ${SUPABASE_GRAFANA_RO_PASSWORD:-}
+      # Bearer the kubex-prometheus datasource sends to ingest's /api/prom
+      # relay (#832). Must match ingest's GRAFANA_DATASOURCE_TOKEN.
+      GRAFANA_DATASOURCE_TOKEN: ${GRAFANA_DATASOURCE_TOKEN:-}
+      # Server-side PNG rendering (#835). The embedded panels are static
+      # 256px images in the shell — rendering them to PNG sidesteps the
+      # /d-solo/ HTML's relative-path asset 404s (E11-T2). Grafana calls
+      # the renderer, which loads the panel back from GF_RENDERING_CALLBACK_URL.
+      GF_RENDERING_SERVER_URL: http://renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana:3000/
     volumes:
       - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
@@ -146,6 +155,17 @@ services:
       postgres:
         condition: service_healthy
         required: false
+
+  renderer:
+    image: grafana/grafana-image-renderer:3.11.6
+    container_name: kubex-grafana-renderer
+    restart: unless-stopped
+    environment:
+      ENABLE_METRICS: "false"
+      # The renderer only ever needs to reach Grafana on the compose net.
+      RENDERING_MODE: default
+    expose:
+      - "8081"
 
 volumes:
   pgdata:  # only populated when running --profile local-db
