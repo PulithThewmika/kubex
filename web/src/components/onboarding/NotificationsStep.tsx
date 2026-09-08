@@ -13,34 +13,33 @@ export function NotificationsStep() {
   const connected = data?.connected ?? false
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h2 className="font-heading text-xl font-semibold text-text">Get deploy alerts in Slack</h2>
-        <p className="text-sm text-text-muted">
+        <h2 className="font-display text-3xl uppercase leading-none text-text sm:text-4xl">
+          Get deploy alerts in Slack
+        </h2>
+        <p className="max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
           When a deployment degrades or fails, KubeX can post the health score and evidence straight to a
           Slack channel. Entirely optional — you can connect it later from Settings.
         </p>
       </div>
 
       {connected ? (
-        <div
-          role="status"
-          className="rounded-lg border border-healthy/30 bg-healthy/10 px-4 py-3 text-sm text-healthy"
-        >
+        <div role="status" className="border-2 border-healthy bg-healthy/10 px-4 py-3 font-body text-xs font-bold uppercase tracking-wide text-healthy">
           Connected to {data?.team_name ?? 'your workspace'}. Pick channels to notify from Settings →
           Connections.
         </div>
       ) : (
         <a
           href="/integrations/slack/install"
-          className="flex w-fit items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px"
+          className="group inline-flex w-fit items-center gap-3 border-2 border-accent bg-accent px-5 py-3 font-display text-base uppercase tracking-wide text-background transition-transform duration-300 hover:-translate-y-1 active:translate-y-0 active:scale-[0.98] motion-reduce:transform-none"
         >
           <SlackIcon />
           Add to Slack
         </a>
       )}
 
-      <p className="text-xs text-text-muted">
+      <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
         Opens Slack in this tab and returns you to Settings when the install completes.
       </p>
     </div>

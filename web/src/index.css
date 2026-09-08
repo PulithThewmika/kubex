@@ -167,4 +167,11 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+
+  /* Marquees are decorative continuous scroll, not a motion cue tied to
+     content changing — keep them running under reduced motion. */
+  .marquee-track {
+    animation-duration: 38s !important;
+    animation-iteration-count: infinite !important;
+  }
 }
