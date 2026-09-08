@@ -6,8 +6,9 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from google.genai import types
 
-os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
+os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 from app.chat_engine import run_chat_turn  # noqa: E402
 from app.schemas.chat import ChatMessage  # noqa: E402
@@ -15,73 +16,51 @@ from app.schemas.chat import ChatMessage  # noqa: E402
 TEST_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
 
 
-def _text_block(text):
-    block = MagicMock()
-    block.type = "text"
-    block.text = text
-    block.model_dump.return_value = {"type": "text", "text": text}
-    return block
+def _text_part(text):
+    # A real types.Part, not a MagicMock — chat_engine.py builds a real
+    # types.Content(parts=...) from these, which pydantic-validates every
+    # part; a loosely-mocked part fails that validation with cryptic
+    # field-coercion errors instead of a clean assertion failure.
+    return types.Part.from_text(text=text)
 
 
-def _tool_use_block(id_, name, input_):
-    block = MagicMock()
-    block.type = "tool_use"
-    block.id = id_
-    block.name = name
-    block.input = input_
-    block.model_dump.return_value = {
-        "type": "tool_use",
-        "id": id_,
-        "name": name,
-        "input": input_,
-    }
-    return block
+def _function_call_part(id_, name, args):
+    return types.Part(function_call=types.FunctionCall(name=name, args=args))
 
 
-def _final_message(stop_reason, content):
-    message = MagicMock()
-    message.stop_reason = stop_reason
-    message.content = content
-    return message
+def _chunk(text, parts):
+    chunk = MagicMock()
+    chunk.text = text
+    candidate = MagicMock()
+    candidate.content.parts = parts
+    chunk.candidates = [candidate]
+    return chunk
 
 
 class _FakeStream:
-    def __init__(self, text_chunks, final_message):
-        self._text_chunks = text_chunks
-        self._final_message = final_message
+    """Re-iterable async stream — __aiter__ builds a fresh generator each
+    time so the same instance can be replayed across tool-loop iterations
+    (needed by the max-iterations test)."""
 
-    @property
-    def text_stream(self):
-        async def _gen():
-            for chunk in self._text_chunks:
-                yield chunk
+    def __init__(self, chunks):
+        self._chunks = chunks
 
-        return _gen()
+    def __aiter__(self):
+        return self._gen()
 
-    async def get_final_message(self):
-        return self._final_message
-
-
-class _FakeStreamManager:
-    def __init__(self, stream):
-        self._stream = stream
-
-    async def __aenter__(self):
-        return self._stream
-
-    async def __aexit__(self, *exc):
-        return False
+    async def _gen(self):
+        for chunk in self._chunks:
+            yield chunk
 
 
 @pytest.mark.asyncio
 async def test_run_chat_turn_streams_text_only():
-    final = _final_message("end_turn", [_text_block("Hello there")])
-    fake_stream = _FakeStream(["Hello", " there"], final)
+    stream = _FakeStream([_chunk("Hello", [_text_part("Hello")]), _chunk(" there", [_text_part(" there")])])
 
     mock_client = MagicMock()
-    mock_client.messages.stream.return_value = _FakeStreamManager(fake_stream)
+    mock_client.aio.models.generate_content_stream = AsyncMock(return_value=stream)
 
-    with patch("app.chat_engine.anthropic.AsyncAnthropic", return_value=mock_client):
+    with patch("app.chat_engine.genai.Client", return_value=mock_client):
         frames = [
             frame
             async for frame in run_chat_turn(
@@ -97,18 +76,11 @@ async def test_run_chat_turn_streams_text_only():
 
 @pytest.mark.asyncio
 async def test_run_chat_turn_includes_tool_call_results():
-    tool_block = _tool_use_block("tool_1", "list_deployments", {"service": "orders"})
-    first_final = _final_message("tool_use", [tool_block])
-    first_stream = _FakeStream([], first_final)
-
-    second_final = _final_message("end_turn", [_text_block("done")])
-    second_stream = _FakeStream(["done"], second_final)
+    first_stream = _FakeStream([_chunk(None, [_function_call_part("tool_1", "list_deployments", {"service": "orders"})])])
+    second_stream = _FakeStream([_chunk("done", [_text_part("done")])])
 
     mock_client = MagicMock()
-    mock_client.messages.stream.side_effect = [
-        _FakeStreamManager(first_stream),
-        _FakeStreamManager(second_stream),
-    ]
+    mock_client.aio.models.generate_content_stream = AsyncMock(side_effect=[first_stream, second_stream])
 
     mock_mcp_session = AsyncMock()
     mock_mcp_session.call_tool.return_value = MagicMock(
@@ -123,7 +95,7 @@ async def test_run_chat_turn_includes_tool_call_results():
         yield mock_mcp_session
 
     with (
-        patch("app.chat_engine.anthropic.AsyncAnthropic", return_value=mock_client),
+        patch("app.chat_engine.genai.Client", return_value=mock_client),
         patch("app.chat_engine.mcp_session", fake_mcp_session),
     ):
         frames = [
@@ -149,19 +121,16 @@ async def test_run_chat_turn_runs_parallel_tool_calls_concurrently():
     import asyncio
     import time
 
-    block_a = _tool_use_block("tool_a", "get_dora_metrics", {})
-    block_b = _tool_use_block("tool_b", "get_active_alerts", {})
-    first_final = _final_message("tool_use", [block_a, block_b])
-    first_stream = _FakeStream([], first_final)
-
-    second_final = _final_message("end_turn", [_text_block("done")])
-    second_stream = _FakeStream(["done"], second_final)
+    first_stream = _FakeStream([
+        _chunk(None, [
+            _function_call_part("tool_a", "get_dora_metrics", {}),
+            _function_call_part("tool_b", "get_active_alerts", {}),
+        ])
+    ])
+    second_stream = _FakeStream([_chunk("done", [_text_part("done")])])
 
     mock_client = MagicMock()
-    mock_client.messages.stream.side_effect = [
-        _FakeStreamManager(first_stream),
-        _FakeStreamManager(second_stream),
-    ]
+    mock_client.aio.models.generate_content_stream = AsyncMock(side_effect=[first_stream, second_stream])
 
     call_started_at: list[float] = []
 
@@ -178,7 +147,7 @@ async def test_run_chat_turn_runs_parallel_tool_calls_concurrently():
         yield mock_mcp_session
 
     with (
-        patch("app.chat_engine.anthropic.AsyncAnthropic", return_value=mock_client),
+        patch("app.chat_engine.genai.Client", return_value=mock_client),
         patch("app.chat_engine.mcp_session", fake_mcp_session),
     ):
         start = time.monotonic()
@@ -200,12 +169,10 @@ async def test_run_chat_turn_runs_parallel_tool_calls_concurrently():
 
 @pytest.mark.asyncio
 async def test_run_chat_turn_stops_after_max_iterations():
-    tool_block = _tool_use_block("tool_1", "list_deployments", {})
-    final = _final_message("tool_use", [tool_block])
-    stream = _FakeStream([], final)
+    stream = _FakeStream([_chunk(None, [_function_call_part("tool_1", "list_deployments", {})])])
 
     mock_client = MagicMock()
-    mock_client.messages.stream.side_effect = lambda **kw: _FakeStreamManager(stream)
+    mock_client.aio.models.generate_content_stream = AsyncMock(return_value=stream)
 
     mock_mcp_session = AsyncMock()
     mock_mcp_session.call_tool.return_value = MagicMock(
@@ -217,7 +184,7 @@ async def test_run_chat_turn_stops_after_max_iterations():
         yield mock_mcp_session
 
     with (
-        patch("app.chat_engine.anthropic.AsyncAnthropic", return_value=mock_client),
+        patch("app.chat_engine.genai.Client", return_value=mock_client),
         patch("app.chat_engine.mcp_session", fake_mcp_session),
     ):
         frames = [
