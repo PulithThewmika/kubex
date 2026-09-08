@@ -36,6 +36,8 @@ class ClusterResponse(BaseModel):
     argocd_version: str | None
     argocd_status: str | None
     prometheus_status: str | None
+    prometheus_namespace: str | None = None
+    prometheus_service: str | None = None
     last_heartbeat: datetime | None
     created_at: datetime
 
@@ -51,6 +53,8 @@ class ClusterHeartbeatRequest(BaseModel):
     argocd_version: str | None = None
     argocd_status: str | None = None
     prometheus_status: str | None = None
+    prometheus_namespace: str | None = None
+    prometheus_service: str | None = None
 
 
 class ClusterHeartbeatResponse(BaseModel):
@@ -66,6 +70,8 @@ class ClusterRotateTokenResponse(BaseModel):
 class ClusterQueryResponse(BaseModel):
     id: str
     promql: str
+    kind: str = "instant"
+    params: dict | None = None
 
 
 class ClusterQueryResultRequest(BaseModel):

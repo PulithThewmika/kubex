@@ -21,7 +21,9 @@ DEPLOYLENS_ENDPOINT = os.environ.get("DEPLOYLENS_ENDPOINT", "")
 ALLOW_INSECURE_ENDPOINT = os.environ.get("ALLOW_INSECURE_ENDPOINT", "").lower() in ("1", "true")
 
 HEARTBEAT_INTERVAL_SECONDS = int(os.environ.get("HEARTBEAT_INTERVAL_SECONDS", "60"))
-QUERY_POLL_INTERVAL_SECONDS = int(os.environ.get("QUERY_POLL_INTERVAL_SECONDS", "10"))
+# Kept short: a Grafana panel query blocks on ingest's /api/prom relay
+# until this poll picks the row up, so it bounds the panel's latency.
+QUERY_POLL_INTERVAL_SECONDS = int(os.environ.get("QUERY_POLL_INTERVAL_SECONDS", "3"))
 ARGOCD_RECHECK_INTERVAL_SECONDS = int(os.environ.get("ARGOCD_RECHECK_INTERVAL_SECONDS", "300"))
 
 BACKOFF_INITIAL_SECONDS = float(os.environ.get("BACKOFF_INITIAL_SECONDS", "1"))

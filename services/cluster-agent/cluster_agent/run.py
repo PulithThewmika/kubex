@@ -149,6 +149,8 @@ async def _heartbeat_tick() -> None:
         argocd_version=_state["argocd_version"],
         argocd_status=_state["argocd_status"],
         prometheus_status=_state["prometheus_status"],
+        prometheus_namespace=_state["prometheus_namespace"],
+        prometheus_service=_state["prometheus_service"],
     )
     if event_buffer.size():
         # Reaching here means the heartbeat POST above just succeeded, so
@@ -185,7 +187,13 @@ async def _query_relay_tick(cluster_id: str) -> None:
     base_url = prometheus.in_cluster_url(_state["prometheus_namespace"], _state["prometheus_service"])
     for q in queries:
         try:
-            result = await prometheus.query(base_url, q["promql"])
+            if q.get("kind") == "range":
+                p = q.get("params") or {}
+                result = await prometheus.query_range(
+                    base_url, q["promql"], p["start"], p["end"], p["step"]
+                )
+            else:
+                result = await prometheus.query(base_url, q["promql"])
         except Exception:
             logger.exception("Failed to execute PromQL for query %s", q["id"])
             continue
