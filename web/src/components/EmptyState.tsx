@@ -14,7 +14,7 @@ type EmptyStateProps = {
 }
 
 const ACTION_CLASS =
-  'inline-flex items-center rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-background transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
+  'inline-flex items-center rounded-md bg-accent px-3.5 py-1.5 text-sm font-semibold text-background transition-colors hover:bg-accent-hover active:translate-y-px'
 
 function ActionButton({ action }: { action: Action }) {
   if ('to' in action && action.to !== undefined) {

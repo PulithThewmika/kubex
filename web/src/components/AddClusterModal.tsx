@@ -169,7 +169,7 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
               onChange={(e) => setName(e.target.value)}
               placeholder="production"
               autoFocus
-              className="rounded-md border border-border bg-background px-3 py-2 text-sm text-text"
+              className="rounded-md border border-border-strong bg-background px-3 py-2 text-sm text-text focus:border-accent focus:outline-none"
             />
           </label>
           {createMutation.isError && (
@@ -179,7 +179,7 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
             type="button"
             disabled={name.trim().length === 0 || createMutation.isPending}
             onClick={() => createMutation.mutate(name.trim())}
-            className="w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90 disabled:opacity-50"
+            className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px disabled:opacity-50"
           >
             {createMutation.isPending ? 'Creating…' : 'Continue'}
           </button>
@@ -196,7 +196,7 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
           <button
             type="button"
             onClick={() => setStep('install')}
-            className="w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90"
+            className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px"
           >
             Continue
           </button>
@@ -239,7 +239,7 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
             type="button"
             onClick={() => setStep('waiting')}
             disabled={!installInfo}
-            className="w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90 disabled:opacity-50"
+            className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px disabled:opacity-50"
           >
             I've installed it
           </button>
@@ -257,7 +257,7 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
               <button
                 type="button"
                 onClick={handleClose}
-                className="mt-2 w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90"
+                className="mt-2 w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px"
               >
                 Done
               </button>
