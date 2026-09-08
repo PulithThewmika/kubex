@@ -160,26 +160,28 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
   return (
     <Modal titleId="add-cluster-title" title="Add cluster" onClose={handleClose}>
       {step === 'name' && (
-        <div className="mt-4 flex flex-col gap-4">
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-text">Cluster name</span>
+        <div className="mt-5 flex flex-col gap-4">
+          <label className="flex flex-col gap-2 font-body text-xs font-bold uppercase tracking-wide">
+            <span className="text-text">Cluster name</span>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="production"
               autoFocus
-              className="rounded-md border border-border-strong bg-background px-3 py-2 text-sm text-text focus:border-accent focus:outline-none"
+              className="border-2 border-border-strong bg-background px-3 py-2.5 font-body text-sm normal-case tracking-normal text-text focus:border-accent focus:outline-none"
             />
           </label>
           {createMutation.isError && (
-            <p className="text-sm text-failed">{(createMutation.error as Error).message}</p>
+            <p className="font-body text-xs font-bold uppercase tracking-wide text-failed">
+              {(createMutation.error as Error).message}
+            </p>
           )}
           <button
             type="button"
             disabled={name.trim().length === 0 || createMutation.isPending}
             onClick={() => createMutation.mutate(name.trim())}
-            className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px disabled:opacity-50"
+            className="w-fit border-2 border-accent bg-accent px-5 py-2.5 font-display text-base uppercase tracking-wide text-background transition-transform duration-300 hover:-translate-y-1 active:translate-y-0 active:scale-[0.98] motion-reduce:transform-none disabled:opacity-50 disabled:hover:translate-y-0"
           >
             {createMutation.isPending ? 'Creating…' : 'Continue'}
           </button>
@@ -187,8 +189,8 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
       )}
 
       {step === 'token' && created && (
-        <div className="mt-4 flex flex-col gap-4">
-          <p className="text-sm text-text-muted">
+        <div className="mt-5 flex flex-col gap-4">
+          <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
             This token authenticates the agent to KubeX. It's shown only once — copy it now, or you'll need to
             rotate it to get a new one.
           </p>
@@ -196,7 +198,7 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
           <button
             type="button"
             onClick={() => setStep('install')}
-            className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px"
+            className="w-fit border-2 border-accent bg-accent px-5 py-2.5 font-display text-base uppercase tracking-wide text-background transition-transform duration-300 hover:-translate-y-1 active:translate-y-0 active:scale-[0.98] motion-reduce:transform-none"
           >
             Continue
           </button>
@@ -204,15 +206,15 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
       )}
 
       {step === 'install' && created && (
-        <div className="mt-4 flex flex-col gap-4">
-          <div className="flex gap-1 border-b border-border">
+        <div className="mt-5 flex flex-col gap-4">
+          <div className="flex gap-1 border-b-2 border-border-strong">
             {INSTALL_TABS.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setInstallMethod(tab.id)}
-                className={`px-3 py-2 text-sm font-medium transition-colors ${
-                  installMethod === tab.id ? 'border-b-2 border-accent text-text' : 'text-text-muted hover:text-text'
+                className={`px-3 py-2 font-body text-xs font-bold uppercase tracking-wide transition-colors ${
+                  installMethod === tab.id ? 'border-b-2 border-accent text-accent' : 'text-text-muted hover:text-text'
                 }`}
               >
                 {tab.label}
@@ -222,24 +224,28 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
           {installInfo ? (
             <CodeBlock code={installCommand(installMethod, created.token, name.trim(), installInfo)} />
           ) : installInfoError ? (
-            <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background p-3">
-              <p className="text-sm text-failed">Couldn't load install instructions.</p>
+            <div className="flex items-center justify-between gap-3 border-2 border-failed bg-background p-3">
+              <p className="font-body text-xs font-bold uppercase tracking-wide text-failed">
+                Couldn't load install instructions.
+              </p>
               <button
                 type="button"
                 onClick={() => retryInstallInfo()}
-                className="w-fit rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text transition-colors hover:bg-background"
+                className="w-fit border-2 border-text-muted px-3 py-1.5 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent"
               >
                 Retry
               </button>
             </div>
           ) : (
-            <p className="text-sm text-text-muted">Loading install instructions…</p>
+            <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+              Loading install instructions…
+            </p>
           )}
           <button
             type="button"
             onClick={() => setStep('waiting')}
             disabled={!installInfo}
-            className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px disabled:opacity-50"
+            className="w-fit border-2 border-accent bg-accent px-5 py-2.5 font-display text-base uppercase tracking-wide text-background transition-transform duration-300 hover:-translate-y-1 active:translate-y-0 active:scale-[0.98] motion-reduce:transform-none disabled:opacity-50 disabled:hover:translate-y-0"
           >
             I've installed it
           </button>
@@ -247,28 +253,32 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
       )}
 
       {step === 'waiting' && (
-        <div className="mt-4 flex flex-col items-center gap-3 py-6 text-center">
+        <div className="mt-5 flex flex-col items-center gap-3 py-6 text-center">
           {connected ? (
             <>
-              <span className="rounded-full bg-healthy/10 px-3 py-1 text-sm font-medium text-healthy">
+              <span className="border-2 border-healthy bg-healthy/10 px-3 py-1 font-body text-xs font-bold uppercase tracking-wide text-healthy">
                 Connected
               </span>
-              <p className="text-sm text-text-muted">The agent is reporting heartbeats. You're all set.</p>
+              <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+                The agent is reporting heartbeats. You're all set.
+              </p>
               <button
                 type="button"
                 onClick={handleClose}
-                className="mt-2 w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px"
+                className="mt-2 w-fit border-2 border-accent bg-accent px-5 py-2.5 font-display text-base uppercase tracking-wide text-background transition-transform duration-300 hover:-translate-y-1 active:translate-y-0 active:scale-[0.98] motion-reduce:transform-none"
               >
                 Done
               </button>
             </>
           ) : waitingError ? (
             <>
-              <p className="text-sm text-failed">Couldn't check the cluster's status.</p>
+              <p className="font-body text-xs font-bold uppercase tracking-wide text-failed">
+                Couldn't check the cluster's status.
+              </p>
               <button
                 type="button"
                 onClick={() => retryWaiting()}
-                className="w-fit rounded-md border border-border px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-background"
+                className="w-fit border-2 border-text-muted px-4 py-2 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent"
               >
                 Retry
               </button>
@@ -276,7 +286,9 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
           ) : (
             <>
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-accent" />
-              <p className="text-sm text-text-muted">Waiting for the agent's first heartbeat…</p>
+              <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+                Waiting for the agent's first heartbeat…
+              </p>
             </>
           )}
         </div>
