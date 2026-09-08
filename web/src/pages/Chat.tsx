@@ -21,7 +21,7 @@ export function Chat() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-paper">
+    <div className="flex h-[calc(100dvh-3.5rem)] flex-col bg-paper">
       {error && (
         <div
           role="alert"
