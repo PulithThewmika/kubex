@@ -26,7 +26,7 @@ function Nav({ cta }: { cta: Cta }) {
           className="flex items-center gap-2.5 font-display text-3xl uppercase leading-none tracking-wide text-background sm:text-4xl"
         >
           <img
-            src="/kubex-logo.png"
+            src="/kubex-logo-black.png"
             alt=""
             aria-hidden="true"
             className="h-8 w-8 shrink-0 select-none sm:h-10 sm:w-10"
