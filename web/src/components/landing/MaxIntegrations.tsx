@@ -77,7 +77,11 @@ export function MaxIntegrations() {
           ))}
         </div>
       </div>
-      <Ticker reverse />
+      {/* z-20 so the next section's torn edge (negative top margin) tears in
+          behind the bar, not over it. */}
+      <div className="relative z-20">
+        <Ticker reverse />
+      </div>
     </section>
   )
 }
