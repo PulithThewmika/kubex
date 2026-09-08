@@ -51,14 +51,14 @@ export function Settings() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6">
-      <h1 className="font-heading text-3xl font-bold uppercase tracking-tight text-ink sm:text-4xl">Settings</h1>
+    <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
+      <h1 className="font-display text-4xl uppercase tracking-tight text-ink sm:text-5xl">Settings</h1>
 
       <div
         role="tablist"
         aria-label="Settings sections"
         onKeyDown={handleTabKeyDown}
-        className="mt-8 flex gap-1 overflow-x-auto border-b-2 border-paper-line"
+        className="mt-5 flex flex-wrap gap-2"
       >
         {TABS.map((tab) => {
           const selected = tab.id === activeTab
@@ -72,10 +72,10 @@ export function Settings() {
               aria-controls={`settings-panel-${tab.id}`}
               tabIndex={selected ? 0 : -1}
               onClick={() => selectTab(tab.id)}
-              className={`-mb-0.5 shrink-0 border-b-2 px-4 py-3 font-body text-xs font-bold uppercase tracking-wide transition-colors ${
+              className={`shrink-0 border-2 border-paper-line px-4 py-2 font-body text-xs font-bold uppercase tracking-[0.15em] transition-all duration-300 motion-reduce:transform-none ${
                 selected
-                  ? 'border-accent text-accent'
-                  : 'border-transparent text-ink-muted hover:text-ink'
+                  ? 'bg-accent text-background'
+                  : 'bg-paper text-ink-muted hover:-translate-y-0.5 hover:scale-[1.03] hover:bg-ink hover:text-paper'
               }`}
             >
               {tab.label}
@@ -85,10 +85,11 @@ export function Settings() {
       </div>
 
       <div
+        key={activeTab}
         id={`settings-panel-${activeTab}`}
         role="tabpanel"
         aria-labelledby={`settings-tab-${activeTab}`}
-        className="mt-10"
+        className="mt-6 animate-page-in"
       >
         {activeTab === 'general' && <GeneralTab />}
         {activeTab === 'connections' && <ConnectionsTab installationId={installationId} />}
