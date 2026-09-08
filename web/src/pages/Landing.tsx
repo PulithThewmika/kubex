@@ -1,5 +1,6 @@
 import { HandwritingText } from '@/components/ui/handwriting-text'
 import { IntegrationGraph } from '@/components/ui/integration-graph'
+import { NebulaCanvas } from '@/components/ui/nebula-canvas'
 import { Reveal } from '../components/landing/Reveal'
 import { Ticker } from '../components/landing/Ticker'
 import { TornEdge } from '../components/landing/TornEdge'
@@ -50,11 +51,9 @@ function Nav({ cta }: { cta: Cta }) {
 function Hero({ cta }: { cta: Cta }) {
   return (
     <section id="top" className="relative overflow-hidden border-b-2 border-text bg-background">
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 text-accent/[0.08] halftone-lg"
-      />
-      <div className="relative mx-auto max-w-6xl px-4 pb-16 pt-12 sm:px-6 sm:pb-24 sm:pt-16">
+      <NebulaCanvas className="absolute inset-0 z-0 h-full w-full" />
+      <div aria-hidden="true" className="absolute inset-0 z-0 bg-background/45" />
+      <div className="relative z-10 mx-auto max-w-6xl px-4 pb-16 pt-12 sm:px-6 sm:pb-24 sm:pt-16">
         <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
           <Reveal>
             <h1 className="font-display uppercase text-accent">
@@ -105,7 +104,9 @@ function Hero({ cta }: { cta: Cta }) {
         </div>
       </div>
 
-      <Ticker />
+      <div className="relative z-10">
+        <Ticker />
+      </div>
     </section>
   )
 }
