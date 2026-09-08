@@ -32,13 +32,13 @@ const INTEGRATIONS: Integration[] = [
 
 export function MaxIntegrations() {
   return (
-    <section id="integrations" className="relative overflow-hidden bg-background pb-20 sm:pb-28">
+    <section id="integrations" className="relative overflow-hidden bg-background">
       <Ticker />
       <div
         aria-hidden="true"
         className="absolute inset-0 text-accent/[0.07] halftone-lg"
       />
-      <div className="relative mx-auto max-w-6xl px-4 pt-10 sm:px-6">
+      <div className="relative mx-auto max-w-6xl px-4 pb-20 pt-10 sm:px-6 sm:pb-28">
         <Reveal>
           <p className="font-body text-xs font-bold uppercase tracking-[0.3em] text-accent">Plug it in</p>
           <h2 className="mt-3 font-display text-6xl uppercase leading-[0.85] text-text sm:text-8xl lg:text-9xl">
