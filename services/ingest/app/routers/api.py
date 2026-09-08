@@ -647,10 +647,10 @@ async def compare_deployments(
     namespace = row_a.namespace
 
     metrics_a = await fetch_metrics_at(
-        service_name, namespace, OBSERVATION_WINDOW, row_a.finished_at,
+        session, user.org_id, service_name, namespace, OBSERVATION_WINDOW, row_a.finished_at,
     )
     metrics_b = await fetch_metrics_at(
-        service_name, namespace, OBSERVATION_WINDOW, row_b.finished_at,
+        session, user.org_id, service_name, namespace, OBSERVATION_WINDOW, row_b.finished_at,
     )
 
     compare_metrics = []
