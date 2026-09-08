@@ -211,3 +211,24 @@ async def test_query_relay_tick_continues_after_one_query_fails() -> None:
     ):
         await run._query_relay_tick("cluster-1")
     mock_submit.assert_awaited_once_with("cluster-1", "q2", {"status": "success"})
+
+
+@pytest.mark.asyncio
+async def test_query_relay_tick_routes_range_queries() -> None:
+    run._state["prometheus_status"] = "found"
+    run._state["prometheus_namespace"] = "monitoring"
+    run._state["prometheus_service"] = "prometheus-operated"
+    with (
+        patch("cluster_agent.run.ingest_client.list_queries", AsyncMock(return_value=[
+            {"id": "q1", "promql": "up", "kind": "range", "params": {"start": "1", "end": "2", "step": "15s"}}
+        ])),
+        patch("cluster_agent.run.prometheus.query_range", AsyncMock(return_value={"status": "success"})) as mock_range,
+        patch("cluster_agent.run.prometheus.query", AsyncMock()) as mock_instant,
+        patch("cluster_agent.run.ingest_client.submit_result", AsyncMock()) as mock_submit,
+    ):
+        await run._query_relay_tick("cluster-1")
+    mock_range.assert_awaited_once_with(
+        "http://prometheus-operated.monitoring.svc.cluster.local:9090", "up", "1", "2", "15s"
+    )
+    mock_instant.assert_not_awaited()
+    mock_submit.assert_awaited_once_with("cluster-1", "q1", {"status": "success"})
