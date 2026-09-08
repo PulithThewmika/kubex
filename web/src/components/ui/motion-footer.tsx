@@ -4,6 +4,7 @@ import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { ArrowRight, ArrowUp, LogIn } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { headerOffset, smoothScrollTo } from '@/lib/smooth-scroll'
 
 if (typeof window !== 'undefined') {
   gsap.registerPlugin(ScrollTrigger)
@@ -162,7 +163,12 @@ export function CinematicFooter({ cta }: { cta: Cta }) {
     return () => ctx.revert()
   }, [])
 
-  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' })
+  const scrollToTop = () => smoothScrollTo(0)
+  const scrollToHow = (e: React.MouseEvent<HTMLElement>) => {
+    e.preventDefault()
+    smoothScrollTo('#how', headerOffset())
+    history.replaceState(null, '', '#how')
+  }
 
   return (
     <>
@@ -205,10 +211,11 @@ export function CinematicFooter({ cta }: { cta: Cta }) {
                 <MagneticButton
                   as="a"
                   href="#how"
+                  onClick={scrollToHow}
                   className="group flex items-center gap-3 border-2 border-background px-8 py-4 font-display text-xl uppercase tracking-wide text-background transition-colors hover:bg-background hover:text-text md:text-2xl"
                 >
                   How it works
-                  <ArrowRight className="h-6 w-6" />
+                  <ArrowRight className="h-6 w-6 transition-transform duration-300 group-hover:translate-x-1 motion-reduce:transform-none" />
                 </MagneticButton>
               </div>
 
@@ -237,9 +244,9 @@ export function CinematicFooter({ cta }: { cta: Cta }) {
               as="button"
               onClick={scrollToTop}
               aria-label="Back to top"
-              className="group flex h-11 w-11 items-center justify-center border-2 border-text text-text transition-colors hover:bg-accent hover:text-background"
+              className="group flex h-11 w-11 items-center justify-center border-2 border-text text-text transition-[background-color,color,transform] duration-300 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] hover:scale-110 hover:bg-accent hover:text-background active:scale-90 motion-reduce:transform-none motion-reduce:transition-colors"
             >
-              <ArrowUp className="h-5 w-5 transition-transform duration-300 group-hover:-translate-y-1" />
+              <ArrowUp className="h-5 w-5 transition-transform duration-300 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] group-hover:-translate-y-1 motion-reduce:transform-none" />
             </MagneticButton>
           </div>
         </footer>
