@@ -1,6 +1,4 @@
-import { HandwritingText } from '@/components/ui/handwriting-text'
 import { IntegrationGraph } from '@/components/ui/integration-graph'
-import { NebulaCanvas } from '@/components/ui/nebula-canvas'
 import { Reveal } from '../components/landing/Reveal'
 import { Ticker } from '../components/landing/Ticker'
 import { TornEdge } from '../components/landing/TornEdge'
@@ -51,30 +49,14 @@ function Nav({ cta }: { cta: Cta }) {
 function Hero({ cta }: { cta: Cta }) {
   return (
     <section id="top" className="relative overflow-hidden border-b-2 border-text bg-background">
-      <NebulaCanvas className="absolute inset-0 z-0 h-full w-full" />
-      <div aria-hidden="true" className="absolute inset-0 z-0 bg-background/45" />
-      <div className="relative z-10 mx-auto max-w-6xl px-4 pb-16 pt-12 sm:px-6 sm:pb-24 sm:pt-16">
+      <div aria-hidden="true" className="absolute inset-0 text-accent/[0.08] halftone-lg" />
+      <div className="relative mx-auto max-w-6xl px-4 pb-16 pt-12 sm:px-6 sm:pb-24 sm:pt-16">
         <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
           <Reveal>
-            <h1 className="font-display uppercase text-accent">
-              <span className="block text-[14vw] leading-[0.82] sm:text-[11vw] lg:text-[6.4rem]">
-                Know if your
-              </span>
-              <span className="block text-[14vw] leading-[0.8] text-outline text-text sm:text-[11vw] lg:text-[6.4rem]">
-                last deploy
-              </span>
-              {/* Pen writes the verdict, then inks it in — the one script note
-                  against the block caps. Degrades to plain text if the CDN
-                  font can't load. */}
-              <span className="mt-1 block normal-case text-[15vw] leading-none text-accent sm:text-[12vw] lg:text-[5.5rem]">
-                <HandwritingText
-                  words={['made it worse.', 'made it better.', 'shipped clean.', 'broke prod.']}
-                  interval={3600}
-                  duration={1.8}
-                  height="1em"
-                  className="text-accent"
-                />
-              </span>
+            <h1 className="font-display text-6xl uppercase leading-[0.82] text-text sm:text-8xl lg:text-8xl">
+              <span className="block">Know if your</span>
+              <span className="block">last deploy</span>
+              <span className="block">made it worse</span>
             </h1>
             <p className="mt-10 max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
               KubeX correlates GitHub Actions, ArgoCD and Kubernetes runtime
@@ -104,9 +86,7 @@ function Hero({ cta }: { cta: Cta }) {
         </div>
       </div>
 
-      <div className="relative z-10">
-        <Ticker />
-      </div>
+      <Ticker />
     </section>
   )
 }
