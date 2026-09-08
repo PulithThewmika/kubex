@@ -24,8 +24,10 @@ GRAFANA_SERVICE_ACCOUNT_TOKEN = os.environ.get("GRAFANA_SERVICE_ACCOUNT_TOKEN", 
 
 # Only these dashboard uids may be embedded through this proxy. `uid` comes
 # from the browser; without an allow-list a caller could name any dashboard
-# in the Grafana org (operator-only ones included) and read it.
-EMBEDDABLE_DASHBOARD_UIDS = {"deploy-timeline"}
+# in the Grafana org (operator-only ones included) and read it. These are
+# the org-scoped-by-construction customer set (deploy/grafana/dashboards/
+# customer/ — every SQL panel filters org_id/'$org', #834).
+EMBEDDABLE_DASHBOARD_UIDS = {"deploy-timeline", "customer-dora-scorecard"}
 
 _RE2_META = re.compile(r"([\\.+*?()|\[\]{}^$])")
 
@@ -44,7 +46,10 @@ _client: httpx.AsyncClient | None = None
 def _get_client() -> httpx.AsyncClient:
     global _client
     if _client is None or _client.is_closed:
-        _client = httpx.AsyncClient(base_url=GRAFANA_URL, timeout=10.0)
+        # Generous: a PNG render drives a datasource query that itself
+        # blocks on the cluster-agent relay (#832, ~20s worst case) before
+        # headless Chrome paints.
+        _client = httpx.AsyncClient(base_url=GRAFANA_URL, timeout=45.0)
     return _client
 
 
@@ -56,10 +61,12 @@ async def grafana_proxy(
     from_: str = Query(default="now-6h", alias="from"),
     to: str = Query(default="now"),
     theme: str = Query(default="light"),
+    width: int = Query(default=1000, ge=100, le=3000),
+    height: int = Query(default=300, ge=100, le=2000),
     user: UserContext = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
-    """Proxy an embedded Grafana panel (/d-solo/) for the React shell.
+    """Render an embedded Grafana panel to PNG for the React shell.
 
     Tenant isolation is enforced here, server-side — the browser is not
     trusted (CLAUDE.md decision 9):
@@ -81,11 +88,10 @@ async def grafana_proxy(
     The Grafana service account token is injected server-side and never
     reaches the browser.
 
-    Known limitation: this streams the /d-solo/ HTML through as-is. That
-    HTML references Grafana's JS/CSS/API relative to `/`, which 404s once
-    served from this proxy's origin — the embedded panel won't fully
-    render standalone until #835 adds an asset+API reverse proxy (with
-    Grafana on a sub-path) or the image-renderer PNG endpoint.
+    Uses Grafana's ``/render/d-solo/`` (grafana-image-renderer, #835) and
+    returns the PNG. The earlier ``/d-solo/`` HTML never rendered from
+    this proxy's origin — its JS/CSS/API are relative to ``/`` and 404
+    (E11-T2). A PNG has no such dependency.
     """
     if uid not in EMBEDDABLE_DASHBOARD_UIDS:
         raise HTTPException(status_code=404, detail="Unknown dashboard")
@@ -119,6 +125,8 @@ async def grafana_proxy(
         "from": from_,
         "to": to,
         "theme": theme,
+        "width": width,
+        "height": height,
     }
     headers = {"Authorization": f"Bearer {GRAFANA_SERVICE_ACCOUNT_TOKEN}"}
 
@@ -128,7 +136,7 @@ async def grafana_proxy(
         # uid containing "?"/"&" could inject extra query parameters
         # ahead of the ones set above.
         request = client.build_request(
-            "GET", f"/d-solo/{quote(uid, safe='')}", params=params, headers=headers
+            "GET", f"/render/d-solo/{quote(uid, safe='')}", params=params, headers=headers
         )
         upstream = await client.send(request, stream=True)
     except httpx.RequestError:
