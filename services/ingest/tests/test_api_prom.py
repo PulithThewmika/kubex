@@ -32,6 +32,17 @@ def test_extract_org_absent():
     assert prom._extract_org('up{service="x"}') == (None, None, 'up{service="x"}')
 
 
+def test_extract_org_rejects_ambiguous_multi_org():
+    other = "99999999-9999-9999-9999-999999999999"
+    assert prom._extract_org(f'a{{org_id="{_ORG}"}} + b{{org_id="{other}"}}') == (None, None, None)
+
+
+def test_extract_org_strips_every_matcher():
+    org, _c, cleaned = prom._extract_org(f'a{{org_id="{_ORG}"}} + b{{x="y",org_id="{_ORG}"}}')
+    assert org == _ORG
+    assert "org_id" not in cleaned
+
+
 def test_extract_org_with_cluster_pin():
     cid = "22222222-2222-2222-2222-222222222222"
     org, cluster, cleaned = prom._extract_org(f'up{{org_id="{_ORG}", cluster="{cid}"}}')
