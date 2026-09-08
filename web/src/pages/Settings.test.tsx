@@ -108,6 +108,17 @@ describe('Settings page', () => {
     expect(screen.getByRole('button', { name: /create api key/i })).toBeInTheDocument()
   })
 
+  it('shows the Claude/ChatGPT MCP connect guide on the API Keys tab', async () => {
+    stubSettingsFetch()
+    renderSettings('/app/settings?tab=api-keys')
+
+    expect(await screen.findByText(/connect claude or chatgpt/i)).toBeInTheDocument()
+    expect(screen.getByText(/kubex-demo-pt\.southeastasia\.cloudapp\.azure\.com\/mcp/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'ChatGPT' }))
+    expect(screen.getByText(/requires plus, team, or enterprise/i)).toBeInTheDocument()
+  })
+
   it('lists org members with their role on the Team tab', async () => {
     stubSettingsFetch()
     renderSettings('/app/settings?tab=team')

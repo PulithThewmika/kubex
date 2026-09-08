@@ -26,10 +26,10 @@ function GitHubIcon() {
 
 function InstallationRow({ installation }: { installation: Installation }) {
   return (
-    <li className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+    <li className="flex flex-col gap-2 border-2 border-border-strong bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <p className="text-sm font-medium text-text">{installation.account_login}</p>
-        <p className="mt-1 text-xs text-text-muted">
+        <p className="font-body text-sm font-bold text-text">{installation.account_login}</p>
+        <p className="mt-1 font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
           {installation.repos.length > 0 ? installation.repos.join(', ') : 'No repos selected'}
         </p>
       </div>
@@ -53,22 +53,22 @@ export function ConnectionsTab({ installationId }: ConnectionsTabProps) {
     <div>
       <section>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted">Connect GitHub</h2>
+          <h2 className="font-body text-xs font-bold uppercase tracking-[0.15em] text-text-muted">Connect GitHub</h2>
           <Link
             to="/app/onboarding"
-            className="text-sm font-medium text-text-muted underline-offset-4 hover:text-text hover:underline"
+            className="font-body text-xs font-bold uppercase tracking-wide text-text-muted underline-offset-4 hover:text-accent hover:underline"
           >
             Re-run setup guide
           </Link>
         </div>
-        <p className="mt-1 text-sm text-text-muted">
+        <p className="mt-1 font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
           Install the KubeX GitHub App to automatically provision webhooks for your repos.
         </p>
 
         {installationId && (
           <div
             role="status"
-            className="mt-4 rounded-md border border-healthy/30 bg-healthy/10 px-4 py-3 text-sm text-healthy"
+            className="mt-4 border-2 border-healthy bg-healthy/10 px-4 py-3 font-body text-xs font-bold uppercase tracking-wide text-healthy"
           >
             GitHub App installation #{installationId} connected successfully.
           </div>
@@ -76,17 +76,27 @@ export function ConnectionsTab({ installationId }: ConnectionsTabProps) {
 
         <a
           href={GITHUB_APP_INSTALL_URL}
-          className="mt-4 flex w-fit items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px"
+          className="mt-4 flex w-fit items-center gap-2 border-2 border-accent bg-accent px-4 py-2.5 font-body text-xs font-bold uppercase tracking-wide text-background transition-colors hover:bg-accent-hover active:translate-y-px"
         >
           <GitHubIcon />
           Connect GitHub
         </a>
 
         <div className="mt-6">
-          {isLoading && <p className="text-sm text-text-muted">Loading installations…</p>}
-          {isError && <p className="text-sm text-failed">Failed to load installations.</p>}
+          {isLoading && (
+            <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+              Loading installations…
+            </p>
+          )}
+          {isError && (
+            <p className="font-body text-xs font-bold uppercase tracking-wide text-failed">
+              Failed to load installations.
+            </p>
+          )}
           {!isLoading && !isError && installations && installations.length === 0 && !installationId && (
-            <p className="text-sm text-text-muted">No GitHub App installations yet.</p>
+            <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+              No GitHub App installations yet.
+            </p>
           )}
           {installations && installations.length > 0 && (
             <ul className="flex flex-col gap-3">
