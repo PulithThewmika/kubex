@@ -1,5 +1,5 @@
 """
-Migration runner for DeployLens.
+Migration runner for KubeX.
 
 Executes versioned SQL migration files in order against PostgreSQL.
 Tracks applied versions in the schema_versions table.
@@ -16,10 +16,24 @@ import argparse
 
 import psycopg2
 
+# Supabase signs its pooler certs with its own private CA — needed for
+# sslmode=verify-full to actually verify the chain rather than just
+# encrypting. (Unlike asyncpg, psycopg2/libpq doesn't hit the strict-mode
+# issue documented in services/ingest/app/db.py, so verify-full works
+# directly with just the root CA loaded.)
+_SUPABASE_CA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "app", "certs", "supabase-root-2021-ca.pem")
+
 
 def get_connection(url: str):
     sync_url = url.replace("+asyncpg", "").replace("postgresql+asyncpg", "postgresql")
-    return psycopg2.connect(sync_url)
+    # Local-dev compose Postgres (--profile local-db) has no TLS listener,
+    # so only force verify-full for a Supabase host.
+    kwargs = (
+        {"sslmode": "verify-full", "sslrootcert": _SUPABASE_CA_PATH}
+        if "supabase" in sync_url
+        else {}
+    )
+    return psycopg2.connect(sync_url, **kwargs)
 
 
 def run_migrations(url: str):
@@ -77,7 +91,7 @@ def run_migrations(url: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run DeployLens migrations")
+    parser = argparse.ArgumentParser(description="Run KubeX migrations")
     parser.add_argument("--url", default=os.environ.get("DATABASE_URL"))
     args = parser.parse_args()
 

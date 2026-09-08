@@ -43,7 +43,7 @@ export async function listDeployments(input: {
   service?: string;
   status?: string;
   limit: number;
-}): Promise<{ content: { type: "text"; text: string }[] }> {
+}, orgId: string | null): Promise<{ content: { type: "text"; text: string }[] }> {
   const conditions: string[] = [];
   const params: unknown[] = [];
   let paramIndex = 1;
@@ -56,6 +56,11 @@ export async function listDeployments(input: {
   if (input.status) {
     conditions.push(`d.status = $${paramIndex++}`);
     params.push(input.status);
+  }
+
+  if (orgId !== null) {
+    conditions.push(`s.org_id = $${paramIndex++}`);
+    params.push(orgId);
   }
 
   const whereClause =

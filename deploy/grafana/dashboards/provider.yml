@@ -1,12 +1,27 @@
-# Grafana dashboard provisioning provider
-# Tells Grafana to load JSON dashboards from this directory
+# Grafana dashboard provisioning providers.
+#
+# Two sets, deliberately separated (#834 / CLAUDE.md decision 6):
+#   operator/ — platform-wide, NULL-org DORA views, operator-only.
+#   customer/ — org-scoped by construction ($org set server-side by the
+#               ingest panel proxy); these are the ones embedded in the
+#               customer's KubeX dashboard.
 apiVersion: 1
 providers:
-  - name: deploylens
+  - name: kubex-operator
     type: file
     disableDeletion: false
     updateIntervalSeconds: 30
     allowUiUpdates: true
+    folder: Operator
     options:
-      path: /etc/grafana/provisioning/dashboards
+      path: /etc/grafana/provisioning/dashboards/operator
+      foldersFromFilesStructure: false
+  - name: kubex-customer
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    folder: Customer
+    options:
+      path: /etc/grafana/provisioning/dashboards/customer
       foldersFromFilesStructure: false

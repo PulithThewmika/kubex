@@ -9,6 +9,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
+import uuid
+
+from agent import cluster_relay
 from agent.promql import (
     _sanitize_label,
     query_prometheus,
@@ -16,6 +19,7 @@ from agent.promql import (
     query_latency_p99,
     query_restarts,
     query_request_rate,
+    MetricsUnreachableError,
 )
 
 
@@ -98,12 +102,15 @@ async def test_query_prometheus_unreachable(mock_client):
 
 
 @pytest.mark.asyncio
-async def test_query_prometheus_timeout(mock_client):
-    """Prometheus timeout returns None."""
+async def test_query_prometheus_timeout(mock_client, caplog):
+    """Prometheus timeout returns None and logs a warning."""
     mock_client.get.side_effect = httpx.TimeoutException("Timed out")
 
-    result = await query_prometheus("up", TS)
+    with caplog.at_level("WARNING", logger="kubex.agent.promql"):
+        result = await query_prometheus("up", TS)
+
     assert result is None
+    assert any("Prometheus unreachable" in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio
@@ -111,13 +118,13 @@ async def test_query_error_rate(mock_client):
     """Error rate query constructs correct PromQL and returns float."""
     mock_client.get.return_value = _mock_response(_make_prom_response(0.03))
 
-    result = await query_error_rate("orders", "deploylens", "30m", TS)
+    result = await query_error_rate("orders", "kubex", "30m", TS)
     assert result == pytest.approx(0.03)
 
     call_args = mock_client.get.call_args
     query = call_args.kwargs["params"]["query"]
     assert 'service="orders"' in query
-    assert 'namespace="deploylens"' in query
+    assert 'namespace="kubex"' in query
     assert 'status=~"5.."' in query
     assert "[30m]" in query
 
@@ -127,7 +134,7 @@ async def test_query_latency_p99_converts_to_ms(mock_client):
     """Latency query returns value converted from seconds to milliseconds."""
     mock_client.get.return_value = _mock_response(_make_prom_response(0.25))
 
-    result = await query_latency_p99("orders", "deploylens", "15m", TS)
+    result = await query_latency_p99("orders", "kubex", "15m", TS)
     assert result == pytest.approx(250.0)
 
     call_args = mock_client.get.call_args
@@ -141,7 +148,7 @@ async def test_query_restarts(mock_client):
     """Restart query constructs correct PromQL with container label."""
     mock_client.get.return_value = _mock_response(_make_prom_response(2.0))
 
-    result = await query_restarts("payments", "deploylens", "30m", TS)
+    result = await query_restarts("payments", "kubex", "30m", TS)
     assert result == pytest.approx(2.0)
 
     call_args = mock_client.get.call_args
@@ -175,7 +182,74 @@ async def test_query_error_rate_sanitizes_service(mock_client):
     """Service names with injection characters are escaped in PromQL."""
     mock_client.get.return_value = _mock_response(_make_prom_response(0.01))
 
-    await query_error_rate('x"} or vector(1){a="', "deploylens", "30m", TS)
+    await query_error_rate('x"} or vector(1){a="', "kubex", "30m", TS)
 
     query = mock_client.get.call_args.kwargs["params"]["query"]
     assert 'service="x\\"} or vector(1){a=\\"' in query
+
+
+# ── Relay dispatch (#840) ────────────────────────────────────────────
+
+CLUSTER_ID = uuid.uuid4()
+
+
+@pytest.mark.asyncio
+async def test_query_error_rate_uses_relay_when_cluster_id_given(mock_client):
+    """A remote-cluster service (cluster_id set) must NOT touch PROM_URL at
+    all -- see the module docstring for why querying the operator's own
+    Prometheus for a customer's service was a real bug, not just missing
+    data."""
+    fake_session = object()
+    with patch.object(
+        cluster_relay, "queue_and_wait", AsyncMock(return_value=_make_prom_response(0.02)),
+    ) as mock_relay:
+        result = await query_error_rate(
+            "orders", "kubex", "30m", TS, session=fake_session, cluster_id=CLUSTER_ID,
+        )
+
+    assert result == 0.02
+    mock_client.get.assert_not_called()
+    mock_relay.assert_awaited_once()
+    call_args = mock_relay.call_args
+    assert call_args.args[0] is fake_session
+    assert call_args.args[1] == CLUSTER_ID
+    assert call_args.args[2] == 'sum(rate(http_requests_total{service="orders",namespace="kubex",status=~"5.."}[30m])) / sum(rate(http_requests_total{service="orders",namespace="kubex"}[30m]))'
+
+
+@pytest.mark.asyncio
+async def test_query_error_rate_without_cluster_id_uses_prom_url(mock_client):
+    """No cluster_id (legacy/local service) keeps querying PROM_URL directly,
+    unchanged from before #840."""
+    mock_client.get.return_value = _mock_response(_make_prom_response(0.01))
+
+    result = await query_error_rate("orders", "kubex", "30m", TS)
+
+    assert result == 0.01
+    mock_client.get.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_relay_timeout_raises_metrics_unreachable_not_none():
+    """A relay timeout must surface as MetricsUnreachableError, distinct from
+    the ordinary None a genuinely-empty result returns -- this is the fix
+    for the Prometheus-unreachable-vs-low-traffic gotcha for remote
+    clusters: a caller that swallowed this back into None would silently
+    reproduce the exact bug #840 exists to fix."""
+    fake_session = object()
+    with patch.object(
+        cluster_relay, "queue_and_wait", AsyncMock(side_effect=cluster_relay.RelayTimeoutError("timed out")),
+    ):
+        with pytest.raises(MetricsUnreachableError):
+            await query_error_rate(
+                "orders", "kubex", "30m", TS, session=fake_session, cluster_id=CLUSTER_ID,
+            )
+
+
+@pytest.mark.asyncio
+async def test_cluster_id_without_session_raises_value_error(mock_client):
+    """cluster_id set with no session to relay through can never be a
+    legitimate call -- must raise loudly, not silently fall through to
+    querying PROM_URL (found in review, #840)."""
+    with pytest.raises(ValueError):
+        await query_error_rate("orders", "kubex", "30m", TS, cluster_id=CLUSTER_ID)
+    mock_client.get.assert_not_called()

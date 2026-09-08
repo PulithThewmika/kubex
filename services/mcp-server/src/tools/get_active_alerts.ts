@@ -23,8 +23,9 @@ interface AlertRow {
 }
 
 async function queryActiveAlerts(
-  service?: string,
-  severity?: string,
+  service: string | undefined,
+  severity: string | undefined,
+  orgId: string | null,
 ): Promise<AlertRow[]> {
   const conditions: string[] = ["a.resolved_at IS NULL"];
   const params: unknown[] = [];
@@ -37,6 +38,10 @@ async function queryActiveAlerts(
   if (severity) {
     conditions.push(`a.severity = $${paramIdx++}`);
     params.push(severity);
+  }
+  if (orgId !== null) {
+    conditions.push(`a.org_id = $${paramIdx++}`);
+    params.push(orgId);
   }
 
   const where = conditions.join(" AND ");
@@ -93,10 +98,10 @@ export function buildSummary(
 export async function getActiveAlerts(input: {
   service?: string;
   severity?: string;
-}): Promise<{ content: { type: "text"; text: string }[] }> {
+}, orgId: string | null): Promise<{ content: { type: "text"; text: string }[] }> {
   let alerts: AlertRow[];
   try {
-    alerts = await queryActiveAlerts(input.service, input.severity);
+    alerts = await queryActiveAlerts(input.service, input.severity, orgId);
   } catch (err) {
     return {
       content: [{

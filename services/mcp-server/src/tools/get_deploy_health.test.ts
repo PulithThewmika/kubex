@@ -34,7 +34,7 @@ describe("getDeployHealth", () => {
   it("returns health score, verdict, evidence breakdown and a summary on the happy path", async () => {
     mockedQueryOne.mockResolvedValue(makeRow());
 
-    const result = await getDeployHealth({ deployment_id: 5 });
+    const result = await getDeployHealth({ deployment_id: 5 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.summary).toBe("orders deployment #5 — health score 92/100 (healthy)");
@@ -51,7 +51,7 @@ describe("getDeployHealth", () => {
   it("returns an error when the deployment ID does not exist", async () => {
     mockedQueryOne.mockResolvedValue(null);
 
-    const result = await getDeployHealth({ deployment_id: 999 });
+    const result = await getDeployHealth({ deployment_id: 999 }, null);
     const parsed = parseResult(result);
 
     expect(parsed).toEqual({
@@ -65,12 +65,22 @@ describe("getDeployHealth", () => {
       makeRow({ score: null, verdict: null, assessed_at: null, deploy_status: "syncing" }),
     );
 
-    const result = await getDeployHealth({ deployment_id: 5 });
+    const result = await getDeployHealth({ deployment_id: 5 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.health).toBeNull();
     expect(parsed.summary).toContain("has not been assessed yet");
     expect(parsed.summary).toContain("syncing");
+  });
+
+  it("scopes the query to the given org_id", async () => {
+    mockedQueryOne.mockResolvedValue(makeRow());
+
+    await getDeployHealth({ deployment_id: 5 }, "org-a");
+
+    const [sql, params] = mockedQueryOne.mock.calls[0];
+    expect(sql).toContain("s.org_id = $2");
+    expect(params).toEqual([5, "org-a"]);
   });
 
   it("surfaces guard-rail skip reasons in the evidence/details under low traffic", async () => {
@@ -84,7 +94,7 @@ describe("getDeployHealth", () => {
       }),
     );
 
-    const result = await getDeployHealth({ deployment_id: 5 });
+    const result = await getDeployHealth({ deployment_id: 5 }, null);
     const parsed = parseResult(result);
 
     expect(parsed.health.details.reason).toContain("request volume below 0.1 rps");

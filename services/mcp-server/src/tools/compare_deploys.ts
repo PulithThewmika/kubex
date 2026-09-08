@@ -2,6 +2,7 @@ import { z } from "zod";
 import { query } from "../clients/postgres.js";
 import { instantQuery } from "../clients/prometheus.js";
 import { sanitizeLabel, buildPromQL } from "./query_metrics.js";
+import { orgFilter } from "./org-filter.js";
 
 export const compareDeploysSchema = {
   deployment_id_a: z.number().int().describe("First deployment ID"),
@@ -36,9 +37,9 @@ interface MetricDiff {
   change_pct: number | null;
 }
 
-async function queryScalar(promql: string, time: string): Promise<number | null> {
+async function queryScalar(promql: string, time: string, orgId: string | null): Promise<number | null> {
   try {
-    const results = await instantQuery(promql, time);
+    const results = await instantQuery(promql, time, orgId);
     if (results.length === 0) return null;
     const val = parseFloat(results[0].value[1]);
     if (Number.isNaN(val)) return null;
@@ -53,13 +54,14 @@ async function fetchMetrics(
   service: string,
   namespace: string,
   finishedAt: Date,
+  orgId: string | null,
 ): Promise<MetricValues> {
   const ts = (finishedAt.getTime() / 1000 + parseWindowSeconds(OBSERVATION_WINDOW)).toString();
 
   const [errorRate, latencyRaw, restarts] = await Promise.all([
-    queryScalar(buildPromQL("error_rate", service, namespace, OBSERVATION_WINDOW), ts),
-    queryScalar(buildPromQL("latency_p99", service, namespace, OBSERVATION_WINDOW), ts),
-    queryScalar(buildPromQL("restarts", service, namespace, OBSERVATION_WINDOW), ts),
+    queryScalar(buildPromQL("error_rate", service, namespace, OBSERVATION_WINDOW), ts, orgId),
+    queryScalar(buildPromQL("latency_p99", service, namespace, OBSERVATION_WINDOW), ts, orgId),
+    queryScalar(buildPromQL("restarts", service, namespace, OBSERVATION_WINDOW), ts, orgId),
   ]);
 
   return {
@@ -91,7 +93,9 @@ function computeChangePct(a: number | null, b: number | null): number | null {
 export async function compareDeploys(input: {
   deployment_id_a: number;
   deployment_id_b: number;
-}): Promise<{ content: { type: "text"; text: string }[] }> {
+}, orgId: string | null): Promise<{ content: { type: "text"; text: string }[] }> {
+  const org = orgFilter(orgId, 3, "s.org_id");
+
   const rows = await query<DeployRow>(
     `SELECT d.id, d.service_id, s.name AS service_name, s.namespace,
             d.status, d.finished_at, d.commit_sha, d.image_tag,
@@ -99,8 +103,8 @@ export async function compareDeploys(input: {
      FROM deployments d
      JOIN services s ON s.id = d.service_id
      LEFT JOIN health_assessments ha ON ha.deployment_id = d.id
-     WHERE d.id IN ($1, $2)`,
-    [input.deployment_id_a, input.deployment_id_b],
+     WHERE d.id IN ($1, $2) ${org.clause}`,
+    [input.deployment_id_a, input.deployment_id_b, ...org.params],
   );
 
   const byId = new Map(rows.map((r) => [r.id, r]));
@@ -147,8 +151,8 @@ export async function compareDeploys(input: {
   }
 
   const [metricsA, metricsB] = await Promise.all([
-    fetchMetrics(rowA.service_name, rowA.namespace, rowA.finished_at),
-    fetchMetrics(rowB.service_name, rowB.namespace, rowB.finished_at),
+    fetchMetrics(rowA.service_name, rowA.namespace, rowA.finished_at, orgId),
+    fetchMetrics(rowB.service_name, rowB.namespace, rowB.finished_at, orgId),
   ]);
 
   const allNull = (m: MetricValues) =>

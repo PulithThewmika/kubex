@@ -9,10 +9,10 @@ function renderOverview() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={['/app']}>
         <Routes>
-          <Route path="/" element={<Overview />} />
-          <Route path="/services/:name" element={<div>Deep Dive Page</div>} />
+          <Route path="/app" element={<Overview />} />
+          <Route path="/app/services/:name" element={<div>Deep Dive Page</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -49,7 +49,7 @@ describe('Overview page', () => {
     renderOverview()
 
     expect(await screen.findByText('orders')).toBeInTheDocument()
-    expect(screen.getByText('deploylens')).toBeInTheDocument()
+    expect(screen.getByText('kubex')).toBeInTheDocument()
   })
 
   it('renders a message when the API returns no services', async () => {
@@ -57,7 +57,7 @@ describe('Overview page', () => {
 
     renderOverview()
 
-    expect(await screen.findByText(/no services registered yet/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /no services yet/i })).toBeInTheDocument()
   })
 
   it('renders a failure message on API error', async () => {

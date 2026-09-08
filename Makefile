@@ -1,28 +1,29 @@
 .PHONY: help cluster-up cluster-down cluster-status up down logs db-shell migrate \
-        forwards forwards-stop argocd-forward tunnel webhook-update
+        forwards forwards-stop argocd-forward tunnel webhook-update e2e
 
 help:
-	@echo "DeployLens dev workflow targets:"
+	@echo "KubeX dev workflow targets:"
 	@echo "  cluster-up       Create the Kind cluster from deploy/kind-config.yaml"
 	@echo "  cluster-down     Delete the Kind cluster"
 	@echo "  cluster-status   Show cluster info and node list"
 	@echo "  up               Start docker-compose stack (postgres, ingest, grafana)"
 	@echo "  down             Stop docker-compose stack"
 	@echo "  logs             Tail docker-compose logs"
-	@echo "  db-shell         Open psql into the deploylens database"
+	@echo "  db-shell         Open psql into the kubex database"
 	@echo "  migrate          Run SQL migrations against local Postgres"
 	@echo "  forwards         Start port-forwards for Prometheus, Loki, Alertmanager"
 	@echo "  forwards-stop    Stop tracked port-forward processes"
 	@echo "  argocd-forward   Port-forward the ArgoCD UI to localhost:8443"
 	@echo "  tunnel           Start ngrok tunnel on port 8000 for GitHub webhooks"
 	@echo "  webhook-update   Patch the GitHub webhook with the current ngrok URL"
+	@echo "  e2e              Run the full push-to-alert end-to-end smoke test (see scripts/e2e_smoke_test.py)"
 
 # --- Kind Cluster ---
 cluster-up:
-	kind create cluster --name deploylens --config deploy/kind-config.yaml
+	kind create cluster --name kubex --config deploy/kind-config.yaml
 
 cluster-down:
-	kind delete cluster --name deploylens
+	kind delete cluster --name kubex
 
 cluster-status:
 	kubectl cluster-info
@@ -32,18 +33,37 @@ cluster-status:
 up:
 	docker compose -f deploy/docker-compose.yml --env-file .env up -d
 
+# Escape hatch: also brings up the local kubex-postgres container instead
+# of relying solely on Supabase (DATABASE_URL in .env must then point at
+# it — see deploy/docker-compose.yml's postgres service comment).
+up-local-db:
+	docker compose -f deploy/docker-compose.yml --env-file .env --profile local-db up -d
+
 down:
 	docker compose -f deploy/docker-compose.yml down
 
 logs:
 	docker compose -f deploy/docker-compose.yml logs -f
 
+# Connects to the platform DB (Supabase by default via DATABASE_URL in
+# .env). For the local-db profile container instead, use db-shell-local.
 db-shell:
-	docker compose -f deploy/docker-compose.yml exec postgres psql -U deploylens -d deploylens
+	set -a; [ -f ./.env ] && . ./.env; set +a; \
+	psql "$${DATABASE_URL}"
+
+db-shell-local:
+	docker compose -f deploy/docker-compose.yml exec postgres psql -U kubex -d kubex
 
 # --- Migrations ---
+# Runs against the platform DB (Supabase by default via DATABASE_URL in
+# .env). For the local-db profile container instead, use migrate-local.
 migrate:
-	python services/ingest/migrations/run.py --url "postgresql://deploylens:deploylens@localhost:5432/deploylens"
+	set -a; [ -f ./.env ] && . ./.env; set +a; \
+	python services/ingest/migrations/run.py --url "$${DATABASE_URL}"
+
+migrate-local:
+	set -a; [ -f ./.env ] && . ./.env; set +a; \
+	python services/ingest/migrations/run.py --url "postgresql://kubex:$${POSTGRES_PASSWORD:-kubex}@localhost:5432/kubex"
 
 # --- Cluster Port-Forwards (background, PIDs tracked in .pids) ---
 forwards:
@@ -79,10 +99,16 @@ tunnel:
 
 webhook-update:
 	@NGROK_URL=$$(curl -s http://localhost:4040/api/tunnels | python -c "import sys,json; print(json.load(sys.stdin)['tunnels'][0]['public_url'])") && \
-	HOOK_ID=$$(gh api repos/PulithThewmika/deploylens/hooks --jq '.[0].id') && \
-	gh api repos/PulithThewmika/deploylens/hooks/$$HOOK_ID --method PATCH \
+	HOOK_ID=$$(gh api repos/PulithThewmika/deploylens-sample-app/hooks --jq '.[0].id') && \
+	gh api repos/PulithThewmika/deploylens-sample-app/hooks/$$HOOK_ID --method PATCH \
 		-f "config[url]=$$NGROK_URL/webhooks/github" \
 		-f "config[content_type]=json" \
 		-f "config[secret]=$$(grep GITHUB_WEBHOOK_SECRET .env | cut -d= -f2-)" \
 		-f "config[insecure_ssl]=0" && \
 	echo "Webhook updated to $$NGROK_URL/webhooks/github"
+
+# --- End-to-End Smoke Test ---
+# Requires: cluster-up, up, forwards, and a live tunnel (tunnel + webhook-update)
+# already running. Takes ~2-25 minutes — see scripts/e2e_smoke_test.py for why.
+e2e:
+	python scripts/e2e_smoke_test.py

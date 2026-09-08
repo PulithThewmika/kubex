@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { queryOne } from "../clients/postgres.js";
+import { orgFilter } from "./org-filter.js";
 
 export const getDeploymentSchema = {
   deployment_id: z.number().int().describe("Deployment ID"),
@@ -89,7 +90,9 @@ function buildTimeline(row: DeploymentDetailRow): TimelineStage[] {
 
 export async function getDeployment(input: {
   deployment_id: number;
-}): Promise<{ content: { type: "text"; text: string }[] }> {
+}, orgId: string | null): Promise<{ content: { type: "text"; text: string }[] }> {
+  const org = orgFilter(orgId, 2, "s.org_id");
+
   const row = await queryOne<DeploymentDetailRow>(
     `SELECT d.id, d.service_id, s.name AS service_name, s.namespace,
             s.repo, s.argocd_app,
@@ -103,8 +106,8 @@ export async function getDeployment(input: {
      FROM deployments d
      JOIN services s ON s.id = d.service_id
      LEFT JOIN health_assessments ha ON ha.deployment_id = d.id
-     WHERE d.id = $1`,
-    [input.deployment_id],
+     WHERE d.id = $1 ${org.clause}`,
+    [input.deployment_id, ...org.params],
   );
 
   if (!row) {

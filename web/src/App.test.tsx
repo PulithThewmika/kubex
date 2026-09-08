@@ -11,7 +11,20 @@ async function renderApp() {
   return render(<App />)
 }
 
-const DEFAULT_ROUTES = {
+const ME_RESPONSE = {
+  user_id: '1',
+  login: 'octocat',
+  email: null,
+  avatar_url: null,
+  org_id: '2',
+  org_name: 'Acme',
+  org_slug: 'acme',
+  onboarding_completed: true,
+}
+
+const AUTHENTICATED_ROUTES = {
+  '/auth/memberships': () => jsonResponse([{ org_id: '2', org_name: 'Acme', org_slug: 'acme' }]),
+  '/auth/me': () => jsonResponse(ME_RESPONSE),
   '/api/services': () => jsonResponse([]),
   '/api/deployments/': () => jsonResponse(makeDeploymentDetail()),
   '/api/deployments': () => jsonResponse([]),
@@ -26,8 +39,54 @@ afterEach(() => {
 })
 
 describe('App routing', () => {
-  it('renders Overview at /', async () => {
-    stubRoutedFetch(DEFAULT_ROUTES)
+  it(
+    'redirects an unauthenticated visit to /app to /login',
+    async () => {
+      stubRoutedFetch({ '/auth/me': () => new Response(null, { status: 401 }) })
+      window.history.pushState({}, '', '/app')
+
+      await renderApp()
+
+      expect(await screen.findByRole('link', { name: /sign in with github/i })).toBeInTheDocument()
+    },
+    // First test in the file pays the one-time cost of vi.resetModules()
+    // re-transforming App's whole import graph (router, react-query,
+    // recharts-adjacent chart libs pulled in by page components) — under
+    // load that alone can approach the 5s default.
+    10_000,
+  )
+
+  it('renders Overview at /app when authenticated', async () => {
+    stubRoutedFetch(AUTHENTICATED_ROUTES)
+    window.history.pushState({}, '', '/app')
+
+    await renderApp()
+
+    expect(await screen.findByRole('heading', { name: 'Overview' })).toBeInTheDocument()
+  })
+
+  it('renders the Landing page at bare / when unauthenticated', async () => {
+    stubRoutedFetch({ '/auth/me': () => new Response(null, { status: 401 }) })
+    window.history.pushState({}, '', '/')
+
+    await renderApp()
+
+    expect(await screen.findByRole('heading', { name: /how it works/i })).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: /sign in with github/i }).length).toBeGreaterThan(0)
+  })
+
+  it('shows a retry state at / on a genuine backend error, not the Landing page', async () => {
+    stubRoutedFetch({ '/auth/me': () => new Response(null, { status: 500 }) })
+    window.history.pushState({}, '', '/')
+
+    await renderApp()
+
+    expect(await screen.findByText(/couldn't verify your session/i)).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /how it works/i })).not.toBeInTheDocument()
+  })
+
+  it('redirects the bare / to /app when authenticated', async () => {
+    stubRoutedFetch(AUTHENTICATED_ROUTES)
     window.history.pushState({}, '', '/')
 
     await renderApp()
@@ -35,43 +94,73 @@ describe('App routing', () => {
     expect(await screen.findByRole('heading', { name: 'Overview' })).toBeInTheDocument()
   })
 
-  it('renders ServiceDeepDive at /services/:name', async () => {
-    stubRoutedFetch(DEFAULT_ROUTES)
-    window.history.pushState({}, '', '/services/orders')
+  it('renders ServiceDeepDive at /app/services/:name', async () => {
+    stubRoutedFetch(AUTHENTICATED_ROUTES)
+    window.history.pushState({}, '', '/app/services/orders')
 
     await renderApp()
 
     expect(await screen.findByRole('heading', { name: 'orders' })).toBeInTheDocument()
   })
 
-  it('renders DeployDetail at /deployments/:id', async () => {
-    stubRoutedFetch(DEFAULT_ROUTES)
-    window.history.pushState({}, '', '/deployments/42')
+  it('renders DeployDetail at /app/deployments/:id', async () => {
+    stubRoutedFetch(AUTHENTICATED_ROUTES)
+    window.history.pushState({}, '', '/app/deployments/42')
 
     await renderApp()
 
     expect(await screen.findByRole('heading', { name: 'Health evidence' })).toBeInTheDocument()
   })
 
-  it('renders Chat at /chat', async () => {
-    stubRoutedFetch(DEFAULT_ROUTES)
-    window.history.pushState({}, '', '/chat')
+  it('renders Chat at /app/chat', async () => {
+    stubRoutedFetch(AUTHENTICATED_ROUTES)
+    window.history.pushState({}, '', '/app/chat')
 
     await renderApp()
 
     expect(await screen.findByPlaceholderText(/ask about/i)).toBeInTheDocument()
   })
 
-  it('falls through gracefully on an unknown route without crashing', async () => {
-    stubRoutedFetch(DEFAULT_ROUTES)
+  it('renders the 404 page on an unknown route', async () => {
+    stubRoutedFetch(AUTHENTICATED_ROUTES)
     window.history.pushState({}, '', '/this-route-does-not-exist')
 
-    const { container } = await renderApp()
+    await renderApp()
 
-    // No route (not even the AppLayout wrapper) matches an unregistered
-    // path today, so nothing renders — the important thing is it doesn't throw.
+    expect(await screen.findByRole('heading', { name: /page not found/i })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Overview' })).not.toBeInTheDocument()
-    expect(screen.queryByPlaceholderText(/ask about/i)).not.toBeInTheDocument()
-    expect(container).toBeInTheDocument()
+  })
+
+  it('renders the 404 page for an unknown /app child route', async () => {
+    stubRoutedFetch(AUTHENTICATED_ROUTES)
+    window.history.pushState({}, '', '/app/nope')
+
+    await renderApp()
+
+    expect(await screen.findByRole('heading', { name: /page not found/i })).toBeInTheDocument()
+  })
+})
+
+describe('Auth redirect flow', () => {
+  it('preserves the deep-linked path through /login and honors it once authenticated', async () => {
+    // Step 1: visiting a protected deep link while unauthenticated lands on
+    // /login with that path preserved as ?redirect=.
+    stubRoutedFetch({ '/auth/me': () => new Response(null, { status: 401 }) })
+    window.history.pushState({}, '', '/app/services/orders')
+
+    await renderApp()
+
+    const githubLink = await screen.findByRole('link', { name: /sign in with github/i })
+    expect(githubLink).toHaveAttribute('href', '/auth/github?redirect=%2Fapp%2Fservices%2Forders')
+
+    // Step 2: the real OAuth round trip happens outside the SPA (GitHub,
+    // then the backend callback), which 302s the browser to exactly that
+    // redirect target. Simulate landing back on it now authenticated.
+    stubRoutedFetch(AUTHENTICATED_ROUTES)
+    window.history.pushState({}, '', '/app/services/orders')
+
+    await renderApp()
+
+    expect(await screen.findByRole('heading', { name: 'orders' })).toBeInTheDocument()
   })
 })

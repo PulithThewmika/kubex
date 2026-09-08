@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -9,28 +10,39 @@ import pytest
 
 from agent.run import _find_unassessed_deployments, _process_deployment, agent_loop
 
+TEST_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
+
 
 @pytest.fixture
-def mock_session():
+def mock_session() -> AsyncMock:
     return AsyncMock()
 
 
-def _make_deploy_row(deploy_id=1, service_id=1, service_name="orders",
-                     namespace="deploylens", commit_sha="abc1234",
-                     prom_components=None):
+def _make_deploy_row(
+    deploy_id: int = 1, service_id: int = 1, org_id: uuid.UUID = TEST_ORG_ID,
+    service_name: str = "orders", namespace: str = "kubex", commit_sha: str = "abc1234",
+    prom_components: list[str] | None = None, cluster_id: uuid.UUID | None = None,
+    prometheus_status: str | None = None, health_check_url: str | None = None,
+    health_check_interval_s: int = 30,
+) -> MagicMock:
     row = MagicMock()
     row.id = deploy_id
     row.service_id = service_id
+    row.org_id = org_id
     row.service_name = service_name
     row.namespace = namespace
     row.commit_sha = commit_sha
     row.prom_components = prom_components
+    row.cluster_id = cluster_id
+    row.prometheus_status = prometheus_status
+    row.health_check_url = health_check_url
+    row.health_check_interval_s = health_check_interval_s
     row.finished_at = datetime(2026, 8, 3, 12, 0, 0, tzinfo=timezone.utc)
     return row
 
 
 @pytest.mark.asyncio
-async def test_find_unassessed_deployments(mock_session):
+async def test_find_unassessed_deployments(mock_session: AsyncMock) -> None:
     """Queries for deployed, observation-elapsed, unassessed deployments."""
     mock_result = MagicMock()
     mock_result.fetchall.return_value = [_make_deploy_row()]
@@ -44,10 +56,60 @@ async def test_find_unassessed_deployments(mock_session):
     assert "status = 'deployed'" in sql
     assert "finished_at IS NOT NULL" in sql
     assert "NOT EXISTS" in sql
+    assert "LEFT JOIN clusters" in sql
+    assert "prometheus_status" in sql
+    assert "health_check_url" in sql
 
 
 @pytest.mark.asyncio
-async def test_process_deployment_healthy(mock_session):
+async def test_process_deployment_passes_prometheus_available_true_when_no_cluster(mock_session: AsyncMock) -> None:
+    """No cluster_id (local/legacy service) -> prometheus_available=True regardless of prometheus_status."""
+    row = _make_deploy_row(cluster_id=None, prometheus_status=None)
+
+    with patch("agent.run.assess_deployment", new_callable=AsyncMock) as mock_assess, \
+         patch("agent.run.fire_alert", new_callable=AsyncMock), \
+         patch("agent.run.get_session", new_callable=AsyncMock):
+
+        mock_assess.return_value = (95, "healthy", {"penalties": {}, "raw_metrics": {}})
+        await _process_deployment(mock_session, row)
+
+        assert mock_assess.call_args.kwargs["prometheus_available"] is True
+
+
+@pytest.mark.asyncio
+async def test_process_deployment_passes_prometheus_available_false_when_cluster_unreachable(mock_session: AsyncMock) -> None:
+    """cluster_id set and prometheus_status != 'found' -> prometheus_available=False."""
+    row = _make_deploy_row(cluster_id=uuid.uuid4(), prometheus_status="unreachable",
+                            health_check_url="http://svc/health")
+
+    with patch("agent.run.assess_deployment", new_callable=AsyncMock) as mock_assess, \
+         patch("agent.run.fire_alert", new_callable=AsyncMock), \
+         patch("agent.run.get_session", new_callable=AsyncMock):
+
+        mock_assess.return_value = (None, "unknown", {"metrics_source": "none", "reason": "n/a"})
+        await _process_deployment(mock_session, row)
+
+        assert mock_assess.call_args.kwargs["prometheus_available"] is False
+        assert mock_assess.call_args.kwargs["health_check_url"] == "http://svc/health"
+
+
+@pytest.mark.asyncio
+async def test_process_deployment_unknown_verdict_no_alert(mock_session: AsyncMock) -> None:
+    """'unknown' verdict (no metrics source) never fires an alert — there's no score to alert on."""
+    row = _make_deploy_row()
+
+    with patch("agent.run.assess_deployment", new_callable=AsyncMock) as mock_assess, \
+         patch("agent.run.fire_alert", new_callable=AsyncMock) as mock_fire, \
+         patch("agent.run.get_session", new_callable=AsyncMock):
+
+        mock_assess.return_value = (None, "unknown", {"metrics_source": "none", "reason": "n/a"})
+        await _process_deployment(mock_session, row)
+
+        mock_fire.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_deployment_healthy(mock_session: AsyncMock) -> None:
     """Healthy deployment writes health_assessments row, updates status, no alert."""
     row = _make_deploy_row()
 
@@ -69,7 +131,7 @@ async def test_process_deployment_healthy(mock_session):
 
 
 @pytest.mark.asyncio
-async def test_process_deployment_degraded_fires_alert(mock_session):
+async def test_process_deployment_degraded_fires_alert(mock_session: AsyncMock) -> None:
     """Degraded deployment triggers fire_alert."""
     row = _make_deploy_row()
 
@@ -100,7 +162,7 @@ async def test_process_deployment_degraded_fires_alert(mock_session):
 
 
 @pytest.mark.asyncio
-async def test_agent_loop_error_one_deployment_continues():
+async def test_agent_loop_error_one_deployment_continues() -> None:
     """Error scoring one deployment doesn't prevent scoring the next."""
     row1 = _make_deploy_row(deploy_id=1)
     row2 = _make_deploy_row(deploy_id=2)
@@ -116,7 +178,9 @@ async def test_agent_loop_error_one_deployment_continues():
 
     call_count = 0
 
-    async def mock_assess(session, deploy, service_name, namespace):
+    async def mock_assess(
+        _session: AsyncMock, _deploy: MagicMock, _components: list[str], _namespace: str, **_kwargs: object,
+    ) -> tuple[int, str, dict]:
         nonlocal call_count
         call_count += 1
         if call_count == 1:
@@ -136,7 +200,7 @@ async def test_agent_loop_error_one_deployment_continues():
 
 
 @pytest.mark.asyncio
-async def test_agent_loop_ignores_already_assessed():
+async def test_agent_loop_ignores_already_assessed() -> None:
     """The SQL query naturally excludes deployments with existing health_assessments."""
     mock_session = AsyncMock()
     mock_result = MagicMock()
@@ -154,7 +218,7 @@ async def test_agent_loop_ignores_already_assessed():
 
 
 @pytest.mark.asyncio
-async def test_process_deployment_empty_prom_components_preserved(mock_session):
+async def test_process_deployment_empty_prom_components_preserved(mock_session: AsyncMock) -> None:
     """An explicit empty prom_components list is preserved, not replaced by [service_name]."""
     row = _make_deploy_row(prom_components=[])
 

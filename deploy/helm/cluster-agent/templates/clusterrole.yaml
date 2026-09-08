@@ -1,0 +1,27 @@
+{{/*
+Rules must stay in lockstep with services/ingest/app/routers/install.py's
+build_install_manifest() — that endpoint generates the same RBAC for the
+raw-manifest install path (E22-T2), and this chart is the Helm-packaged
+equivalent of the exact same agent (E22-T4). See install.py's inline
+comments for the security-review history behind each rule (E22-T3).
+*/}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "cluster-agent.fullname" . }}
+  labels:
+    {{- include "cluster-agent.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "create", "patch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["argocd-notifications-secret"]
+    verbs: ["get", "patch"]
