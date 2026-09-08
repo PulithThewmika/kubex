@@ -20,8 +20,17 @@ const NAV_LINKS = [
 function Nav({ cta }: { cta: Cta }) {
   return (
     <header className="sticky top-0 z-50 border-b-2 border-background bg-text text-background">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:h-16 sm:px-6">
-        <a href="#top" className="font-display text-2xl uppercase leading-none tracking-wide text-background sm:text-3xl">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:h-20 sm:px-6">
+        <a
+          href="#top"
+          className="flex items-center gap-2.5 font-display text-3xl uppercase leading-none tracking-wide text-background sm:text-4xl"
+        >
+          <img
+            src="/kubex-logo.png"
+            alt=""
+            aria-hidden="true"
+            className="h-8 w-8 shrink-0 select-none sm:h-10 sm:w-10"
+          />
           Kube<span className="text-accent">X</span>
         </a>
         <nav className="hidden gap-7 md:flex">
@@ -37,7 +46,7 @@ function Nav({ cta }: { cta: Cta }) {
         </nav>
         <a
           href={cta.href}
-          className="border-2 border-background bg-accent px-3 py-1.5 font-display text-sm uppercase tracking-wide text-background transition-colors hover:bg-background hover:text-text sm:text-base"
+          className="border-2 border-background bg-accent px-4 py-2 font-display text-base uppercase tracking-wide text-background transition-colors hover:bg-background hover:text-text sm:text-lg"
         >
           {cta.label}
         </a>
@@ -50,7 +59,7 @@ function Hero({ cta }: { cta: Cta }) {
   return (
     <section
       id="top"
-      className="relative flex min-h-[calc(100dvh-3.5rem)] flex-col overflow-hidden border-b-2 border-text bg-background sm:min-h-[calc(100dvh-4rem)]"
+      className="relative flex min-h-[calc(100dvh-4rem)] flex-col overflow-hidden border-b-2 border-text bg-background sm:min-h-[calc(100dvh-5rem)]"
     >
       <div aria-hidden="true" className="absolute inset-0 text-accent/[0.08] halftone-lg" />
       <div className="relative mx-auto flex w-full max-w-6xl flex-1 items-center px-4 pt-16 sm:px-6 sm:pt-20">
