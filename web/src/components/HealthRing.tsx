@@ -65,7 +65,7 @@ export function HealthRing({ score, verdict, size = 56 }: HealthRingProps) {
         />
       </svg>
       <span
-        className={`absolute font-heading font-medium tabular-nums ${isUnknown ? 'text-text-muted' : 'text-text'}`}
+        className={`absolute font-heading font-bold tabular-nums ${isUnknown ? 'text-text-muted' : 'text-text'}`}
         style={{ fontSize: size * 0.32 }}
       >
         {isUnknown ? '?' : Math.round(clampedScore)}
