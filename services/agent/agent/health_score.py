@@ -15,7 +15,6 @@ error/latency penalties and note in details JSONB.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import uuid
 from datetime import datetime, timedelta
@@ -330,22 +329,24 @@ async def _query_component(
     component: str, namespace: str, window: str, timestamp: datetime,
     *, session: AsyncSession | None = None, cluster_id: uuid.UUID | None = None,
 ) -> dict:
-    """Query all metrics for a single Prometheus component, concurrently
-    rather than sequentially (#840) -- with the relay transport (cluster_id
-    set) each of these four is a blocking queue-and-poll round trip, so
-    running them one after another would multiply a single relay timeout
-    by 4 for no benefit; they're independent queries."""
-    error_rate, latency_p99, restarts, request_rate = await asyncio.gather(
-        promql.query_error_rate(component, namespace, window, timestamp, session=session, cluster_id=cluster_id),
-        promql.query_latency_p99(component, namespace, window, timestamp, session=session, cluster_id=cluster_id),
-        promql.query_restarts(component, namespace, window, timestamp, session=session, cluster_id=cluster_id),
-        promql.query_request_rate(component, namespace, window, timestamp, session=session, cluster_id=cluster_id),
-    )
+    """Query all metrics for a single Prometheus component.
+
+    Sequential, not asyncio.gather (#840 correctness fix) -- on the relay
+    transport (cluster_id set) each of these four independently calls
+    cluster_relay.queue_and_wait(session, ...), and SQLAlchemy's
+    AsyncSession is not safe for concurrent use by more than one task at
+    once. An earlier revision gathered these to avoid one relay timeout
+    costing 4x, but that traded a real correctness bug (races on the
+    shared session, surfacing as SQLAlchemy errors or worse) for a
+    latency win that direct-PROM_URL queries (session=None) never needed
+    in the first place. The 4x-timeout cost on an unreachable relay is
+    accepted as-is; components/windows are also queried sequentially in
+    _aggregate_metrics/assess_deployment for the same reason."""
     return {
-        "error_rate": error_rate,
-        "latency_p99": latency_p99,
-        "restarts": restarts,
-        "request_rate": request_rate,
+        "error_rate": await promql.query_error_rate(component, namespace, window, timestamp, session=session, cluster_id=cluster_id),
+        "latency_p99": await promql.query_latency_p99(component, namespace, window, timestamp, session=session, cluster_id=cluster_id),
+        "restarts": await promql.query_restarts(component, namespace, window, timestamp, session=session, cluster_id=cluster_id),
+        "request_rate": await promql.query_request_rate(component, namespace, window, timestamp, session=session, cluster_id=cluster_id),
     }
 
 
