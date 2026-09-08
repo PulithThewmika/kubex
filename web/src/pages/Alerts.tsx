@@ -21,7 +21,7 @@ function isFilterId(value: string | null): value is FilterId {
 function AlertRow({ alert }: { alert: Alert }) {
   const resolved = alert.resolved_at !== null
   return (
-    <li className="flex flex-col gap-2 border-b-2 border-paper-line-soft px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:gap-4">
+    <li className="flex flex-col gap-2 border-b-2 border-paper-line-soft px-4 py-2.5 last:border-b-0 sm:flex-row sm:items-center sm:gap-4">
       <div className="flex items-center gap-3 sm:w-40 sm:shrink-0">
         <AlertSeverityBadge severity={alert.severity} />
       </div>
@@ -86,9 +86,9 @@ export function Alerts() {
   }
 
   return (
-    <div className="p-6">
-      <div className="mb-5 flex items-center gap-3 border-b-2 border-paper-line pb-5">
-        <h1 className="font-heading text-2xl font-bold uppercase tracking-tight text-ink sm:text-3xl">Alerts</h1>
+    <div className="p-4">
+      <div className="mb-4 flex items-center gap-3 border-b-2 border-paper-line pb-3">
+        <h1 className="font-display text-3xl uppercase tracking-tight text-ink sm:text-4xl">Alerts</h1>
         {activeCount > 0 && (
           <span className="border-2 border-failed bg-failed/10 px-2 py-0.5 font-body text-xs font-bold uppercase tabular-nums tracking-wide text-failed">
             {activeCount} active
@@ -99,7 +99,7 @@ export function Alerts() {
       <div
         role="tablist"
         aria-label="Alert status filter"
-        className="mb-5 inline-flex gap-1 border-2 border-paper-line-soft bg-paper-raised p-1"
+        className="mb-4 inline-flex gap-1 border-2 border-paper-line-soft bg-paper-raised p-1"
       >
         {FILTERS.map((f) => {
           const selected = f.id === activeFilter
@@ -129,22 +129,31 @@ export function Alerts() {
       ) : isLoading ? (
         <ul className="overflow-hidden border-2 border-paper-line-soft bg-paper-raised" aria-busy="true">
           {Array.from({ length: 4 }, (_, i) => (
-            <li key={i} className="border-b-2 border-paper-line-soft px-4 py-4 last:border-b-0">
+            <li key={i} className="border-b-2 border-paper-line-soft px-4 py-3 last:border-b-0">
               <div className="h-4 w-3/4 animate-pulse bg-paper-line-soft" />
             </li>
           ))}
         </ul>
       ) : visible.length === 0 ? (
-        <EmptyState
-          title={activeFilter === 'active' ? 'All clear' : 'Nothing here'}
-          description={
-            activeFilter === 'active'
-              ? 'No active alerts. Every service is within its health thresholds.'
-              : activeFilter === 'resolved'
-                ? 'No resolved alerts yet.'
-                : 'No alerts have been recorded yet.'
-          }
-        />
+        activeFilter === 'active' ? (
+          <div
+            role="status"
+            className="flex flex-col items-center gap-3 border-2 border-paper-line-soft bg-paper-raised px-4 py-8 text-center"
+          >
+            <img src="/Noalerts.png" alt="" className="h-40 w-auto select-none" />
+            <h2 className="font-heading text-lg font-bold uppercase tracking-tight text-ink">All clear</h2>
+            <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
+              No active alerts. Every service is within its health thresholds.
+            </p>
+          </div>
+        ) : (
+          <EmptyState
+            title="Nothing here"
+            description={
+              activeFilter === 'resolved' ? 'No resolved alerts yet.' : 'No alerts have been recorded yet.'
+            }
+          />
+        )
       ) : (
         <ul className="overflow-hidden border-2 border-paper-line-soft bg-paper-raised">
           {visible.map((alert) => (
