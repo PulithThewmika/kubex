@@ -19,9 +19,9 @@ const NAV_LINKS = [
 
 function Nav({ cta }: { cta: Cta }) {
   return (
-    <header className="sticky top-0 z-50 border-b-2 border-text bg-background">
+    <header className="sticky top-0 z-50 border-b-2 border-background bg-text text-background">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:h-16 sm:px-6">
-        <a href="#top" className="font-display text-2xl uppercase leading-none tracking-wide text-text sm:text-3xl">
+        <a href="#top" className="font-display text-2xl uppercase leading-none tracking-wide text-background sm:text-3xl">
           Kube<span className="text-accent">X</span>
         </a>
         <nav className="hidden gap-7 md:flex">
@@ -29,7 +29,7 @@ function Nav({ cta }: { cta: Cta }) {
             <a
               key={l.label}
               href={l.href}
-              className="font-body text-xs font-bold uppercase tracking-[0.15em] text-text-muted transition-colors hover:text-accent"
+              className="font-body text-xs font-bold uppercase tracking-[0.15em] text-background/60 transition-colors hover:text-accent"
             >
               {l.label}
             </a>
@@ -37,7 +37,7 @@ function Nav({ cta }: { cta: Cta }) {
         </nav>
         <a
           href={cta.href}
-          className="border-2 border-accent bg-accent px-3 py-1.5 font-display text-sm uppercase tracking-wide text-background transition-colors hover:bg-background hover:text-accent sm:text-base"
+          className="border-2 border-background bg-accent px-3 py-1.5 font-display text-sm uppercase tracking-wide text-background transition-colors hover:bg-background hover:text-text sm:text-base"
         >
           {cta.label}
         </a>
@@ -48,10 +48,13 @@ function Nav({ cta }: { cta: Cta }) {
 
 function Hero({ cta }: { cta: Cta }) {
   return (
-    <section id="top" className="relative overflow-hidden border-b-2 border-text bg-background">
+    <section
+      id="top"
+      className="relative flex min-h-[calc(100dvh-3.5rem)] flex-col overflow-hidden border-b-2 border-text bg-background sm:min-h-[calc(100dvh-4rem)]"
+    >
       <div aria-hidden="true" className="absolute inset-0 text-accent/[0.08] halftone-lg" />
-      <div className="relative mx-auto max-w-6xl px-4 pb-16 pt-12 sm:px-6 sm:pb-24 sm:pt-16">
-        <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
+      <div className="relative mx-auto flex w-full max-w-6xl flex-1 items-center px-4 py-16 sm:px-6 sm:py-20">
+        <div className="grid w-full items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
           <Reveal>
             <h1 className="font-display text-6xl uppercase leading-[0.82] text-text sm:text-8xl lg:text-8xl">
               <span className="block">Know if your</span>
