@@ -22,6 +22,12 @@ GITHUB_WEBHOOK_SECRET = os.environ.get("GITHUB_WEBHOOK_SECRET", "")
 GITHUB_APP_WEBHOOK_SECRET = os.environ.get("GITHUB_APP_WEBHOOK_SECRET", "")
 ARGOCD_WEBHOOK_TOKEN = os.environ.get("ARGOCD_WEBHOOK_TOKEN", "")
 ALERTMANAGER_WEBHOOK_TOKEN = os.environ.get("ALERTMANAGER_WEBHOOK_TOKEN", "")
+# Static bearer the Grafana Prometheus datasource sends to /api/prom. The
+# org a query runs against travels in the PromQL itself (org_id="<uuid>",
+# injected by the panel proxy from UserContext); this token is what makes
+# that org id trustworthy — without it any container on the compose
+# network could hit /api/prom and forge one.
+GRAFANA_DATASOURCE_TOKEN = os.environ.get("GRAFANA_DATASOURCE_TOKEN", "")
 SLACK_SIGNING_SECRET = os.environ.get("SLACK_SIGNING_SECRET", "")
 GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
 GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
@@ -139,6 +145,17 @@ async def verify_alertmanager_token(authorization: str | None = Header(default=N
     if authorization is None:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
     expected = f"Bearer {ALERTMANAGER_WEBHOOK_TOKEN}"
+    if not hmac.compare_digest(authorization, expected):
+        raise HTTPException(status_code=401, detail="Invalid bearer token")
+
+
+async def verify_grafana_datasource_token(authorization: str | None = Header(default=None)):
+    if not GRAFANA_DATASOURCE_TOKEN:
+        # Fail closed: an unset token must not mean "allow everyone".
+        raise HTTPException(status_code=503, detail="Datasource relay not configured")
+    if authorization is None:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    expected = f"Bearer {GRAFANA_DATASOURCE_TOKEN}"
     if not hmac.compare_digest(authorization, expected):
         raise HTTPException(status_code=401, detail="Invalid bearer token")
 

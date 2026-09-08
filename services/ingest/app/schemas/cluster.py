@@ -66,6 +66,8 @@ class ClusterRotateTokenResponse(BaseModel):
 class ClusterQueryResponse(BaseModel):
     id: str
     promql: str
+    kind: str = "instant"
+    params: dict | None = None
 
 
 class ClusterQueryResultRequest(BaseModel):
