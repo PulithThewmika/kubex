@@ -29,7 +29,11 @@ def _load(filename: str) -> dict:
     return json.loads((_CUSTOMER_DIR / filename).read_text())
 
 
-def _sql_targets(dashboard: dict):
+# The one tenant predicate the proxy sets and the browser can't override.
+_ORG_PREDICATE = "$org"
+
+
+def _sql_targets(dashboard: dict):  # -> Iterator[tuple[str, str]]
     for panel in dashboard.get("panels", []):
         for target in panel.get("targets", []):
             if target.get("rawSql"):
@@ -40,29 +44,33 @@ def _sql_targets(dashboard: dict):
             yield f"annotation {ann.get('name')!r}", sql
 
 
-def test_customer_set_is_non_empty():
+def test_customer_set_is_non_empty() -> None:
     assert CUSTOMER_FACING, "no customer-facing dashboards found"
 
 
 @pytest.mark.parametrize("filename", CUSTOMER_FACING)
-def test_customer_dashboard_sql_is_org_scoped(filename):
+def test_customer_dashboard_sql_is_org_scoped(filename: str) -> None:
     dashboard = _load(filename)
     offenders = []
     for where, sql in _sql_targets(dashboard):
         if any(f"{name}(" in sql for name in _DORA_NAMES):
-            if "$org" not in sql:
-                offenders.append(f"{where} (DORA call without $org)")
+            # DORA panel: must call the function with the org, e.g.
+            # dora_deploy_frequency('$org'::uuid) — not the NULL-org view.
+            if _ORG_PREDICATE not in sql:
+                offenders.append(f"{where} (DORA call without {_ORG_PREDICATE})")
             continue
         if any(name in sql for name in _DORA_NAMES):
             offenders.append(f"{where} (reads a NULL-org dora_* view)")
             continue
-        if any(t in sql for t in ORG_SCOPED_TABLES) and "org_id" not in sql:
-            offenders.append(f"{where} (no org_id filter)")
+        # Raw SQL panel: merely mentioning org_id (e.g. SELECT s.org_id) is
+        # not isolation — require the proxy-set '$org' predicate itself.
+        if any(t in sql for t in ORG_SCOPED_TABLES) and _ORG_PREDICATE not in sql:
+            offenders.append(f"{where} (no {_ORG_PREDICATE} predicate)")
     assert not offenders, f"{filename}: {offenders}"
 
 
 @pytest.mark.parametrize("filename", CUSTOMER_FACING)
-def test_customer_dashboard_has_hidden_org_var(filename):
+def test_customer_dashboard_has_hidden_org_var(filename: str) -> None:
     dashboard = _load(filename)
     org_var = next(
         (v for v in dashboard.get("templating", {}).get("list", []) if v["name"] == "org"), None
@@ -72,7 +80,7 @@ def test_customer_dashboard_has_hidden_org_var(filename):
 
 
 @pytest.mark.parametrize("filename", CUSTOMER_FACING)
-def test_customer_sql_uses_logical_service_not_component_alternation(filename):
+def test_customer_sql_uses_logical_service_not_component_alternation(filename: str) -> None:
     # Two distinct proxy vars: $service is the logical KubeX service name
     # (services.name), $component is the pipe-joined prom_components for the
     # Prometheus label matcher. A SQL panel must filter on $service — using
@@ -84,6 +92,6 @@ def test_customer_sql_uses_logical_service_not_component_alternation(filename):
 
 
 @pytest.mark.parametrize("filename", CUSTOMER_FACING)
-def test_customer_dashboard_no_demo_hardcodes(filename):
+def test_customer_dashboard_no_demo_hardcodes(filename: str) -> None:
     raw = (_CUSTOMER_DIR / filename).read_text()
     assert "sample-app" not in raw, f"{filename}: hardcoded demo workload reference"
