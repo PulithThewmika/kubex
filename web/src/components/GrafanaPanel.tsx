@@ -14,6 +14,7 @@ type Status = 'loading' | 'loaded' | 'no-source' | 'error'
 
 export function GrafanaPanel({ uid, panelId, service, from = 'now-6h', to = 'now', title }: GrafanaPanelProps) {
   const [status, setStatus] = useState<Status>('loading')
+  const [imgUrl, setImgUrl] = useState<string | null>(null)
 
   const params = new URLSearchParams({
     uid,
@@ -27,24 +28,43 @@ export function GrafanaPanel({ uid, panelId, service, from = 'now-6h', to = 'now
 
   useEffect(() => {
     setStatus('loading')
+    setImgUrl(null)
     let cancelled = false
-    // The proxy renders the panel to PNG server-side (#835), so <img> is
-    // enough. A GET preflight lets us tell "no metrics source connected"
-    // (503, the org has no connected cluster or a relay timeout) apart
-    // from a genuine render failure — otherwise both would just be a
-    // broken image. Deliberately plain fetch, not apiFetch: a 401 here is
-    // a stale Grafana service-account token, not the user's session.
+    let objectUrl: string | null = null
+
+    // One request, not two: server-side PNG rendering is expensive (a
+    // headless-Chrome render + a bounded relay round-trip), so fetch the
+    // image once and point <img> at an object URL rather than letting the
+    // browser issue a second identical render. The response status still
+    // distinguishes "no metrics source" (503) from a render failure.
+    // Plain fetch, not apiFetch: a 401 here is a stale Grafana SA token,
+    // not the user's session.
     fetch(src, { credentials: 'include' })
-      .then((res) => {
+      .then(async (res) => {
         if (cancelled) return
-        if (res.status === 503) setStatus('no-source')
-        else if (!res.ok) setStatus('error')
+        if (res.status === 503) {
+          setStatus('no-source')
+          return
+        }
+        if (!res.ok) {
+          setStatus('error')
+          return
+        }
+        objectUrl = URL.createObjectURL(await res.blob())
+        if (cancelled) {
+          URL.revokeObjectURL(objectUrl)
+          return
+        }
+        setImgUrl(objectUrl)
+        setStatus('loaded')
       })
       .catch(() => {
         if (!cancelled) setStatus('error')
       })
+
     return () => {
       cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
   }, [src])
 
@@ -75,13 +95,9 @@ export function GrafanaPanel({ uid, panelId, service, from = 'now-6h', to = 'now
           <p className="text-xs text-text-muted">The {title} panel couldn't be rendered. Try again shortly.</p>
         </div>
       )}
-      <img
-        alt={title}
-        src={src}
-        className={`h-full w-full object-contain ${status === 'loaded' ? '' : 'invisible'}`}
-        onLoad={() => setStatus((s) => (s === 'no-source' || s === 'error' ? s : 'loaded'))}
-        onError={() => setStatus((s) => (s === 'no-source' ? s : 'error'))}
-      />
+      {imgUrl && (
+        <img alt={title} src={imgUrl} className="h-full w-full object-contain" />
+      )}
     </div>
   )
 }

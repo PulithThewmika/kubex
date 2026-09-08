@@ -72,16 +72,15 @@ def test_customer_dashboard_has_hidden_org_var(filename):
 
 
 @pytest.mark.parametrize("filename", CUSTOMER_FACING)
-def test_customer_dashboard_sql_handles_multi_component_service(filename):
-    # The proxy forwards a multi-component service as "a|b|c" (var-service).
-    # A SQL panel matching `s.name = '$service'` would then match nothing.
+def test_customer_sql_uses_logical_service_not_component_alternation(filename):
+    # Two distinct proxy vars: $service is the logical KubeX service name
+    # (services.name), $component is the pipe-joined prom_components for the
+    # Prometheus label matcher. A SQL panel must filter on $service — using
+    # $component would compare "frontend|orders|payments" to services.name
+    # and silently return nothing for any rolled-up service.
     dashboard = _load(filename)
-    offenders = [
-        where
-        for where, sql in _sql_targets(dashboard)
-        if "$service" in sql and "s.name = '$service'" in sql
-    ]
-    assert not offenders, f"{filename}: bare s.name = '$service' breaks rolled-up services in {offenders}"
+    offenders = [where for where, sql in _sql_targets(dashboard) if "$component" in sql]
+    assert not offenders, f"{filename}: SQL panel references the Prometheus-only $component var in {offenders}"
 
 
 @pytest.mark.parametrize("filename", CUSTOMER_FACING)
