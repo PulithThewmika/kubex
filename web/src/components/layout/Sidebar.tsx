@@ -1,6 +1,5 @@
 import { NavLink } from 'react-router-dom'
 import { useServices } from '../../hooks/useServices'
-import { Logo } from './Logo'
 
 type NavItem = {
   to: string
@@ -90,12 +89,9 @@ export function Sidebar() {
   const activeAlertCount = services?.reduce((sum, s) => sum + s.active_alert_count, 0) ?? 0
 
   return (
-    <aside className="flex h-dvh w-[4.5rem] shrink-0 flex-col border-r-2 border-text bg-surface lg:w-60">
-      <div className="flex h-14 items-center justify-center border-b-2 border-text px-3 lg:justify-start lg:px-4">
-        <Logo withWordmark={false} markClassName="h-7 w-7 lg:hidden" />
-        <span className="hidden lg:inline-flex">
-          <Logo markClassName="h-7 w-7" />
-        </span>
+    <aside className="flex h-dvh w-[4.5rem] shrink-0 flex-col border-r-2 border-background bg-text text-background lg:w-60">
+      <div className="flex h-14 items-center justify-center border-b-2 border-background px-3 lg:justify-start lg:px-4">
+        <img src="/header-logo.png" alt="KubeX Platform" className="h-8 w-auto select-none" />
       </div>
       <nav className="flex flex-1 flex-col gap-1 p-2 lg:p-3">
         {NAV_ITEMS.map(({ to, label, icon: Icon }) => {
@@ -108,10 +104,10 @@ export function Sidebar() {
               aria-label={badge ? `${label}, ${badge} active` : label}
               title={label}
               className={({ isActive }) =>
-                `group relative flex items-center justify-center gap-3 border-2 px-3 py-2.5 font-body text-xs font-bold uppercase tracking-wide transition-colors lg:justify-start ${
+                `group relative flex items-center justify-center gap-3 border-2 px-3 py-2.5 font-body text-xs font-bold uppercase tracking-[0.15em] transition-colors lg:justify-start ${
                   isActive
-                    ? 'border-accent bg-accent text-background'
-                    : 'border-transparent text-text-muted hover:border-border-strong hover:text-text'
+                    ? 'border-background bg-accent text-background'
+                    : 'border-transparent text-background/55 hover:border-background/30 hover:text-accent'
                 }`
               }
             >
