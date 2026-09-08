@@ -18,11 +18,16 @@ export default {
         border: '#262A31',
         'border-strong': '#363B44',
 
-        // The one accent — luminous green. Distinct in hue from the muted
-        // `healthy` status green (#3FB950): brighter, cooler, decorative not
-        // stateful.
-        accent: '#00E676',
-        'accent-hover': '#5FFFA6',
+        // The one accent — luminous green (CSS SpringGreen). Distinct in hue
+        // from the muted `healthy` status green (#3FB950): far brighter,
+        // cooler, decorative not stateful.
+        accent: '#00FF7F',
+        'accent-hover': '#7DFFB4',
+
+        // Secondary poster colour — the original brand orange, kept for the
+        // "Deployment-aware / by design" section only (deliberate colour
+        // block, the maximalist landing plays hot vs. cold section to section).
+        flare: '#F97316',
 
         // Text ladder.
         text: '#E6E8EB',
