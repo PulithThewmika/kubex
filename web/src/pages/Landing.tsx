@@ -44,41 +44,27 @@ function Nav({ cta }: { cta: Cta }) {
   )
 }
 
-function DeployCard({
-  className = '',
-  rotate,
-  label,
-  verdict,
-  score,
-  tone,
-}: {
-  className?: string
-  rotate: number
-  label: string
-  verdict: string
-  score: string
-  tone: 'healthy' | 'degraded'
-}) {
+// The KubeX mark, framed like a printed plate: an offset orange block behind
+// a stencilled border, halftone wash, registration ticks in the corners.
+function LogoPlate() {
   return (
-    <div
-      className={`w-56 border-2 border-text bg-background shadow-raised ${className}`}
-      style={{ transform: `rotate(${rotate}deg)` }}
-    >
-      <div className="flex items-center justify-between bg-text px-3 py-1.5 font-mono text-[11px] font-bold uppercase text-background">
-        <span>{label}</span>
-        <span aria-hidden="true">●</span>
+    <div className="relative w-fit" style={{ transform: 'rotate(-3deg)' }}>
+      <div aria-hidden="true" className="absolute inset-0 translate-x-3 translate-y-3 bg-accent sm:translate-x-4 sm:translate-y-4" />
+      <div className="relative border-2 border-text bg-background p-8 sm:p-12">
+        <div aria-hidden="true" className="absolute inset-0 text-accent/25 halftone" />
+        {['left-1.5 top-1.5', 'right-1.5 top-1.5 rotate-90', 'right-1.5 bottom-1.5 rotate-180', 'left-1.5 bottom-1.5 -rotate-90'].map((p) => (
+          <span key={p} className={`absolute z-10 h-3 w-3 border-l-2 border-t-2 border-accent ${p}`} aria-hidden="true" />
+        ))}
+        <img
+          src="/kubex-logo.png"
+          alt="KubeX"
+          width={256}
+          height={256}
+          className="relative z-10 h-44 w-44 object-contain drop-shadow-[0_8px_24px_rgba(249,115,22,0.25)] sm:h-64 sm:w-64"
+        />
       </div>
-      <div className="halftone px-3 py-4 text-accent">
-        <p className="font-display text-4xl uppercase leading-none text-text">
-          {verdict}
-        </p>
-        <p
-          className={`mt-1 font-display text-6xl leading-none tabular-nums ${
-            tone === 'healthy' ? 'text-accent' : 'text-outline text-text'
-          }`}
-        >
-          {score}
-        </p>
+      <div className="absolute -bottom-3 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap border-2 border-text bg-accent px-3 py-1 font-display text-xs uppercase tracking-[0.2em] text-background">
+        One record per deploy
       </div>
     </div>
   )
@@ -91,28 +77,26 @@ function Hero({ cta }: { cta: Cta }) {
         aria-hidden="true"
         className="absolute inset-0 text-accent/[0.08] halftone-lg"
       />
-      <div className="relative mx-auto max-w-6xl px-4 pb-14 pt-12 sm:px-6 sm:pb-20 sm:pt-16">
-        <div className="grid gap-6 lg:grid-cols-[1fr_20rem] lg:items-start">
+      <div className="relative mx-auto max-w-6xl px-4 pb-16 pt-12 sm:px-6 sm:pb-24 sm:pt-16">
+        <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
           <Reveal>
             <h1 className="font-display uppercase text-accent">
-              <span className="block text-[14vw] leading-[0.82] sm:text-[11vw] lg:text-[6.8rem]">
+              <span className="block text-[14vw] leading-[0.82] sm:text-[11vw] lg:text-[6.4rem]">
                 Know if your
               </span>
-              <span className="block text-[15vw] leading-[0.8] text-outline text-text sm:text-[12vw] lg:text-[8.5rem]">
+              <span className="block text-[14vw] leading-[0.8] text-outline text-text sm:text-[11vw] lg:text-[6.4rem]">
                 last deploy
               </span>
-              <span className="block text-[14vw] leading-[0.82] sm:text-[11vw] lg:text-[6.8rem]">
+              <span className="block text-[14vw] leading-[0.82] sm:text-[11vw] lg:text-[6.4rem]">
                 made it worse
               </span>
             </h1>
-          </Reveal>
-          <Reveal delayMs={120}>
-            <p className="max-w-xs font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-text-muted lg:mt-4">
+            <p className="mt-10 max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
               KubeX correlates GitHub Actions, ArgoCD and Kubernetes runtime
               health into one deployment record — and scores every release
               automatically. No dashboards to babysit.
             </p>
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-7 flex flex-wrap gap-3">
               <a
                 href={cta.href}
                 className="border-2 border-accent bg-accent px-5 py-2.5 font-display text-lg uppercase tracking-wide text-background transition-transform hover:-translate-y-1"
@@ -129,13 +113,9 @@ function Hero({ cta }: { cta: Cta }) {
               </a>
             </div>
           </Reveal>
-        </div>
-
-        {/* Scattered deployment cards */}
-        <div className="mt-12 flex flex-wrap justify-center gap-6 lg:mt-4 lg:h-64 lg:justify-start">
-          <DeployCard rotate={-5} label="orders #482" verdict="Healthy" score="94" tone="healthy" className="lg:relative lg:left-4 lg:top-2" />
-          <DeployCard rotate={4} label="payments #517" verdict="Degraded" score="61" tone="degraded" className="lg:relative lg:-top-4 lg:left-10" />
-          <DeployCard rotate={-2} label="frontend #903" verdict="Healthy" score="92" tone="healthy" className="hidden lg:relative lg:left-20 lg:top-6 lg:block" />
+          <Reveal delayMs={120} className="flex justify-center lg:justify-end">
+            <LogoPlate />
+          </Reveal>
         </div>
       </div>
 
