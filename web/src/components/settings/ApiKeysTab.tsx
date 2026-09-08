@@ -3,6 +3,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { useApiKeys, useRevokeApiKey, type ApiKey } from '../../hooks/useApiKeys'
 import { Modal } from '../Modal'
 import { ApiKeyCreateModal } from './ApiKeyCreateModal'
+import { McpConnectGuide } from './McpConnectGuide'
 
 function KeyRow({ apiKey, onRevoke }: { apiKey: ApiKey; onRevoke: (key: ApiKey) => void }) {
   return (
@@ -121,6 +122,8 @@ export function ApiKeysTab() {
 
       {showCreate && <ApiKeyCreateModal onClose={() => setShowCreate(false)} />}
       {revoking && <RevokeDialog apiKey={revoking} onClose={() => setRevoking(null)} />}
+
+      <McpConnectGuide />
     </section>
   )
 }
