@@ -22,6 +22,13 @@ GITHUB_WEBHOOK_SECRET = os.environ.get("GITHUB_WEBHOOK_SECRET", "")
 GITHUB_APP_WEBHOOK_SECRET = os.environ.get("GITHUB_APP_WEBHOOK_SECRET", "")
 ARGOCD_WEBHOOK_TOKEN = os.environ.get("ARGOCD_WEBHOOK_TOKEN", "")
 ALERTMANAGER_WEBHOOK_TOKEN = os.environ.get("ALERTMANAGER_WEBHOOK_TOKEN", "")
+# Shared bearer token for internal service-to-service calls (#840) — the
+# same secret mcp_client.py already sends when ingest calls OUT to the MCP
+# server (E20-T3). Reused here for the reverse direction: the MCP server
+# calling IN to ingest's org-scoped telemetry relay
+# (routers/relay_internal.py). One secret, one docstring, instead of a
+# second env var with an identical trust model.
+MCP_INTERNAL_TOKEN = os.environ.get("MCP_INTERNAL_TOKEN", "")
 SLACK_SIGNING_SECRET = os.environ.get("SLACK_SIGNING_SECRET", "")
 GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
 GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
@@ -67,6 +74,8 @@ def validate_auth_tokens() -> None:
         missing.append("GITHUB_CLIENT_SECRET")
     if not JWT_SECRET:
         missing.append("JWT_SECRET")
+    if not MCP_INTERNAL_TOKEN:
+        missing.append("MCP_INTERNAL_TOKEN")
     if missing:
         raise RuntimeError(
             f"Webhook/OAuth auth secrets must not be empty: {', '.join(missing)}. "
@@ -139,6 +148,23 @@ async def verify_alertmanager_token(authorization: str | None = Header(default=N
     if authorization is None:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
     expected = f"Bearer {ALERTMANAGER_WEBHOOK_TOKEN}"
+    if not hmac.compare_digest(authorization, expected):
+        raise HTTPException(status_code=401, detail="Invalid bearer token")
+
+
+async def verify_internal_token(authorization: str | None = Header(default=None)) -> None:
+    """Authenticate an internal service-to-service caller (#840) — today,
+    the MCP server calling ingest's org-scoped telemetry relay. Fails
+    closed on an unset token (same as verify_grafana_datasource_token)
+    rather than the ARGOCD/ALERTMANAGER checks' implicit behavior, since
+    an empty MCP_INTERNAL_TOKEN would otherwise mean "compare against
+    literal 'Bearer '" instead of an explicit "not configured" error.
+    """
+    if not MCP_INTERNAL_TOKEN:
+        raise HTTPException(status_code=503, detail="Internal relay not configured")
+    if authorization is None:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    expected = f"Bearer {MCP_INTERNAL_TOKEN}"
     if not hmac.compare_digest(authorization, expected):
         raise HTTPException(status_code=401, detail="Invalid bearer token")
 
