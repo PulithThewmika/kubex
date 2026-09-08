@@ -65,12 +65,22 @@ import argparse
 import json
 import os
 import re
+import ssl
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+try:
+    import certifi
+    _SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    # certifi isn't a hard dependency elsewhere in this repo — fall back to
+    # whatever CA store Python's own defaults resolve to (the OS store on
+    # Windows) if it's genuinely unavailable.
+    _SSL_CONTEXT = None
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SAMPLE_APP_REPO = REPO_ROOT.parent / "deploylens-sample-app"
@@ -99,7 +109,13 @@ def http_get(url: str):
         req.add_header("Cookie", f"session={session}")
     elif api_key:
         req.add_header("Authorization", f"Bearer {api_key}")
-    with urllib.request.urlopen(req, timeout=10) as resp:
+    # Explicit certifi CA bundle (found 2026-09-08): on at least one Windows
+    # dev machine, Python's ssl module (which uses the OS certificate store
+    # by default, not certifi) misreported a genuinely valid, current
+    # Let's Encrypt cert as expired — curl and openssl s_client against the
+    # same host at the same moment both validated it fine. A stale/
+    # incomplete OS trust store, not an actual expired/invalid cert.
+    with urllib.request.urlopen(req, timeout=10, context=_SSL_CONTEXT) as resp:
         return json.loads(resp.read())
 
 
