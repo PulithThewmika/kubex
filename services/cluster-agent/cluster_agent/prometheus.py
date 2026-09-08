@@ -98,7 +98,10 @@ async def query(base_url: str, promql: str) -> dict:
 
 async def query_range(base_url: str, promql: str, start: str, end: str, step: str) -> dict:
     """Execute a PromQL range query — Grafana issues one of these per
-    time-series panel. Returns Prometheus's raw JSON response unmodified."""
+    time-series panel, and so does the MCP server's query_metrics/
+    generate_incident_report tools, relayed through ingest's
+    routers/relay_internal.py as a "range"-kind cluster_queries row.
+    Returns Prometheus's raw JSON response unmodified."""
     if len(promql) > MAX_PROMQL_LENGTH:
         raise QueryTooLongError(f"PromQL string exceeds {MAX_PROMQL_LENGTH} chars ({len(promql)})")
     client = _client_for(base_url)

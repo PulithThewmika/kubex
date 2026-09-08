@@ -214,11 +214,16 @@ async def test_heartbeat_rejects_invalid_token(client: FastAPI, mock_session: As
 # ── S8: GET /api/clusters/:id/queries ────────────────────────────────────
 
 
-def _fake_query(cluster_id: uuid.UUID, promql: str = 'up{service="orders"}', status: str = "pending") -> ClusterQuery:
+def _fake_query(
+    cluster_id: uuid.UUID, promql: str = 'up{service="orders"}', status: str = "pending",
+    kind: str = "instant", params: dict | None = None,
+) -> ClusterQuery:
     return ClusterQuery(
         id=uuid.uuid4(),
         cluster_id=cluster_id,
         promql=promql,
+        kind=kind,
+        params=params,
         status=status,
         result=None,
         requested_at=datetime.now(timezone.utc),

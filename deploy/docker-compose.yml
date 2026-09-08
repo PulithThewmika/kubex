@@ -98,8 +98,10 @@ services:
       # don't redeclare MCP_INTERNAL_TOKEN as ${MCP_INTERNAL_TOKEN} here,
       # it resolves empty without an explicit --env-file flag and
       # crash-loops the server.
-      PROM_URL: ${PROM_URL:-http://host.docker.internal:9090}
-      LOKI_URL: ${LOKI_URL:-http://host.docker.internal:3100}
+      # PROM_URL/LOKI_URL removed (#840) — this server no longer talks to
+      # Prometheus/Loki directly, it relays through ingest's
+      # /internal/relay/* endpoints (see INGEST_URL below).
+      INGEST_URL: ${INGEST_URL:-http://ingest:8000}
       MCP_TRANSPORT: http
       MCP_HTTP_PORT: "3001"
       # MCP_INTERNAL_TOKEN comes from env_file (../.env) above — don't
