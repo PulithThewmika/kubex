@@ -19,10 +19,10 @@ export function ConnectReposStep({ installations }: ConnectReposStepProps) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h2 className="font-display text-3xl uppercase leading-none text-text sm:text-4xl">
+        <h2 className="font-display text-3xl uppercase leading-none text-ink sm:text-4xl">
           Connect your repositories
         </h2>
-        <p className="max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
+        <p className="max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-ink-muted">
           Install the KubeX GitHub App on the organization or repositories you deploy from. KubeX watches
           GitHub Actions runs and provisions webhooks automatically — no per-repo secrets to manage.
         </p>
@@ -45,7 +45,7 @@ export function ConnectReposStep({ installations }: ConnectReposStepProps) {
         {connected ? 'Install on another account' : 'Install GitHub App'}
       </a>
 
-      <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+      <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
         Opens GitHub in this tab. GitHub returns you to Settings when the install completes; re-open this
         guide from there to pick up where you left off.
       </p>
