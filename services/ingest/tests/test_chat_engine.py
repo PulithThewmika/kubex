@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from google.genai import errors as genai_errors
 from google.genai import types
 
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
@@ -26,6 +27,11 @@ def _text_part(text):
 
 def _function_call_part(id_, name, args):
     return types.Part(function_call=types.FunctionCall(name=name, args=args))
+
+
+def _api_error(code, status="UNAVAILABLE"):
+    error_cls = genai_errors.ServerError if code >= 500 else genai_errors.ClientError
+    return error_cls(code, {"error": {"code": code, "message": "busy", "status": status}})
 
 
 def _chunk(text, parts):
@@ -196,3 +202,108 @@ async def test_run_chat_turn_stops_after_max_iterations():
 
     assert frames[-1].startswith("event: error\n")
     assert "maximum iterations" in frames[-1]
+
+
+# ── retry-with-backoff on transient Gemini errors ────────────────────
+
+@pytest.mark.asyncio
+async def test_run_chat_turn_retries_transient_503_then_succeeds():
+    success_stream = _FakeStream([_chunk("ok", [_text_part("ok")])])
+
+    mock_client = MagicMock()
+    mock_client.aio.models.generate_content_stream = AsyncMock(
+        side_effect=[_api_error(503), _api_error(503), success_stream]
+    )
+
+    with (
+        patch("app.chat_engine.genai.Client", return_value=mock_client),
+        patch("app.chat_engine.asyncio.sleep", AsyncMock()),
+    ):
+        frames = [
+            frame
+            async for frame in run_chat_turn(
+                [ChatMessage(role="user", content="hi")], tools=[], org_id=TEST_ORG_ID
+            )
+        ]
+
+    assert frames == ['event: text\ndata: {"text": "ok"}\n\n']
+    assert mock_client.aio.models.generate_content_stream.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_run_chat_turn_does_not_retry_non_retryable_error():
+    mock_client = MagicMock()
+    mock_client.aio.models.generate_content_stream = AsyncMock(
+        side_effect=_api_error(400, status="INVALID_ARGUMENT")
+    )
+
+    with (
+        patch("app.chat_engine.genai.Client", return_value=mock_client),
+        patch("app.chat_engine.asyncio.sleep", AsyncMock()) as mock_sleep,
+    ):
+        frames = [
+            frame
+            async for frame in run_chat_turn(
+                [ChatMessage(role="user", content="hi")], tools=[], org_id=TEST_ORG_ID
+            )
+        ]
+
+    assert frames[-1].startswith("event: error\n")
+    assert mock_client.aio.models.generate_content_stream.await_count == 1
+    mock_sleep.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_chat_turn_gives_up_after_max_retries():
+    mock_client = MagicMock()
+    mock_client.aio.models.generate_content_stream = AsyncMock(side_effect=_api_error(503))
+
+    with (
+        patch("app.chat_engine.genai.Client", return_value=mock_client),
+        patch("app.chat_engine.asyncio.sleep", AsyncMock()),
+    ):
+        frames = [
+            frame
+            async for frame in run_chat_turn(
+                [ChatMessage(role="user", content="hi")], tools=[], org_id=TEST_ORG_ID
+            )
+        ]
+
+    assert frames[-1].startswith("event: error\n")
+    assert "LLM service unavailable" in frames[-1]
+    # _MAX_RETRIES=2 -> 3 total attempts
+    assert mock_client.aio.models.generate_content_stream.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_run_chat_turn_does_not_retry_after_partial_output_sent():
+    """A failure after some text has already reached the client must not
+    retry — the response already has partial content committed, and
+    retrying would duplicate rather than replace it."""
+
+    class _FailingStream:
+        def __aiter__(self):
+            return self._gen()
+
+        async def _gen(self):
+            yield _chunk("partial", [_text_part("partial")])
+            raise _api_error(503)
+
+    mock_client = MagicMock()
+    mock_client.aio.models.generate_content_stream = AsyncMock(return_value=_FailingStream())
+
+    with (
+        patch("app.chat_engine.genai.Client", return_value=mock_client),
+        patch("app.chat_engine.asyncio.sleep", AsyncMock()) as mock_sleep,
+    ):
+        frames = [
+            frame
+            async for frame in run_chat_turn(
+                [ChatMessage(role="user", content="hi")], tools=[], org_id=TEST_ORG_ID
+            )
+        ]
+
+    assert frames[0] == 'event: text\ndata: {"text": "partial"}\n\n'
+    assert frames[-1].startswith("event: error\n")
+    mock_sleep.assert_not_awaited()
+    assert mock_client.aio.models.generate_content_stream.await_count == 1
