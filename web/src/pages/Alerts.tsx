@@ -32,7 +32,9 @@ function AlertRow({ alert }: { alert: Alert }) {
         )}
       </div>
       <div className="text-xs text-text-muted sm:w-32 sm:shrink-0">
-        <span className="rounded border border-border px-1.5 py-0.5">{alert.service_name}</span>
+        <span className="rounded border border-border bg-background px-1.5 py-0.5 font-mono">
+          {alert.service_name}
+        </span>
       </div>
       <Link
         to={`/app/deployments/${alert.deployment_id}`}
@@ -84,15 +86,19 @@ export function Alerts() {
   return (
     <div className="p-6">
       <div className="mb-4 flex items-center gap-3">
-        <h1 className="font-heading text-xl font-semibold text-text">Alerts</h1>
+        <h1 className="font-heading text-xl font-semibold tracking-tight text-text">Alerts</h1>
         {activeCount > 0 && (
-          <span className="rounded-full bg-failed/10 px-2 py-0.5 text-xs font-medium text-failed">
+          <span className="rounded-full bg-failed/10 px-2 py-0.5 text-xs font-medium tabular-nums text-failed ring-1 ring-inset ring-failed/25">
             {activeCount} active
           </span>
         )}
       </div>
 
-      <div role="tablist" aria-label="Alert status filter" className="mb-4 flex gap-1">
+      <div
+        role="tablist"
+        aria-label="Alert status filter"
+        className="mb-4 inline-flex gap-1 rounded-lg border border-border bg-surface p-1"
+      >
         {FILTERS.map((f) => {
           const selected = f.id === activeFilter
           return (
@@ -102,10 +108,10 @@ export function Alerts() {
               role="tab"
               aria-selected={selected}
               onClick={() => selectFilter(f.id)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
                 selected
                   ? 'bg-accent/10 text-accent'
-                  : 'text-text-muted hover:bg-surface hover:text-text'
+                  : 'text-text-muted hover:bg-surface-raised hover:text-text'
               }`}
             >
               {f.label}
@@ -115,7 +121,9 @@ export function Alerts() {
       </div>
 
       {isError ? (
-        <p className="text-sm text-failed">Failed to load alerts. Retrying automatically.</p>
+        <div className="rounded-xl border border-failed/30 bg-failed/5 p-4 text-sm text-failed">
+          Failed to load alerts. Retrying automatically.
+        </div>
       ) : isLoading ? (
         <ul className="overflow-hidden rounded-lg border border-border bg-surface" aria-busy="true">
           {Array.from({ length: 4 }, (_, i) => (

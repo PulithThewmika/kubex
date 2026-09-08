@@ -23,16 +23,23 @@ export function ToolCallChip({ tool, input, result, isError }: ToolCallChipProps
       >
         <span className={`font-mono ${isError ? 'text-failed' : 'text-accent'}`}>{tool}</span>
         <span className="truncate text-text-muted">{summary}</span>
-        <span className="ml-auto shrink-0 text-text-muted">{expanded ? '▲' : '▼'}</span>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          className={`ml-auto h-3.5 w-3.5 shrink-0 text-text-muted transition-transform ${expanded ? 'rotate-180' : ''}`}
+          aria-hidden="true"
+        >
+          <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
       {expanded && (
         <div className="border-t border-border px-3 py-2">
-          <div className="mb-1 text-text-muted">Input</div>
-          <pre className="mb-2 overflow-x-auto whitespace-pre-wrap break-words text-text">
+          <div className="mb-1 font-medium text-text-faint">Input</div>
+          <pre className="mb-2 overflow-x-auto whitespace-pre-wrap break-words font-mono text-text">
             {JSON.stringify(input, null, 2)}
           </pre>
-          <div className="mb-1 text-text-muted">Result</div>
-          <pre className="overflow-x-auto whitespace-pre-wrap break-words text-text">{result}</pre>
+          <div className="mb-1 font-medium text-text-faint">Result</div>
+          <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-text">{result}</pre>
         </div>
       )}
     </div>
