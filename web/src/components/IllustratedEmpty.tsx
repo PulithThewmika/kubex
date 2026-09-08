@@ -8,24 +8,35 @@ type IllustratedEmptyProps = {
   /** Instruction rows, stacked as a vertical bordered table. */
   lines: ReactNode[]
   action?: { to: string; label: string }
+  /**
+   * 'center' (default) — the pair sits centred in the content area.
+   * 'split' — pulled up under the header, picture pushed left, copy pushed right.
+   */
+  variant?: 'center' | 'split'
 }
 
-// Centered empty state: a bare PNG beside a vertical bordered "table" of copy,
-// sized like the landing "How it works" cells. Shared by the empty services
-// and empty alerts states.
-export function IllustratedEmpty({ image, title, lines, action }: IllustratedEmptyProps) {
-  return (
-    <div
-      role="status"
-      className="mx-auto flex max-w-4xl flex-col items-center gap-8 py-10 md:flex-row md:justify-center md:gap-12 md:py-16"
-    >
-      <img
-        src={image}
-        alt=""
-        className="w-full max-w-xs shrink-0 select-none object-contain md:max-w-sm"
-      />
+const LAYOUT = {
+  center: {
+    wrap: 'mx-auto flex max-w-4xl flex-col items-center gap-8 pb-10 pt-2 md:flex-row md:justify-center md:gap-20 md:pb-14 md:pt-4',
+    image: 'w-full max-w-xs shrink-0 select-none object-contain md:-ml-20 md:max-w-sm',
+    table: 'grid w-full gap-px border-2 border-paper-line bg-paper-line md:ml-6 md:max-w-md',
+  },
+  split: {
+    wrap: 'mx-auto -mt-6 flex max-w-4xl flex-col items-center gap-8 pb-10 pt-0 md:-mt-12 md:flex-row md:justify-center md:gap-24 md:pb-14',
+    image: 'w-full max-w-xs shrink-0 select-none object-contain md:-ml-24 md:max-w-sm',
+    table: 'grid w-full gap-px border-2 border-paper-line bg-paper-line md:ml-8 md:max-w-md',
+  },
+} as const
 
-      <div className="grid w-full gap-px border-2 border-paper-line bg-paper-line md:max-w-md">
+// A bare PNG beside a vertical bordered "table" of copy, sized like the landing
+// "How it works" cells. Shared by the empty services and empty alerts states.
+export function IllustratedEmpty({ image, title, lines, action, variant = 'center' }: IllustratedEmptyProps) {
+  const l = LAYOUT[variant]
+  return (
+    <div role="status" className={l.wrap}>
+      <img src={image} alt="" className={l.image} />
+
+      <div className={l.table}>
         <div className="bg-paper-raised p-6">
           <h2 className="font-display text-3xl uppercase leading-none text-ink sm:text-4xl">{title}</h2>
         </div>
