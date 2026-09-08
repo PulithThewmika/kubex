@@ -28,8 +28,8 @@ export function RadioCards({ legend, name, options, value, onChange, children }:
         return (
           <div key={opt.value}>
             <label
-              className={`flex cursor-pointer gap-3 rounded-lg border p-3.5 transition-colors ${
-                selected ? 'border-accent bg-accent/5' : 'border-border hover:border-text-muted'
+              className={`flex cursor-pointer gap-4 border-2 p-4 transition-colors ${
+                selected ? 'border-accent bg-accent/10' : 'border-border-strong hover:border-text'
               }`}
             >
               <input
@@ -40,12 +40,14 @@ export function RadioCards({ legend, name, options, value, onChange, children }:
                 onChange={() => onChange(opt.value)}
                 className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
               />
-              <span className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium text-text">{opt.label}</span>
-                <span className="text-xs text-text-muted">{opt.description}</span>
+              <span className="flex flex-col gap-1">
+                <span className="font-display text-base uppercase leading-none text-text">{opt.label}</span>
+                <span className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+                  {opt.description}
+                </span>
               </span>
             </label>
-            {selected && children && <div className="mt-2 pl-7">{children}</div>}
+            {selected && children && <div className="mt-2 pl-8">{children}</div>}
           </div>
         )
       })}
