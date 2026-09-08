@@ -123,9 +123,7 @@ async def reconcile_active_alerts(session: AsyncSession) -> int:
             )
 
             if _recovery_counters[alert_id] >= 2:
-                await resolve_alert(
-                    session, alert_id, service_name, deploy_id, org_id=row.org_id, service_id=row.service_id,
-                )
+                await resolve_alert(session, alert_id, service_name, deploy_id)
                 # Queue the Slack notice — only sent once the batch commit
                 # below succeeds, so a rolled-back resolution never pings.
                 recovered_notices.append({
