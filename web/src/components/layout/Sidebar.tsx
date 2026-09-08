@@ -90,8 +90,8 @@ export function Sidebar() {
   const activeAlertCount = services?.reduce((sum, s) => sum + s.active_alert_count, 0) ?? 0
 
   return (
-    <aside className="flex h-dvh w-[4.5rem] shrink-0 flex-col border-r border-border bg-surface lg:w-60">
-      <div className="flex h-14 items-center justify-center border-b border-border px-3 lg:justify-start lg:px-4">
+    <aside className="flex h-dvh w-[4.5rem] shrink-0 flex-col border-r-2 border-text bg-surface lg:w-60">
+      <div className="flex h-14 items-center justify-center border-b-2 border-text px-3 lg:justify-start lg:px-4">
         <Logo withWordmark={false} markClassName="h-7 w-7 lg:hidden" />
         <span className="hidden lg:inline-flex">
           <Logo markClassName="h-7 w-7" />
@@ -108,44 +108,34 @@ export function Sidebar() {
               aria-label={badge ? `${label}, ${badge} active` : label}
               title={label}
               className={({ isActive }) =>
-                `group relative flex items-center justify-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors lg:justify-start ${
+                `group relative flex items-center justify-center gap-3 border-2 px-3 py-2.5 font-body text-xs font-bold uppercase tracking-wide transition-colors lg:justify-start ${
                   isActive
-                    ? 'bg-accent/10 text-accent'
-                    : 'text-text-muted hover:bg-surface-raised hover:text-text'
+                    ? 'border-accent bg-accent text-background'
+                    : 'border-transparent text-text-muted hover:border-border-strong hover:text-text'
                 }`
               }
             >
-              {({ isActive }) => (
-                <>
-                  {isActive && (
-                    <span
-                      className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-accent"
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span className="relative shrink-0">
-                    <Icon className="h-5 w-5" />
-                    {badge && (
-                      <span
-                        className="absolute -right-1.5 -top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-failed px-1 text-[10px] font-semibold leading-none text-white lg:hidden"
-                        aria-hidden="true"
-                      >
-                        {badge > 9 ? '9+' : badge}
-                      </span>
-                    )}
+              <span className="relative shrink-0">
+                <Icon className="h-5 w-5" />
+                {badge && (
+                  <span
+                    className="absolute -right-1.5 -top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-failed px-1 text-[10px] font-bold leading-none text-white lg:hidden"
+                    aria-hidden="true"
+                  >
+                    {badge > 9 ? '9+' : badge}
                   </span>
-                  <span className="hidden lg:inline" aria-hidden="true">
-                    {label}
-                  </span>
-                  {badge && (
-                    <span
-                      className="ml-auto hidden rounded-full bg-failed/15 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-failed lg:inline"
-                      aria-hidden="true"
-                    >
-                      {badge > 99 ? '99+' : badge}
-                    </span>
-                  )}
-                </>
+                )}
+              </span>
+              <span className="hidden lg:inline" aria-hidden="true">
+                {label}
+              </span>
+              {badge && (
+                <span
+                  className="ml-auto hidden bg-failed px-1.5 py-0.5 text-xs font-bold tabular-nums text-white lg:inline"
+                  aria-hidden="true"
+                >
+                  {badge > 99 ? '99+' : badge}
+                </span>
               )}
             </NavLink>
           )
