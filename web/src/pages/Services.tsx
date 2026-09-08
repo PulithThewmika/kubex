@@ -79,25 +79,25 @@ export function Services() {
     <div className="p-6">
       <PageHeader title="Services" description="Search, filter, and sort every tracked service." />
 
-      <div className="mb-5 flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
+      <div className="mb-6 flex flex-wrap items-end gap-4">
+        <label className="flex flex-col gap-1.5 font-body text-[11px] font-bold uppercase tracking-wide text-text-muted">
           Search
           <input
             type="search"
             value={query}
             onChange={(e) => setParam('q', e.target.value)}
             placeholder="Service name"
-            className="w-52 rounded-md border border-border-strong bg-surface px-2.5 py-1.5 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
+            className="w-52 border-2 border-border-strong bg-surface px-2.5 py-2 font-body text-sm normal-case tracking-normal text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
           />
         </label>
 
         {(hasClusterAssignments || clusterFilter) && (
-          <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
+          <label className="flex flex-col gap-1.5 font-body text-[11px] font-bold uppercase tracking-wide text-text-muted">
             Cluster
             <select
               value={clusterFilter}
               onChange={(e) => setParam('cluster', e.target.value)}
-              className="rounded-md border border-border-strong bg-surface px-2.5 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
+              className="border-2 border-border-strong bg-surface px-2.5 py-2 font-body text-sm normal-case tracking-normal text-text focus:border-accent focus:outline-none"
             >
               <option value="">All clusters</option>
               {clusters?.map((c) => (
@@ -110,12 +110,12 @@ export function Services() {
           </label>
         )}
 
-        <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
+        <label className="flex flex-col gap-1.5 font-body text-[11px] font-bold uppercase tracking-wide text-text-muted">
           Sort by
           <select
             value={sort}
             onChange={(e) => setParam('sort', e.target.value)}
-            className="rounded-md border border-border-strong bg-surface px-2.5 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
+            className="border-2 border-border-strong bg-surface px-2.5 py-2 font-body text-sm normal-case tracking-normal text-text focus:border-accent focus:outline-none"
           >
             {SORTS.map((s) => (
               <option key={s.id} value={s.id}>
@@ -127,7 +127,7 @@ export function Services() {
       </div>
 
       {isError ? (
-        <div className="rounded-xl border border-failed/30 bg-failed/5 p-4 text-sm text-failed">
+        <div className="border-2 border-failed bg-failed/5 p-4 font-body text-xs font-bold uppercase tracking-wide text-failed">
           Failed to load services. Retrying automatically.
         </div>
       ) : !isLoading && visible.length === 0 ? (
