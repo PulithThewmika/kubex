@@ -51,9 +51,9 @@ describe('App routing', () => {
     },
     // First test in the file pays the one-time cost of vi.resetModules()
     // re-transforming App's whole import graph (router, react-query,
-    // recharts-adjacent chart libs pulled in by page components) — under
-    // load that alone can approach the 5s default.
-    10_000,
+    // recharts-adjacent chart libs, the marketing Landing page and its
+    // lucide-react icon set) — under load that alone can exceed 10s.
+    20_000,
   )
 
   it('renders Overview at /app when authenticated', async () => {
