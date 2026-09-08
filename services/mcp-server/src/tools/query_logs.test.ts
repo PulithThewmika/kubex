@@ -1,6 +1,25 @@
-import { describe, it, expect } from "vitest";
-import { buildLogQL, detectLevel } from "./query_logs.js";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { queryOne } from "../clients/postgres.js";
+import { queryRange } from "../clients/loki.js";
+import { buildLogQL, detectLevel, queryLogs } from "./query_logs.js";
 import { sanitizeLabel } from "./query_metrics.js";
+import { parseResult } from "./test-utils.js";
+
+vi.mock("../clients/postgres.js", () => ({
+  queryOne: vi.fn(),
+}));
+
+vi.mock("../clients/loki.js", () => ({
+  queryRange: vi.fn(),
+}));
+
+const mockedQueryOne = vi.mocked(queryOne);
+const mockedQueryRange = vi.mocked(queryRange);
+
+beforeEach(() => {
+  mockedQueryOne.mockReset();
+  mockedQueryRange.mockReset();
+});
 
 describe("LogQL construction", () => {
   it("builds basic service selector", () => {
@@ -99,5 +118,54 @@ describe("log entry formatting", () => {
     }));
     const capped = entries.slice(0, 200);
     expect(capped).toHaveLength(200);
+  });
+});
+
+
+describe("queryLogs org scoping (#840/H5)", () => {
+  it("resolves the service against Postgres with the caller's org filter before querying Loki", async () => {
+    mockedQueryOne.mockResolvedValue({ name: "orders", namespace: "kubex" });
+    mockedQueryRange.mockResolvedValue([]);
+
+    await queryLogs({ service: "orders", from: "-1h", limit: 50 }, "org-a");
+
+    const [sql, params] = mockedQueryOne.mock.calls[0];
+    expect(sql).toContain("org_id = $2");
+    expect(params).toEqual(["orders", "org-a"]);
+  });
+
+  it("never calls Loki for a service that does not belong to the caller's org", async () => {
+    // Postgres finds nothing because the org filter excludes org B's
+    // service — this is the regression test for the original gap, where
+    // queryLogs built {app="<raw input>"} and queried Loki directly with
+    // no org check at all.
+    mockedQueryOne.mockResolvedValue(null);
+
+    const result = await queryLogs({ service: "org-b-service", from: "-1h", limit: 50 }, "org-a");
+    const parsed = parseResult(result);
+
+    expect(parsed.error).toContain("not found");
+    expect(mockedQueryRange).not.toHaveBeenCalled();
+  });
+
+  it("passes orgId=null through unfiltered for the stdio/admin transport", async () => {
+    mockedQueryOne.mockResolvedValue({ name: "orders", namespace: "kubex" });
+    mockedQueryRange.mockResolvedValue([]);
+
+    await queryLogs({ service: "orders", from: "-1h", limit: 50 }, null);
+
+    const [sql, params] = mockedQueryOne.mock.calls[0];
+    expect(sql).not.toContain("org_id");
+    expect(params).toEqual(["orders"]);
+  });
+
+  it("builds LogQL from the resolved service name, not the raw input", async () => {
+    mockedQueryOne.mockResolvedValue({ name: "orders", namespace: "kubex" });
+    mockedQueryRange.mockResolvedValue([]);
+
+    const result = await queryLogs({ service: "orders", from: "-1h", limit: 50 }, "org-a");
+    const parsed = parseResult(result);
+
+    expect(parsed.logql).toBe('{app="orders"}');
   });
 });
