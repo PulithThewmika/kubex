@@ -19,8 +19,8 @@ function titleFor(pathname: string): string {
 export function TopBar() {
   const { pathname } = useLocation()
   return (
-    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface/80 px-4 backdrop-blur sm:px-6">
-      <span className="font-heading text-sm font-semibold tracking-tight text-text">{titleFor(pathname)}</span>
+    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between border-b-2 border-text bg-surface/95 px-4 backdrop-blur sm:px-6">
+      <span className="font-body text-xs font-bold uppercase tracking-[0.2em] text-text">{titleFor(pathname)}</span>
       <UserMenu />
     </header>
   )
