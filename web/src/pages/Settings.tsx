@@ -51,14 +51,14 @@ export function Settings() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="font-heading text-2xl font-bold uppercase tracking-tight text-text sm:text-3xl">Settings</h1>
+    <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6">
+      <h1 className="font-heading text-3xl font-bold uppercase tracking-tight text-ink sm:text-4xl">Settings</h1>
 
       <div
         role="tablist"
         aria-label="Settings sections"
         onKeyDown={handleTabKeyDown}
-        className="mt-6 flex gap-1 overflow-x-auto border-b-2 border-text"
+        className="mt-8 flex gap-1 overflow-x-auto border-b-2 border-paper-line"
       >
         {TABS.map((tab) => {
           const selected = tab.id === activeTab
@@ -72,10 +72,10 @@ export function Settings() {
               aria-controls={`settings-panel-${tab.id}`}
               tabIndex={selected ? 0 : -1}
               onClick={() => selectTab(tab.id)}
-              className={`-mb-0.5 shrink-0 border-b-2 px-3 py-2.5 font-body text-xs font-bold uppercase tracking-wide transition-colors ${
+              className={`-mb-0.5 shrink-0 border-b-2 px-4 py-3 font-body text-xs font-bold uppercase tracking-wide transition-colors ${
                 selected
                   ? 'border-accent text-accent'
-                  : 'border-transparent text-text-muted hover:text-text'
+                  : 'border-transparent text-ink-muted hover:text-ink'
               }`}
             >
               {tab.label}
@@ -88,7 +88,7 @@ export function Settings() {
         id={`settings-panel-${activeTab}`}
         role="tabpanel"
         aria-labelledby={`settings-tab-${activeTab}`}
-        className="mt-8"
+        className="mt-10"
       >
         {activeTab === 'general' && <GeneralTab />}
         {activeTab === 'connections' && <ConnectionsTab installationId={installationId} />}

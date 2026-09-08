@@ -25,17 +25,17 @@ type ClusterRowProps = {
 
 function ClusterRow({ cluster, onRotateToken }: ClusterRowProps) {
   return (
-    <li className="flex flex-col gap-3 border-2 border-border-strong bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+    <li className="flex flex-col gap-3 border-2 border-paper-line-soft bg-paper-raised p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
-          <span className="font-body text-sm font-bold text-text">{cluster.name}</span>
+          <span className="font-body text-sm font-bold text-ink">{cluster.name}</span>
           <StatusBadge variant={CLUSTER_STATUS_VARIANT[cluster.status]}>{cluster.status}</StatusBadge>
         </div>
-        <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+        <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
           ArgoCD: {formatComponentStatus(cluster.argocd_status)} · Prometheus:{' '}
           {formatComponentStatus(cluster.prometheus_status)}
         </p>
-        <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+        <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
           {cluster.last_heartbeat
             ? `Last heartbeat ${formatDistanceToNow(new Date(cluster.last_heartbeat), { addSuffix: true })}`
             : 'No heartbeat received yet'}
@@ -44,7 +44,7 @@ function ClusterRow({ cluster, onRotateToken }: ClusterRowProps) {
       <button
         type="button"
         onClick={() => onRotateToken(cluster)}
-        className="w-fit border-2 border-text-muted px-3 py-1.5 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent"
+        className="w-fit border-2 border-ink-muted px-3 py-1.5 font-body text-xs font-bold uppercase tracking-wide text-ink transition-colors hover:border-accent hover:text-accent"
       >
         Rotate token
       </button>
@@ -63,7 +63,7 @@ export function ClustersSection({ onAddCluster, onRotateToken }: ClustersSection
   return (
     <section className="mt-10">
       <div className="flex items-center justify-between">
-        <h2 className="font-body text-xs font-bold uppercase tracking-[0.15em] text-text-muted">Clusters</h2>
+        <h2 className="font-body text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">Clusters</h2>
         <button
           type="button"
           onClick={onAddCluster}
@@ -72,13 +72,13 @@ export function ClustersSection({ onAddCluster, onRotateToken }: ClustersSection
           Add cluster
         </button>
       </div>
-      <p className="mt-1 font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+      <p className="mt-1 font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
         Kubernetes clusters running the KubeX agent, reporting deployment health back to this org.
       </p>
 
       <div className="mt-4">
         {isLoading && (
-          <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+          <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
             Loading clusters…
           </p>
         )}
@@ -88,7 +88,7 @@ export function ClustersSection({ onAddCluster, onRotateToken }: ClustersSection
           </p>
         )}
         {!isLoading && !isError && clusters && clusters.length === 0 && (
-          <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+          <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
             No clusters connected yet.
           </p>
         )}
