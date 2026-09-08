@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { formatDistanceStrict, formatDistanceToNow } from 'date-fns'
 import { AlertSeverityBadge } from '../components/AlertSeverityBadge'
 import { EmptyState } from '../components/EmptyState'
+import { PageHeader } from '../components/PageHeader'
 import { useAlerts } from '../hooks/useAlerts'
 import type { Alert } from '../types/alert'
 
@@ -86,20 +87,22 @@ export function Alerts() {
   }
 
   return (
-    <div className="p-4">
-      <div className="mb-4 flex items-center gap-3 border-b-2 border-paper-line pb-3">
-        <h1 className="font-heading text-2xl font-bold uppercase tracking-tight text-ink sm:text-3xl">Alerts</h1>
-        {activeCount > 0 && (
-          <span className="border-2 border-failed bg-failed/10 px-2 py-0.5 font-body text-xs font-bold uppercase tabular-nums tracking-wide text-failed">
-            {activeCount} active
-          </span>
-        )}
-      </div>
+    <div className="p-6">
+      <PageHeader
+        title="Alerts"
+        actions={
+          activeCount > 0 ? (
+            <span className="border-2 border-failed bg-failed/10 px-2 py-0.5 font-body text-xs font-bold uppercase tabular-nums tracking-wide text-failed">
+              {activeCount} active
+            </span>
+          ) : undefined
+        }
+      />
 
       <div
         role="tablist"
         aria-label="Alert status filter"
-        className="mb-4 inline-flex gap-1 border-2 border-paper-line-soft bg-paper-raised p-1"
+        className="mb-5 inline-flex gap-1 border-2 border-paper-line-soft bg-paper-raised p-1"
       >
         {FILTERS.map((f) => {
           const selected = f.id === activeFilter
