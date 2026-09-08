@@ -70,22 +70,27 @@ def _tidy(query: str) -> str:
     return re.sub(r"\s{2,}", " ", query)  # collapse the gap left behind
 
 
-def _extract_org(query: str) -> tuple[str | None, str | None, str]:
-    """Returns (org_id, cluster_id | None, promql-with-both-matchers-stripped)."""
-    m = _ORG_MATCHER.search(query)
-    if not m:
-        return None, None, query
-    cleaned = _ORG_MATCHER.sub("", query, count=1)
-    cm = _CLUSTER_MATCHER.search(cleaned)
-    cluster = cm.group(1) if cm else None
-    if cm:
-        cleaned = _CLUSTER_MATCHER.sub("", cleaned, count=1)
-    return m.group(1), cluster, _tidy(cleaned)
+def _extract_org(query: str) -> tuple[str | None, str | None, str] | tuple[None, None, None]:
+    """Returns (org_id, cluster_id | None, promql with every org_id/cluster
+    matcher stripped). Returns (None, None, None) if the query names more
+    than one distinct org_id (or cluster) — a query that can't be
+    unambiguously attributed is rejected, not guessed at."""
+    orgs = set(_ORG_MATCHER.findall(query))
+    if len(orgs) != 1:
+        return (None, None, query) if not orgs else (None, None, None)
+    cleaned = _ORG_MATCHER.sub("", query)  # strip all, not just the first
+    clusters = set(_CLUSTER_MATCHER.findall(cleaned))
+    if len(clusters) > 1:
+        return None, None, None
+    cleaned = _CLUSTER_MATCHER.sub("", cleaned)
+    return orgs.pop(), (clusters.pop() if clusters else None), _tidy(cleaned)
 
 
 async def _relay(session: AsyncSession, raw_query: str, kind: str, params: dict) -> JSONResponse:
     org_str, cluster_str, promql = _extract_org(raw_query)
     if org_str is None:
+        if promql is None:
+            return _error("bad_data", "query names more than one org_id or cluster")
         return _error("bad_data", "query is missing the org_id label matcher")
     try:
         org_id = uuid.UUID(org_str)
