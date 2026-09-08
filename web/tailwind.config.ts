@@ -2,7 +2,7 @@ import type { Config } from 'tailwindcss'
 
 // KubeX design system — dark-tech observability.
 // Direction: a single cool-tinted near-black surface ladder (not pure black),
-// the brand orange as the one accent, and a GitHub-Primer-adjacent status
+// a luminous green as the one accent, and a GitHub-Primer-adjacent status
 // palette (green/amber/red/blue) that the SRE audience already reads fluently
 // and that clears WCAG AA on the dark surfaces. Dark-only by design — dark is
 // the product's identity, not a mode.
@@ -18,9 +18,11 @@ export default {
         border: '#262A31',
         'border-strong': '#363B44',
 
-        // The one accent.
-        accent: '#F97316',
-        'accent-hover': '#FB9A4B',
+        // The one accent — luminous green. Distinct in hue from the muted
+        // `healthy` status green (#3FB950): brighter, cooler, decorative not
+        // stateful.
+        accent: '#00E676',
+        'accent-hover': '#5FFFA6',
 
         // Text ladder.
         text: '#E6E8EB',

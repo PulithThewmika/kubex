@@ -10,7 +10,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Reveal } from './Reveal'
-import { TornEdge } from './TornEdge'
+import { Ticker } from './Ticker'
 
 type Integration = {
   name: string
@@ -33,7 +33,7 @@ const INTEGRATIONS: Integration[] = [
 export function MaxIntegrations() {
   return (
     <section id="integrations" className="relative overflow-hidden bg-background pb-20 sm:pb-28">
-      <TornEdge tone="background" className="-mt-4 sm:-mt-8" />
+      <Ticker />
       <div
         aria-hidden="true"
         className="absolute inset-0 text-accent/[0.07] halftone-lg"
@@ -77,6 +77,7 @@ export function MaxIntegrations() {
           ))}
         </div>
       </div>
+      <Ticker reverse />
     </section>
   )
 }
