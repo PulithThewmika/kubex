@@ -13,7 +13,7 @@ export function ToolCallChip({ tool, input, result, isError }: ToolCallChipProps
 
   return (
     <div
-      className={`rounded-lg border text-xs ${isError ? 'border-failed/40 bg-failed/5' : 'border-border bg-surface'}`}
+      className={`border-2 text-xs ${isError ? 'border-failed bg-failed/5' : 'border-border-strong bg-surface'}`}
     >
       <button
         type="button"
@@ -33,12 +33,12 @@ export function ToolCallChip({ tool, input, result, isError }: ToolCallChipProps
         </svg>
       </button>
       {expanded && (
-        <div className="border-t border-border px-3 py-2">
-          <div className="mb-1 font-medium text-text-faint">Input</div>
+        <div className="border-t-2 border-border-strong px-3 py-2">
+          <div className="mb-1 font-body text-[11px] font-bold uppercase tracking-wide text-text-faint">Input</div>
           <pre className="mb-2 overflow-x-auto whitespace-pre-wrap break-words font-mono text-text">
             {JSON.stringify(input, null, 2)}
           </pre>
-          <div className="mb-1 font-medium text-text-faint">Result</div>
+          <div className="mb-1 font-body text-[11px] font-bold uppercase tracking-wide text-text-faint">Result</div>
           <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-text">{result}</pre>
         </div>
       )}
