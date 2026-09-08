@@ -40,7 +40,7 @@ export function ConnectReposStep({ installations }: ConnectReposStepProps) {
 
       <a
         href={GITHUB_APP_INSTALL_URL}
-        className="flex w-fit items-center gap-2 rounded-md bg-text px-4 py-2.5 text-sm font-medium text-background transition-colors hover:opacity-90"
+        className="flex w-fit items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px"
       >
         <GitHubIcon />
         {connected ? 'Install on another account' : 'Install GitHub App'}

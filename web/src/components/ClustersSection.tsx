@@ -67,7 +67,7 @@ export function ClustersSection({ onAddCluster, onRotateToken }: ClustersSection
         <button
           type="button"
           onClick={onAddCluster}
-          className="rounded-md bg-text px-3 py-1.5 text-xs font-medium text-background transition-colors hover:opacity-90"
+          className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px"
         >
           Add cluster
         </button>
