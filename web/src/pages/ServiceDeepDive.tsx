@@ -27,21 +27,25 @@ export function ServiceDeepDive() {
         dora={dora}
       />
       <section className="flex flex-col gap-3">
-        <h2 className="font-heading text-sm font-semibold text-text">Pipeline timeline</h2>
+        <h2 className="font-heading text-xs font-bold uppercase tracking-[0.15em] text-text-muted">
+          Pipeline timeline
+        </h2>
         {deploymentsError ? (
-          <div className="rounded-xl border border-failed/30 bg-failed/5 p-4 text-sm text-failed">
+          <div className="border-2 border-failed bg-failed/5 p-4 font-body text-xs font-bold uppercase tracking-wide text-failed">
             Failed to load deployments. Retrying automatically.
           </div>
         ) : !deploymentsLoading && deployments?.length === 0 ? (
-          <p className="text-sm text-text-muted">No deployments yet for this service.</p>
+          <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+            No deployments yet for this service.
+          </p>
         ) : deploymentsLoading ? (
-          <div className="h-40 animate-pulse rounded-lg border border-border bg-surface" />
+          <div className="h-40 animate-pulse border-2 border-border-strong bg-surface" />
         ) : (
           <PipelineTimeline deployments={deployments ?? []} />
         )}
       </section>
       <section className="flex flex-col gap-3">
-        <h2 className="font-heading text-sm font-semibold text-text">Metrics</h2>
+        <h2 className="font-heading text-xs font-bold uppercase tracking-[0.15em] text-text-muted">Metrics</h2>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <GrafanaPanel uid="deploy-timeline" panelId={1} service={name} title="Error Rate" />
           <GrafanaPanel uid="deploy-timeline" panelId={2} service={name} title="p99 Latency" />
@@ -75,21 +79,23 @@ function CompareSection({ deployments }: CompareSectionProps) {
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h2 className="font-heading text-sm font-semibold text-text">Compare</h2>
+        <h2 className="font-heading text-xs font-bold uppercase tracking-[0.15em] text-text-muted">Compare</h2>
         <button
           type="button"
           onClick={() => {
             setActive((a) => !a)
             setSelected([])
           }}
-          className="rounded-md border border-border-strong px-3 py-1 text-xs font-medium text-text-muted transition-colors hover:border-accent hover:text-accent"
+          className="border-2 border-text-muted px-3 py-1.5 font-body text-xs font-bold uppercase tracking-wide text-text-muted transition-colors hover:border-accent hover:text-accent"
         >
           {active ? 'Cancel' : 'Compare deployments'}
         </button>
       </div>
       {active && (
         <div className="flex flex-col gap-2">
-          <p className="text-xs text-text-muted">Select two deployments to compare ({selected.length}/2).</p>
+          <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+            Select two deployments to compare ({selected.length}/2).
+          </p>
           {deployments.map((d) => {
             const shortSha = d.commit_sha ? d.commit_sha.slice(0, 7) : d.status
             const checked = selected.includes(d.id)
@@ -97,9 +103,9 @@ function CompareSection({ deployments }: CompareSectionProps) {
             return (
               <label
                 key={d.id}
-                className={`flex items-center gap-2 rounded-md border bg-surface px-3 py-2 text-sm transition-colors ${
-                  checked ? 'border-accent/60' : 'border-border'
-                } ${disabled ? 'opacity-50' : 'hover:border-border-strong'}`}
+                className={`flex items-center gap-2 border-2 bg-surface px-3 py-2 font-body text-sm transition-colors ${
+                  checked ? 'border-accent' : 'border-border-strong'
+                } ${disabled ? 'opacity-50' : 'hover:border-text'}`}
               >
                 <input
                   type="checkbox"
@@ -109,14 +115,20 @@ function CompareSection({ deployments }: CompareSectionProps) {
                   className="accent-accent"
                 />
                 <span className="font-mono text-text">{shortSha}</span>
-                <span className="text-text-muted">{d.author ?? 'unknown'}</span>
+                <span className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+                  {d.author ?? 'unknown'}
+                </span>
               </label>
             )
           })}
           {selected.length === 2 && (
             <>
-              {compareError && <p className="text-sm text-failed">Failed to load comparison.</p>}
-              {compareLoading && <div className="h-32 animate-pulse rounded-lg border border-border bg-surface" />}
+              {compareError && (
+                <p className="font-body text-xs font-bold uppercase tracking-wide text-failed">
+                  Failed to load comparison.
+                </p>
+              )}
+              {compareLoading && <div className="h-32 animate-pulse border-2 border-border-strong bg-surface" />}
               {compareResult && <DeployDiffTable metrics={compareResult.metrics} />}
             </>
           )}
@@ -136,15 +148,15 @@ type ServiceHeaderProps = {
 function ServiceHeader({ name, status, environment, dora }: ServiceHeaderProps) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="font-heading text-xl font-semibold tracking-tight text-text">{name}</h1>
+      <div className="flex flex-wrap items-center gap-3 border-b-2 border-text pb-5">
+        <h1 className="font-heading text-2xl font-bold uppercase tracking-tight text-text sm:text-3xl">{name}</h1>
         {status && (
-          <span className="rounded-full border border-border-strong bg-surface px-2 py-0.5 text-xs font-medium text-text-muted">
+          <span className="border-2 border-border-strong bg-surface px-2 py-0.5 font-body text-xs font-bold uppercase tracking-wide text-text-muted">
             {status}
           </span>
         )}
         {environment && (
-          <span className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[11px] text-text-muted">
+          <span className="border border-border-strong bg-background px-1.5 py-0.5 font-mono text-[11px] text-text-muted">
             {environment}
           </span>
         )}
@@ -161,9 +173,9 @@ function ServiceHeader({ name, status, environment, dora }: ServiceHeaderProps) 
 
 function DoraStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-border bg-surface p-3 shadow-card">
-      <div className="text-xs uppercase tracking-wide text-text-faint">{label}</div>
-      <div className="mt-0.5 font-heading text-lg font-semibold tabular-nums text-text">{value}</div>
+    <div className="border-2 border-border-strong bg-surface p-3">
+      <div className="font-body text-[11px] font-bold uppercase tracking-wide text-text-faint">{label}</div>
+      <div className="mt-0.5 font-heading text-xl font-bold tabular-nums text-text">{value}</div>
     </div>
   )
 }

@@ -13,19 +13,19 @@ const METRIC_LABELS: Record<string, string> = {
 
 export function HealthEvidenceTable({ evidence }: HealthEvidenceTableProps) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-border">
+    <div className="overflow-x-auto border-2 border-border-strong">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-border bg-surface text-left text-xs uppercase tracking-wide text-text-faint">
-            <th className="px-3 py-2 font-medium">Metric</th>
-            <th className="px-3 py-2 font-medium">Baseline</th>
-            <th className="px-3 py-2 font-medium">Post-deploy</th>
-            <th className="px-3 py-2 font-medium">Change</th>
+          <tr className="border-b-2 border-border-strong bg-surface text-left font-body text-[11px] uppercase tracking-wide text-text-faint">
+            <th className="px-3 py-2 font-bold">Metric</th>
+            <th className="px-3 py-2 font-bold">Baseline</th>
+            <th className="px-3 py-2 font-bold">Post-deploy</th>
+            <th className="px-3 py-2 font-bold">Change</th>
           </tr>
         </thead>
         <tbody>
           {evidence.map((item) => (
-            <tr key={item.metric} className="border-b border-border last:border-0 hover:bg-surface">
+            <tr key={item.metric} className="border-b border-border-strong last:border-0 hover:bg-surface">
               <td className="px-3 py-2 text-text">{METRIC_LABELS[item.metric] ?? item.metric}</td>
               <td className="px-3 py-2 font-mono text-text-muted">{item.baseline ?? '—'}</td>
               <td className="px-3 py-2 font-mono text-text-muted">{item.post ?? '—'}</td>

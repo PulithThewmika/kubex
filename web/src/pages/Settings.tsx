@@ -52,13 +52,13 @@ export function Settings() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="font-heading text-xl font-semibold tracking-tight text-text">Settings</h1>
+      <h1 className="font-heading text-2xl font-bold uppercase tracking-tight text-text sm:text-3xl">Settings</h1>
 
       <div
         role="tablist"
         aria-label="Settings sections"
         onKeyDown={handleTabKeyDown}
-        className="mt-6 flex gap-1 overflow-x-auto border-b border-border"
+        className="mt-6 flex gap-1 overflow-x-auto border-b-2 border-text"
       >
         {TABS.map((tab) => {
           const selected = tab.id === activeTab
@@ -72,9 +72,9 @@ export function Settings() {
               aria-controls={`settings-panel-${tab.id}`}
               tabIndex={selected ? 0 : -1}
               onClick={() => selectTab(tab.id)}
-              className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+              className={`-mb-0.5 shrink-0 border-b-2 px-3 py-2.5 font-body text-xs font-bold uppercase tracking-wide transition-colors ${
                 selected
-                  ? 'border-accent text-text'
+                  ? 'border-accent text-accent'
                   : 'border-transparent text-text-muted hover:text-text'
               }`}
             >
