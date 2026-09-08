@@ -9,10 +9,9 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth_middleware import UserContext, get_current_user
-from ..db import get_session
+from ..db import async_session
 from ..models.cluster import Cluster
 from ..models.service import Service
 
@@ -28,9 +27,19 @@ GRAFANA_SERVICE_ACCOUNT_TOKEN = os.environ.get("GRAFANA_SERVICE_ACCOUNT_TOKEN", 
 # in the Grafana org (operator-only ones included) and read it. These are
 # the org-scoped-by-construction customer set (deploy/grafana/dashboards/
 # customer/ — every SQL panel filters org_id/'$org', #834).
+#
+# SECURITY: `$org` is only enforced when the panel is reached *through*
+# this proxy (var-org from UserContext). A customer must never be granted
+# a Grafana login — with one, `var-org` is freely editable and every
+# customer dashboard becomes cross-tenant readable. Grafana anon access is
+# off and the only credential is the operator admin + this proxy's Viewer
+# service-account token.
 EMBEDDABLE_DASHBOARD_UIDS = {"deploy-timeline", "customer-dora-scorecard"}
 
-_RE2_META = re.compile(r"([\\.+*?()|\[\]{}^$])")
+# `"` terminates the PromQL label-value string; `\` and control chars can
+# break out of / mangle it. Everything else is a plain RE2 metacharacter.
+_RE2_META = re.compile(r'([\\."+*?()|\[\]{}^$])')
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
 
 def _as_uuid(value: str) -> uuid.UUID:
@@ -41,10 +50,13 @@ def _as_uuid(value: str) -> uuid.UUID:
 
 
 def _re2_quote(value: str) -> str:
-    """Escape a Prometheus label value so it matches literally inside the
-    panel's ``service=~"$service"`` matcher (RE2). ``prom_components`` is
-    free-text ``ARRAY(Text)``; a value like ``api.v1`` or one containing
-    ``|`` would otherwise widen the selector."""
+    """Escape a value so it matches literally inside the panel's
+    ``service=~"$service"`` matcher (RE2, double-quoted). ``prom_components``
+    is free-text ``ARRAY(Text)``; a value like ``api.v1``, one containing
+    ``|``, or one containing ``"``/``\\`` would otherwise widen the
+    selector or break out of the string."""
+    if _CONTROL_CHARS.search(value):
+        raise HTTPException(status_code=400, detail="Invalid service component")
     return _RE2_META.sub(r"\\\1", value)
 
 
@@ -73,7 +85,6 @@ async def grafana_proxy(
     height: int = Query(default=300, ge=100, le=2000),
     cluster: str | None = Query(default=None, alias="var-cluster"),
     user: UserContext = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
     """Render an embedded Grafana panel to PNG for the React shell.
 
@@ -105,35 +116,40 @@ async def grafana_proxy(
     if uid not in EMBEDDABLE_DASHBOARD_UIDS:
         raise HTTPException(status_code=404, detail="Unknown dashboard")
 
-    row = (
-        await session.execute(
-            select(Service.prom_components).where(
-                Service.name == service, Service.org_id == user.org_id
+    pinned = _as_uuid(cluster) if cluster is not None else None
+
+    # All DB work happens up front on a short-lived session — nothing is
+    # held across the (up to 45s) render stream below, which would pin a
+    # pooled connection and starve the webhook path.
+    async with async_session() as session:
+        row = (
+            await session.execute(
+                select(Service.prom_components).where(
+                    Service.name == service, Service.org_id == user.org_id
+                )
             )
-        )
-    ).first()
-    if row is None:
-        # 404, not 403: don't confirm the service exists in another org.
-        raise HTTPException(status_code=404, detail="Unknown service")
-    components = row[0] or [service]
+        ).first()
+        if row is None:
+            # 404, not 403: don't confirm the service exists in another org.
+            raise HTTPException(status_code=404, detail="Unknown service")
+        components = row[0] or [service]
 
-    has_source = await session.scalar(
-        select(Cluster.id)
-        .where(Cluster.org_id == user.org_id, Cluster.status == "connected")
-        .limit(1)
-    )
-    if has_source is None:
-        raise HTTPException(status_code=503, detail="no metrics source connected")
-
-    # Optional multi-cluster pin (#836): must be one of the caller's own
-    # clusters. The customer dashboards don't expose a picker yet, but the
-    # relay honours a cluster="$cluster" matcher when one is set.
-    if cluster is not None:
-        owns = await session.scalar(
-            select(Cluster.id).where(Cluster.id == _as_uuid(cluster), Cluster.org_id == user.org_id)
+        has_source = await session.scalar(
+            select(Cluster.id)
+            .where(Cluster.org_id == user.org_id, Cluster.status == "connected")
+            .limit(1)
         )
-        if owns is None:
-            raise HTTPException(status_code=404, detail="Unknown cluster")
+        if has_source is None:
+            raise HTTPException(status_code=503, detail="no metrics source connected")
+
+        # Optional multi-cluster pin (#836): must be one of the caller's
+        # own clusters. The relay honours a cluster="$cluster" matcher.
+        if pinned is not None:
+            owns = await session.scalar(
+                select(Cluster.id).where(Cluster.id == pinned, Cluster.org_id == user.org_id)
+            )
+            if owns is None:
+                raise HTTPException(status_code=404, detail="Unknown cluster")
 
     params = {
         "panelId": panelId,
@@ -147,8 +163,9 @@ async def grafana_proxy(
         "width": width,
         "height": height,
     }
-    if cluster is not None:
-        params["var-cluster"] = cluster
+    if pinned is not None:
+        # canonical form so prom.py's stricter cluster="..." matcher agrees
+        params["var-cluster"] = str(pinned)
     headers = {"Authorization": f"Bearer {GRAFANA_SERVICE_ACCOUNT_TOKEN}"}
 
     client = _get_client()
