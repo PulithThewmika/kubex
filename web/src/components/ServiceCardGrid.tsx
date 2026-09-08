@@ -24,9 +24,13 @@ export function ServiceCardGrid({ services, isLoading }: ServiceCardGridProps) {
 
   return (
     <div className={GRID}>
-      {services?.map((service) => (
-        <Link key={service.id} to={`/app/services/${service.name}`} className="block">
-          <ServiceCard service={service} />
+      {services?.map((service, i) => (
+        <Link
+          key={service.id}
+          to={`/app/services/${service.name}`}
+          className="group block outline-offset-4"
+        >
+          <ServiceCard service={service} index={i} />
         </Link>
       ))}
     </div>
