@@ -31,7 +31,7 @@ function Nav({ cta }: { cta: Cta }) {
   const innerRef = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
-    if (prefersReducedMotion() || !innerRef.current) return
+    if (!innerRef.current || prefersReducedMotion()) return
     const ctx = gsap.context(() => {
       gsap.from(innerRef.current, {
         y: -14,
@@ -90,7 +90,12 @@ function Hero({ cta }: { cta: Cta }) {
 
   useLayoutEffect(() => {
     const scope = sectionRef.current
-    if (!scope || prefersReducedMotion()) return
+    if (!scope) return
+
+    // Reduced motion: no entrance choreography, no parallax — content renders
+    // at its natural state. (Respecting the OS "reduce motion" setting; turn
+    // that off to see the full hero sequence.)
+    if (prefersReducedMotion()) return
 
     const ctx = gsap.context(() => {
       // Entrance — one coordinated sequence: heading lines, copy, CTAs, then
@@ -128,7 +133,7 @@ function Hero({ cta }: { cta: Cta }) {
     }, scope)
 
     // Depth on scroll-out — collage and texture drift at different rates.
-    // Desktop only (the collage is hidden below lg), reduced-motion excluded.
+    // Desktop only (the collage is hidden below lg).
     const mm = gsap.matchMedia()
     mm.add('(min-width: 1024px)', () => {
       const scrollTrigger = { trigger: scope, start: 'top top', end: 'bottom top', scrub: 0.5 }
