@@ -30,7 +30,7 @@ export function UserMenu() {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="User menu"
-        className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-accent/10 text-xs font-medium text-accent"
+        className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-accent/10 text-xs font-medium text-accent ring-1 ring-border transition-colors hover:ring-border-strong"
       >
         {user.avatar_url ? (
           <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
@@ -41,32 +41,34 @@ export function UserMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-10 z-10 w-56 rounded-md border border-border bg-surface py-1 shadow-lg"
+          className="absolute right-0 top-11 z-30 w-60 origin-top-right animate-fade-in overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-raised"
         >
-          <div className="border-b border-border px-3 py-2">
+          <div className="border-b border-border px-3 py-2.5">
             <p className="truncate text-sm font-medium text-text">{user.login}</p>
             {user.org_name && <p className="truncate text-xs text-text-muted">{user.org_name}</p>}
           </div>
           <OrgSwitcher onSwitched={() => setOpen(false)} />
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false)
-              navigate('/app/settings')
-            }}
-            className="block w-full px-3 py-2 text-left text-sm text-text hover:bg-background"
-          >
-            Settings
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={handleSignOut}
-            className="block w-full px-3 py-2 text-left text-sm text-text hover:bg-background"
-          >
-            Sign out
-          </button>
+          <div className="py-1">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                navigate('/app/settings')
+              }}
+              className="block w-full px-3 py-2 text-left text-sm text-text-muted transition-colors hover:bg-surface hover:text-text"
+            >
+              Settings
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleSignOut}
+              className="block w-full px-3 py-2 text-left text-sm text-text-muted transition-colors hover:bg-surface hover:text-text"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       )}
     </div>
