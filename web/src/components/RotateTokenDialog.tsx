@@ -43,7 +43,7 @@ export function RotateTokenDialog({ cluster, onClose }: RotateTokenDialogProps) 
     <Modal titleId="rotate-token-title" title={`Rotate token for ${cluster.name}`} onClose={handleClose} widthClassName="max-w-md">
       {!rotated && (
         <div className="mt-4 flex flex-col gap-4">
-          <p className="font-body text-xs font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
+          <p className="font-body text-xs font-semibold uppercase leading-relaxed tracking-wide text-ink-muted">
             The agent currently running in this cluster will need to be updated with the new token. Its old token
             keeps working for a 10-minute grace period so you have time to redeploy it.
           </p>
@@ -65,7 +65,7 @@ export function RotateTokenDialog({ cluster, onClose }: RotateTokenDialogProps) 
               type="button"
               onClick={handleClose}
               disabled={mutation.isPending}
-              className="w-fit border-2 border-text-muted px-5 py-2.5 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+              className="w-fit border-2 border-ink-muted px-5 py-2.5 font-body text-xs font-bold uppercase tracking-wide text-ink transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
             >
               Cancel
             </button>
@@ -75,7 +75,7 @@ export function RotateTokenDialog({ cluster, onClose }: RotateTokenDialogProps) 
 
       {rotated && (
         <div className="mt-4 flex flex-col gap-4">
-          <p className="font-body text-xs font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
+          <p className="font-body text-xs font-semibold uppercase leading-relaxed tracking-wide text-ink-muted">
             New token — shown only once. Update the agent's <code>CLUSTER_TOKEN</code> secret with this value
             before the old one's grace period expires.
           </p>

@@ -13,10 +13,10 @@ const METRIC_LABELS: Record<string, string> = {
 
 export function HealthEvidenceTable({ evidence }: HealthEvidenceTableProps) {
   return (
-    <div className="overflow-x-auto border-2 border-border-strong">
+    <div className="overflow-x-auto border-2 border-paper-line-soft">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b-2 border-border-strong bg-surface text-left font-body text-[11px] uppercase tracking-wide text-text-faint">
+          <tr className="border-b-2 border-paper-line-soft bg-paper text-left font-body text-[11px] uppercase tracking-wide text-ink-faint">
             <th className="px-3 py-2 font-bold">Metric</th>
             <th className="px-3 py-2 font-bold">Baseline</th>
             <th className="px-3 py-2 font-bold">Post-deploy</th>
@@ -25,10 +25,10 @@ export function HealthEvidenceTable({ evidence }: HealthEvidenceTableProps) {
         </thead>
         <tbody>
           {evidence.map((item) => (
-            <tr key={item.metric} className="border-b border-border-strong last:border-0 hover:bg-surface">
-              <td className="px-3 py-2 text-text">{METRIC_LABELS[item.metric] ?? item.metric}</td>
-              <td className="px-3 py-2 font-mono text-text-muted">{item.baseline ?? '—'}</td>
-              <td className="px-3 py-2 font-mono text-text-muted">{item.post ?? '—'}</td>
+            <tr key={item.metric} className="border-b border-paper-line-soft last:border-0 hover:bg-paper">
+              <td className="px-3 py-2 text-ink">{METRIC_LABELS[item.metric] ?? item.metric}</td>
+              <td className="px-3 py-2 font-mono text-ink-muted">{item.baseline ?? '—'}</td>
+              <td className="px-3 py-2 font-mono text-ink-muted">{item.post ?? '—'}</td>
               <td className={`px-3 py-2 font-mono font-medium ${changePercentColorClass(item.change_pct)}`}>
                 {formatChangePercent(item.change_pct)}
               </td>

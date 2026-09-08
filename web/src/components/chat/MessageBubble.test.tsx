@@ -29,6 +29,6 @@ describe('MessageBubble', () => {
   it('does not render an empty box for a text part with no text yet', () => {
     const message: ChatMessage = { id: '3', role: 'assistant', parts: [{ type: 'text', text: '' }] }
     const { container } = render(<MessageBubble message={message} />)
-    expect(container.querySelectorAll('.bg-surface').length).toBe(0)
+    expect(container.querySelectorAll('.bg-paper-raised').length).toBe(0)
   })
 })

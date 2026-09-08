@@ -22,13 +22,13 @@ function Pill({ label, connected, detail }: Omit<Tier, 'key'>) {
   return (
     <span
       className={`inline-flex items-center gap-1 border px-1.5 py-0.5 font-body text-[11px] font-bold uppercase tracking-wide ${
-        connected ? 'border-healthy bg-healthy/10 text-healthy' : 'border-border-strong bg-surface-raised text-text-faint'
+        connected ? 'border-healthy bg-healthy/10 text-healthy' : 'border-paper-line-soft bg-paper text-ink-faint'
       }`}
       title={`${label}: ${detail}`}
       aria-label={`${label}: ${detail}`}
     >
       <span
-        className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-healthy' : 'bg-text-faint'}`}
+        className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-healthy' : 'bg-ink-faint'}`}
         aria-hidden="true"
       />
       {label}

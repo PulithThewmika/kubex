@@ -43,8 +43,8 @@ function PipelineRow({ deployment, size }: PipelineRowProps) {
   const trackHeight = size === 'large' ? 'h-12' : 'h-6'
 
   return (
-    <div className="flex items-center gap-3 border-2 border-border-strong bg-surface p-3">
-      <span className="w-24 shrink-0 truncate font-mono text-sm text-text-muted">{shortSha}</span>
+    <div className="flex items-center gap-3 border-2 border-paper-line-soft bg-paper-raised p-3">
+      <span className="w-24 shrink-0 truncate font-mono text-sm text-ink-muted">{shortSha}</span>
       <div className={`flex ${trackHeight} flex-1 gap-0.5 overflow-hidden`}>
         {timeline.map((stage, i) => (
           <PipelineStage key={stage.stage} stage={stage} durationS={durationsS[i]} size={size} />
@@ -100,9 +100,9 @@ function PipelineStage({ stage, durationS, size }: PipelineStageProps) {
           </span>
         )}
       </div>
-      <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden -translate-x-1/2 whitespace-nowrap border-2 border-text bg-surface-raised px-2 py-1 text-xs text-text group-hover:block">
+      <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden -translate-x-1/2 whitespace-nowrap border-2 border-paper-line bg-paper-raised px-2 py-1 text-xs text-ink group-hover:block">
         <div className="font-bold uppercase tracking-wide">{stageLabel(stage.stage)}</div>
-        <div className="text-text-muted">{timestamp}</div>
+        <div className="text-ink-muted">{timestamp}</div>
       </div>
     </div>
   )
