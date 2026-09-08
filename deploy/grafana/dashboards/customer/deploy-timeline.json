@@ -470,8 +470,8 @@
       {
         "name": "org",
         "label": "Org",
-        "description": "Set server-side by the ingest panel proxy (var-org, from the session). Hidden and empty by default so a non-proxied open fails closed on the ::uuid cast rather than leaking across tenants.",
-        "type": "constant",
+        "description": "Set server-side by the ingest panel proxy (var-org, from the session). Hidden and empty by default so a non-proxied open fails closed on the ::uuid cast rather than leaking across tenants. Must be type \"textbox\", not \"constant\" — Grafana 11's renderer/d-solo navigation does not apply var-X URL overrides to constant-type variables, only to textbox/custom/query types (found 2026-09-08: every panel 400'd with an empty org_id despite the proxy correctly passing var-org).",
+        "type": "textbox",
         "query": "",
         "current": {
           "text": "",
@@ -499,8 +499,8 @@
       {
         "name": "component",
         "label": "Prometheus component(s)",
-        "description": "Set server-side by the panel proxy (var-component) \u2014 the KubeX service expanded to its prom_components.",
-        "type": "constant",
+        "description": "Set server-side by the panel proxy (var-component) \u2014 the KubeX service expanded to its prom_components. Type \"textbox\", not \"constant\" \u2014 see the org variable's description.",
+        "type": "textbox",
         "query": "",
         "current": {
           "text": "",
