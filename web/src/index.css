@@ -117,18 +117,38 @@
     }
   }
 
-  /* One pulse travelling each hub→node connector in the integration graph.
-     dashoffset runs from the node end of the line to just past the hub. */
+  /* A glowing comet travelling each node→hub connector in the integration
+     graph. Paths carry pathLength="1", so the dash maths is length-independent
+     and every connector, long or short, takes the same time. */
   .graph-flow {
-    animation: graph-flow 2.6s linear infinite;
+    animation: graph-flow 3s linear infinite;
   }
 
   @keyframes graph-flow {
     from {
-      stroke-dashoffset: 132;
+      stroke-dashoffset: 1;
     }
     to {
-      stroke-dashoffset: -14;
+      stroke-dashoffset: -0.16;
+    }
+  }
+
+  .graph-glow {
+    filter: drop-shadow(0 0 2px #ff5722) drop-shadow(0 0 6px rgba(255, 87, 34, 0.55));
+  }
+
+  /* Nodes drift so the graph never sits perfectly still. */
+  .graph-float {
+    animation: graph-float 5s ease-in-out infinite;
+  }
+
+  @keyframes graph-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-7px);
     }
   }
 }
