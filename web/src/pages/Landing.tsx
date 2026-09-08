@@ -1,4 +1,5 @@
 import { Reveal } from '../components/landing/Reveal'
+import { Ticker } from '../components/landing/Ticker'
 import { TornEdge } from '../components/landing/TornEdge'
 import { MaxFeatures } from '../components/landing/MaxFeatures'
 import { MaxIntegrations } from '../components/landing/MaxIntegrations'
@@ -44,7 +45,7 @@ function Nav({ cta }: { cta: Cta }) {
   )
 }
 
-// The KubeX mark, framed like a printed plate: an offset orange block behind
+// The KubeX mark, framed like a printed plate: an offset green block behind
 // a stencilled border, halftone wash, registration ticks in the corners.
 function LogoPlate() {
   return (
@@ -60,7 +61,7 @@ function LogoPlate() {
           alt="KubeX"
           width={256}
           height={256}
-          className="relative z-10 h-44 w-44 object-contain drop-shadow-[0_8px_24px_rgba(249,115,22,0.25)] sm:h-64 sm:w-64"
+          className="relative z-10 h-44 w-44 object-contain drop-shadow-[0_8px_28px_rgba(0,230,118,0.35)] sm:h-64 sm:w-64"
         />
       </div>
       <div className="absolute -bottom-3 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap border-2 border-text bg-accent px-3 py-1 font-display text-xs uppercase tracking-[0.2em] text-background">
@@ -119,12 +120,7 @@ function Hero({ cta }: { cta: Cta }) {
         </div>
       </div>
 
-      {/* Integration ticker */}
-      <div className="overflow-hidden border-t-2 border-text bg-accent py-2">
-        <p className="whitespace-nowrap px-4 font-display text-xl uppercase tracking-wider text-background sm:text-2xl">
-          GitHub Actions · ArgoCD · Kubernetes · Prometheus · Grafana · Slack · Loki · Alertmanager · DORA metrics · Health scoring ·
-        </p>
-      </div>
+      <Ticker />
     </section>
   )
 }

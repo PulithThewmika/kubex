@@ -5,7 +5,7 @@ type Tone = 'background' | 'accent' | 'text'
 
 const FILL: Record<Tone, string> = {
   background: '#0A0B0D',
-  accent: '#F97316',
+  accent: '#00E676',
   text: '#E6E8EB',
 }
 
