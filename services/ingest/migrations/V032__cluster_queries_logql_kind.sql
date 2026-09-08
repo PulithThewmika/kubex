@@ -1,15 +1,20 @@
 -- V032: cluster_queries — allow 'logql' as a relay query kind (#840).
 --
--- Depends on V031 (#832), which added the `kind` column (CHECK IN
--- ('instant', 'range')) so Grafana's PromQL range queries could be
--- relayed. This migration widens that same CHECK to also allow 'logql',
--- so the cluster-agent's query relay can carry Loki log queries alongside
--- Prometheus ones (see cluster_agent's _query_relay_tick dispatch and
--- app/routers/relay_internal.py's loki_range_query).
+-- Landed concurrently with V031 (#831/#832, which adds `kind`/`params` so
+-- Grafana's PromQL range queries can be relayed) on a separate branch, so
+-- this migration cannot assume V031 has already run — CI on this branch
+-- applies migrations against a database that has never seen V031, and a
+-- hard dependency here (as an earlier revision of this file had) fails
+-- that run outright. Instead this creates `kind`/`params` itself if
+-- missing (matching V031's exact shape) and widens the CHECK to also
+-- allow 'logql' either way, so the cluster-agent's query relay can carry
+-- Loki log queries alongside Prometheus ones (see cluster_agent's
+-- _query_relay_tick dispatch and app/routers/relay_internal.py's
+-- loki_range_query) regardless of whether V031 lands before or after
+-- this one.
 --
--- Idempotent — safe to run multiple times, and safe to run whether or not
--- V031 has landed yet (drops the constraint if present before recreating
--- it, rather than assuming V031's exact constraint name).
+-- Idempotent — safe to run multiple times, and safe in either merge
+-- order relative to V031.
 
 DO $$
 BEGIN
@@ -18,17 +23,14 @@ BEGIN
         RETURN;
     END IF;
 
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'cluster_queries' AND column_name = 'kind'
-    ) THEN
-        RAISE EXCEPTION 'V032 requires V031 (cluster_queries.kind) to be applied first';
-    END IF;
+    -- Same shape as V031's ADD COLUMN — a no-op if V031 already ran.
+    ALTER TABLE cluster_queries ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'instant';
+    ALTER TABLE cluster_queries ADD COLUMN IF NOT EXISTS params JSONB;
 
     ALTER TABLE cluster_queries DROP CONSTRAINT IF EXISTS cluster_queries_kind_check;
     ALTER TABLE cluster_queries
         ADD CONSTRAINT cluster_queries_kind_check CHECK (kind IN ('instant', 'range', 'logql'));
 
     INSERT INTO schema_versions (version, description)
-    VALUES ('V032', 'cluster_queries.kind allows logql for the Loki relay (#840)');
+    VALUES ('V032', 'cluster_queries.kind/params, widened to allow logql for the Loki relay (#840)');
 END $$;
