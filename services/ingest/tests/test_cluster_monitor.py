@@ -39,3 +39,19 @@ async def test_no_op_when_nothing_stale() -> None:
 
 def test_disconnect_threshold_is_three_minutes() -> None:
     assert DISCONNECT_THRESHOLD == timedelta(minutes=3)
+
+
+@pytest.mark.asyncio
+async def test_reaps_stale_cluster_queries() -> None:
+    from app.cluster_monitor import reap_stale_cluster_queries
+
+    session = AsyncMock()
+    session.execute = AsyncMock(return_value=MagicMock(rowcount=3))
+    session.commit = AsyncMock()
+
+    count = await reap_stale_cluster_queries(session)
+
+    assert count == 3
+    session.commit.assert_awaited_once()
+    stmt = session.execute.await_args.args[0]
+    assert "DELETE FROM cluster_queries" in str(stmt)

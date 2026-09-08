@@ -89,6 +89,7 @@ async def test_proxy_renders_panel_png(client) -> None:
     assert "authorization" not in {h.lower() for h in resp.headers}
     assert sent.kwargs["params"]["var-org"] == "00000000-0000-0000-0000-000000000002"
     assert sent.kwargs["params"]["var-service"] == "orders"
+    assert sent.kwargs["params"]["var-component"] == "orders"
 
 
 @pytest.mark.asyncio
@@ -101,9 +102,10 @@ async def test_proxy_expands_prom_components(client) -> None:
         resp = await _get(uid="deploy-timeline", panelId=1, **{"var-service": "sample-app"})
 
     assert resp.status_code == 200
-    assert grafana_client.build_request.call_args.kwargs["params"]["var-service"] == (
-        "frontend|orders|payments"
-    )
+    params = grafana_client.build_request.call_args.kwargs["params"]
+    # SQL panels get the logical name; Prometheus panels get the components.
+    assert params["var-service"] == "sample-app"
+    assert params["var-component"] == "frontend|orders|payments"
 
 
 @pytest.mark.asyncio

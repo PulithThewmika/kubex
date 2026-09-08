@@ -149,8 +149,11 @@ async def _relay(raw_query: str, kind: str, params: dict) -> JSONResponse:
                     select(ClusterQuery.status, ClusterQuery.result).where(ClusterQuery.id == query_id)
                 )
             ).first()
-        if row is not None and row.status == "completed":
-            return JSONResponse(content=row.result)
+            if row is not None and row.status == "completed":
+                result = row.result
+                await session.execute(delete(ClusterQuery).where(ClusterQuery.id == query_id))
+                await session.commit()
+                return JSONResponse(content=result)
 
     # Nobody is waiting on this row any more — drop it so it isn't picked
     # up and run against the customer's Prometheus when the agent recovers,
@@ -190,3 +193,18 @@ async def buildinfo() -> JSONResponse:
 @router.get("/api/v1/metadata")
 async def metadata() -> JSONResponse:
     return JSONResponse(content={"status": "success", "data": {}})
+
+
+# The customer dashboards source their template vars from Postgres, not
+# from label discovery — but Grafana's metric browser / a future
+# Prometheus-typed var would 404 hard without these. Empty is honest: the
+# relay is per-query, there's no catalogue to enumerate.
+@router.get("/api/v1/labels")
+@router.get("/api/v1/series")
+async def _empty_list() -> JSONResponse:
+    return JSONResponse(content={"status": "success", "data": []})
+
+
+@router.get("/api/v1/label/{name}/values")
+async def _label_values(name: str) -> JSONResponse:  # noqa: ARG001
+    return JSONResponse(content={"status": "success", "data": []})
