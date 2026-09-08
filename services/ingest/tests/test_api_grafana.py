@@ -63,6 +63,10 @@ async def test_proxy_returns_grafana_panel_html(client, mock_session) -> None:
     assert resp.text == "<html>panel</html>"
 
     sent = grafana_client.build_request.call_args
+    # Renders to PNG via the image-renderer, not the /d-solo/ HTML (#835).
+    assert sent.args[1] == "/render/d-solo/deploy-timeline"
+    assert sent.kwargs["params"]["width"] == 1000
+    assert sent.kwargs["params"]["height"] == 300
     assert sent.kwargs["headers"]["Authorization"] == "Bearer super-secret-token"
     # The SA token is forwarded to Grafana, never echoed to the browser.
     assert "super-secret-token" not in resp.text

@@ -10,8 +10,10 @@ type GrafanaPanelProps = {
   title: string
 }
 
+type Status = 'loading' | 'loaded' | 'no-source' | 'error'
+
 export function GrafanaPanel({ uid, panelId, service, from = 'now-6h', to = 'now', title }: GrafanaPanelProps) {
-  const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
+  const [status, setStatus] = useState<Status>('loading')
 
   const params = new URLSearchParams({
     uid,
@@ -26,21 +28,17 @@ export function GrafanaPanel({ uid, panelId, service, from = 'now-6h', to = 'now
   useEffect(() => {
     setStatus('loading')
     let cancelled = false
-    // <iframe onError> only fires on network-level failures — a 502 from
-    // the proxy (e.g. Grafana unreachable) still "loads" its error body
-    // successfully and fires onLoad, never onError. A GET preflight lets
-    // us catch real backend failures the iframe itself can't detect.
-    // (The route is GET-only — HEAD returns 405 — so this duplicates the
-    // iframe's own request; acceptable for two lightweight panels a page.)
-    //
-    // Deliberately plain fetch, not apiFetch: the proxy forwards Grafana's
-    // own upstream status verbatim (grafana.py), so a 401 here means
-    // Grafana's service-account token is stale, not that the user's
-    // session expired — routing it through apiFetch would force an
-    // app-wide logout over a Grafana-side misconfiguration.
+    // The proxy renders the panel to PNG server-side (#835), so <img> is
+    // enough. A GET preflight lets us tell "no metrics source connected"
+    // (503, the org has no connected cluster or a relay timeout) apart
+    // from a genuine render failure — otherwise both would just be a
+    // broken image. Deliberately plain fetch, not apiFetch: a 401 here is
+    // a stale Grafana service-account token, not the user's session.
     fetch(src, { credentials: 'include' })
       .then((res) => {
-        if (!cancelled && !res.ok) setStatus('error')
+        if (cancelled) return
+        if (res.status === 503) setStatus('no-source')
+        else if (!res.ok) setStatus('error')
       })
       .catch(() => {
         if (!cancelled) setStatus('error')
@@ -57,26 +55,32 @@ export function GrafanaPanel({ uid, panelId, service, from = 'now-6h', to = 'now
           Loading {title}…
         </div>
       )}
-      {status === 'error' && (
+      {status === 'no-source' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 p-4 text-center">
-          <p className="text-sm font-medium text-text">Metrics unavailable</p>
+          <p className="text-sm font-medium text-text">No metrics source connected</p>
           <p className="text-xs text-text-muted">
-            The {title} panel couldn't load. If this service has no metrics source yet, connect one.
+            {title} needs a connected cluster. Connect one to start seeing metrics.
           </p>
           <Link
             to="/app/settings?tab=connections"
             className="mt-1 text-xs font-medium text-accent hover:underline"
           >
-            Connect Prometheus
+            Connect a cluster
           </Link>
         </div>
       )}
-      <iframe
-        title={title}
+      {status === 'error' && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 p-4 text-center">
+          <p className="text-sm font-medium text-text">Panel failed to load</p>
+          <p className="text-xs text-text-muted">The {title} panel couldn't be rendered. Try again shortly.</p>
+        </div>
+      )}
+      <img
+        alt={title}
         src={src}
-        className={`h-full w-full border-0 ${status === 'loaded' ? '' : 'invisible'}`}
-        onLoad={() => setStatus((s) => (s === 'error' ? s : 'loaded'))}
-        onError={() => setStatus('error')}
+        className={`h-full w-full object-contain ${status === 'loaded' ? '' : 'invisible'}`}
+        onLoad={() => setStatus((s) => (s === 'no-source' || s === 'error' ? s : 'loaded'))}
+        onError={() => setStatus((s) => (s === 'no-source' ? s : 'error'))}
       />
     </div>
   )
