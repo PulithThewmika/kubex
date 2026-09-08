@@ -416,8 +416,8 @@
       {
         "name": "org",
         "label": "Org",
-        "description": "Set server-side by the ingest panel proxy (var-org).",
-        "type": "constant",
+        "description": "Set server-side by the ingest panel proxy (var-org). Must be type \"textbox\", not \"constant\" — Grafana 11's renderer/d-solo navigation does not apply var-X URL overrides to constant-type variables (found 2026-09-08).",
+        "type": "textbox",
         "query": "",
         "current": {
           "text": "",
