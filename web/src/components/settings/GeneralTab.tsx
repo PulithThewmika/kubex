@@ -3,9 +3,11 @@ import { useAuth } from '../../contexts/AuthContext'
 function Field({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div>
-      <dt className="text-sm font-medium text-text">{label}</dt>
+      <dt className="font-body text-xs font-bold uppercase tracking-wide text-text">{label}</dt>
       <dd className="mt-1 text-sm text-text-muted">{value}</dd>
-      {hint && <p className="mt-1.5 text-xs text-text-muted">{hint}</p>}
+      {hint && (
+        <p className="mt-1.5 font-body text-[11px] font-semibold uppercase tracking-wide text-text-faint">{hint}</p>
+      )}
     </div>
   )
 }
@@ -15,7 +17,7 @@ export function GeneralTab() {
 
   return (
     <section>
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted">Organization</h2>
+      <h2 className="font-body text-xs font-bold uppercase tracking-[0.15em] text-text-muted">Organization</h2>
       <dl className="mt-4 flex flex-col gap-5">
         <Field label="Name" value={user?.org_name ?? '—'} />
         <Field

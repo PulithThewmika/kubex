@@ -27,24 +27,31 @@ function DeliveryStatus({ channel }: { channel: SlackChannel }) {
   }
   if (channel.last_delivery_error) {
     return (
-      <span className="text-xs text-degraded" title={channel.last_delivery_error}>
+      <span
+        className="font-body text-xs font-bold uppercase tracking-wide text-degraded"
+        title={channel.last_delivery_error}
+      >
         Last delivery failed: {channel.last_delivery_error}
       </span>
     )
   }
   if (channel.last_delivery_at) {
-    return <span className="text-xs text-healthy">Delivering</span>
+    return <span className="font-body text-xs font-bold uppercase tracking-wide text-healthy">Delivering</span>
   }
-  return <span className="text-xs text-text-muted">No messages sent yet</span>
+  return (
+    <span className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+      No messages sent yet
+    </span>
+  )
 }
 
 function ChannelRow({ channel }: { channel: SlackChannel }) {
   const remove = useRemoveSlackChannel()
   const test = useTestSlackChannel()
   return (
-    <li className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
+    <li className="flex flex-col gap-2 border-2 border-border-strong bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-col gap-1">
-        <p className="text-sm font-medium text-text">#{channel.slack_channel_name}</p>
+        <p className="font-body text-sm font-bold text-text">#{channel.slack_channel_name}</p>
         <DeliveryStatus channel={channel} />
       </div>
       <div className="flex items-center gap-2">
@@ -52,7 +59,7 @@ function ChannelRow({ channel }: { channel: SlackChannel }) {
           type="button"
           onClick={() => test.mutate(channel.id)}
           disabled={test.isPending}
-          className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-text transition-colors hover:bg-background disabled:opacity-50"
+          className="border-2 border-text-muted px-2.5 py-1.5 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
         >
           {test.isPending ? 'Sending…' : 'Send test'}
         </button>
@@ -60,13 +67,13 @@ function ChannelRow({ channel }: { channel: SlackChannel }) {
           type="button"
           onClick={() => remove.mutate(channel.id)}
           disabled={remove.isPending}
-          className="rounded-md px-2.5 py-1 text-xs font-medium text-failed transition-colors hover:bg-failed/10 disabled:opacity-50"
+          className="border-2 border-transparent px-2.5 py-1.5 font-body text-xs font-bold uppercase tracking-wide text-failed transition-colors hover:border-failed disabled:opacity-50"
         >
           Remove
         </button>
       </div>
       {(test.isError || remove.isError) && (
-        <p className="text-xs text-failed sm:w-full" role="alert">
+        <p className="font-body text-xs font-bold uppercase tracking-wide text-failed sm:w-full" role="alert">
           {((test.error ?? remove.error) as Error).message}
         </p>
       )}
@@ -84,7 +91,7 @@ function AddChannel({ existingIds }: { existingIds: Set<string> }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-fit rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text transition-colors hover:bg-surface"
+        className="w-fit border-2 border-text-muted px-3 py-1.5 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent"
       >
         Add a channel
       </button>
@@ -95,18 +102,26 @@ function AddChannel({ existingIds }: { existingIds: Set<string> }) {
 
   return (
     <div className="flex flex-col gap-2">
-      {available.isLoading && <p className="text-xs text-text-muted">Loading channels…</p>}
+      {available.isLoading && (
+        <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+          Loading channels…
+        </p>
+      )}
       {available.isError && (
-        <p className="text-xs text-failed">{(available.error as Error).message}</p>
+        <p className="font-body text-xs font-bold uppercase tracking-wide text-failed">
+          {(available.error as Error).message}
+        </p>
       )}
       {available.data && (
         <ul className="flex flex-col gap-1.5">
           {choices.map((c) => (
             <li key={c.slack_channel_id} className="flex items-center justify-between gap-2">
-              <span className="text-sm text-text">
+              <span className="font-body text-sm text-text">
                 #{c.name}
                 {c.is_private && !c.is_member && (
-                  <span className="ml-2 text-xs text-degraded">invite @KubeX first</span>
+                  <span className="ml-2 font-body text-xs font-bold uppercase tracking-wide text-degraded">
+                    invite @KubeX first
+                  </span>
                 )}
               </span>
               <button
@@ -118,22 +133,28 @@ function AddChannel({ existingIds }: { existingIds: Set<string> }) {
                   )
                 }
                 disabled={add.isPending}
-                className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-text transition-colors hover:bg-surface disabled:opacity-50"
+                className="border-2 border-text-muted px-2.5 py-1 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
               >
                 Add
               </button>
             </li>
           ))}
           {choices.length === 0 && (
-            <li className="text-xs text-text-muted">No more channels the bot can see.</li>
+            <li className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+              No more channels the bot can see.
+            </li>
           )}
         </ul>
       )}
-      {add.isError && <p className="text-xs text-failed" role="alert">{(add.error as Error).message}</p>}
+      {add.isError && (
+        <p className="font-body text-xs font-bold uppercase tracking-wide text-failed" role="alert">
+          {(add.error as Error).message}
+        </p>
+      )}
       <button
         type="button"
         onClick={() => setOpen(false)}
-        className="w-fit text-xs font-medium text-text-muted underline-offset-4 hover:text-text hover:underline"
+        className="w-fit font-body text-xs font-bold uppercase tracking-wide text-text-muted underline-offset-4 hover:text-accent hover:underline"
       >
         Cancel
       </button>
@@ -149,37 +170,41 @@ export function SlackSection() {
 
   return (
     <section className="mt-10">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted">Slack</h2>
-      <p className="mt-1 text-sm text-text-muted">
+      <h2 className="font-body text-xs font-bold uppercase tracking-[0.15em] text-text-muted">Slack</h2>
+      <p className="mt-1 font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
         Get deploy health alerts in your own Slack workspace. Optional — deployments are still tracked
         without it.
       </p>
 
       {slackParam === 'connected' && (
-        <div role="status" className="mt-4 rounded-md border border-healthy/30 bg-healthy/10 px-4 py-3 text-sm text-healthy">
+        <div role="status" className="mt-4 border-2 border-healthy bg-healthy/10 px-4 py-3 font-body text-xs font-bold uppercase tracking-wide text-healthy">
           Slack workspace connected.
         </div>
       )}
       {slackParam === 'denied' && (
-        <div role="status" className="mt-4 rounded-md border border-degraded/30 bg-degraded/10 px-4 py-3 text-sm text-degraded">
+        <div role="status" className="mt-4 border-2 border-degraded bg-degraded/10 px-4 py-3 font-body text-xs font-bold uppercase tracking-wide text-degraded">
           Slack authorization was cancelled.
         </div>
       )}
       {slackParam === 'exists' && (
-        <div role="status" className="mt-4 rounded-md border border-degraded/30 bg-degraded/10 px-4 py-3 text-sm text-degraded">
+        <div role="status" className="mt-4 border-2 border-degraded bg-degraded/10 px-4 py-3 font-body text-xs font-bold uppercase tracking-wide text-degraded">
           A Slack workspace is already connected. Disconnect it before connecting a different one.
         </div>
       )}
 
-      {isLoading && <p className="mt-4 text-sm text-text-muted">Loading…</p>}
+      {isLoading && (
+        <p className="mt-4 font-body text-xs font-semibold uppercase tracking-wide text-text-muted">Loading…</p>
+      )}
       {isError && (
-        <p className="mt-4 text-sm text-text-muted">Slack integration is unavailable on this server.</p>
+        <p className="mt-4 font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+          Slack integration is unavailable on this server.
+        </p>
       )}
 
       {data && !data.connected && (
         <a
           href={INSTALL_URL}
-          className="mt-4 flex w-fit items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px"
+          className="mt-4 flex w-fit items-center gap-2 border-2 border-accent bg-accent px-4 py-2.5 font-body text-xs font-bold uppercase tracking-wide text-background transition-colors hover:bg-accent-hover active:translate-y-px"
         >
           <SlackIcon />
           Add to Slack
@@ -189,21 +214,21 @@ export function SlackSection() {
       {data && data.connected && (
         <div className="mt-4 flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-text">
-              Connected to <span className="font-medium">{data.team_name ?? 'your workspace'}</span>
+            <p className="font-body text-sm text-text">
+              Connected to <span className="font-bold">{data.team_name ?? 'your workspace'}</span>
             </p>
             <button
               type="button"
               onClick={() => disconnect.mutate()}
               disabled={disconnect.isPending}
-              className="text-xs font-medium text-failed underline-offset-4 hover:underline disabled:opacity-50"
+              className="font-body text-xs font-bold uppercase tracking-wide text-failed underline-offset-4 hover:underline disabled:opacity-50"
             >
               Disconnect
             </button>
           </div>
 
           {disconnect.isError && (
-            <p className="text-xs text-failed" role="alert">
+            <p className="font-body text-xs font-bold uppercase tracking-wide text-failed" role="alert">
               {(disconnect.error as Error).message}
             </p>
           )}
