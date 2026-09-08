@@ -142,12 +142,35 @@ async def verify_github_app_signature(request: Request) -> bytes:
     return await _verify_hmac_signature(request, GITHUB_APP_WEBHOOK_SECRET)
 
 
-async def verify_argocd_token(authorization: str | None = Header(default=None)):
+async def verify_argocd_token(
+    authorization: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> Cluster | None:
+    """Accept either the legacy global ARGOCD_WEBHOOK_TOKEN (returns None —
+    caller falls back to argocd_app-name-based org resolution) or a
+    per-cluster agent token (returns that Cluster, whose org_id the caller
+    should use directly). The global check runs first since it's a cheap
+    constant-time compare; the bcrypt cluster walk only runs when it
+    doesn't match, so the common legacy path pays no extra latency.
+
+    Per-cluster tokens close a real cross-tenant bug (#found 2026-09-08):
+    the legacy path resolves org_id by matching an existing services row's
+    argocd_app name, which has no idea which org a *newly connected*
+    cluster belongs to and silently misattributes its deployments to
+    whichever org happened to register that app name first.
+    """
     if authorization is None:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
     expected = f"Bearer {ARGOCD_WEBHOOK_TOKEN}"
-    if not hmac.compare_digest(authorization, expected):
+    if hmac.compare_digest(authorization, expected):
+        return None
+    if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid bearer token")
+    token = authorization.removeprefix("Bearer ").encode()
+    cluster = await find_cluster_by_token(token, session)
+    if cluster is None:
+        raise HTTPException(status_code=401, detail="Invalid bearer token")
+    return cluster
 
 
 async def verify_alertmanager_token(authorization: str | None = Header(default=None)):
