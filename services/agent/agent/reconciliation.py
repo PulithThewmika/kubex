@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import promql
 from .alerting import resolve_alert
 from .config import BASELINE_WINDOW, BASELINE_WINDOW_SECONDS, OBSERVATION_WINDOW, OBSERVATION_WINDOW_SECONDS
 from .notifications import notify_deploy_recovered
@@ -32,7 +33,7 @@ async def _fetch_active_alerts(session: AsyncSession):
         text("""
             SELECT a.id, a.deployment_id, a.service_id, a.org_id,
                    s.name AS service_name, s.namespace,
-                   s.prom_components
+                   s.prom_components, s.cluster_id
             FROM alerts a
             JOIN services s ON s.id = a.service_id
             WHERE a.resolved_at IS NULL
@@ -68,8 +69,25 @@ async def reconcile_active_alerts(session: AsyncSession) -> int:
         components = row.prom_components if row.prom_components is not None else [service_name]
         seen_alert_ids.add(alert_id)
 
-        base = await _aggregate_metrics(components, namespace, BASELINE_WINDOW, baseline_end)
-        post = await _aggregate_metrics(components, namespace, OBSERVATION_WINDOW, now)
+        try:
+            base = await _aggregate_metrics(
+                components, namespace, BASELINE_WINDOW, baseline_end,
+                session=session, cluster_id=row.cluster_id,
+            )
+            post = await _aggregate_metrics(
+                components, namespace, OBSERVATION_WINDOW, now,
+                session=session, cluster_id=row.cluster_id,
+            )
+        except promql.MetricsUnreachableError as e:
+            # Skip this alert this cycle rather than crashing the whole
+            # reconciliation batch (#840) - a relay timeout for one
+            # remote cluster must not stop every other alert (including
+            # ones on the local/legacy path) from being reconciled.
+            logger.warning(
+                "Skipping reconciliation for alert #%d this cycle - metrics unreachable: %s",
+                alert_id, e,
+            )
+            continue
 
         metrics = {
             "error_rate_base": base["error_rate"],

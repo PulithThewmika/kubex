@@ -1,13 +1,15 @@
 """Prometheus query helpers, routed through the org-scoped cluster relay (#840).
 
-Previously opened an httpx client directly against a hardcoded PROM_URL.
-That was wrong for every org except whichever one happens to be running
-against the operator's own local Kind cluster: a customer's metrics only
-ever exist behind *their own* cluster-agent relay (EPIC-022), and PROM_URL
-pointed at the operator's Prometheus regardless of which org's deployment
-was actually being scored — so a connected customer cluster's safety-score
-cluster-utilization factor and the /compare endpoint's metrics were both
-silently reading the wrong cluster's numbers, not just missing data.
+Two execution paths, mirroring agent/promql.py exactly: a legacy/local
+service (no cluster_id - the in-cluster Kind demo wired directly to
+PROM_URL) queries Prometheus directly, unchanged from before this PR. A
+service on a remote customer cluster (cluster_id set, EPIC-022) routes
+through the cluster_queries relay instead - PROM_URL is the operator's
+own Prometheus and was never a meaningful source for a customer's
+metrics; querying it regardless of cluster_id would mean the safety
+score's cluster-utilization factor and the /compare endpoint silently
+read the wrong cluster's numbers for any org with a connected remote
+cluster, not just missing data.
 """
 
 from __future__ import annotations
@@ -19,12 +21,14 @@ import re
 import uuid
 from datetime import datetime
 
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import cluster_relay
 
 logger = logging.getLogger("kubex.ingest.promql")
 
+PROM_URL = os.environ.get("PROM_URL", "http://localhost:9090")
 OBSERVATION_WINDOW = os.environ.get("OBSERVATION_WINDOW", "15m")
 BASELINE_WINDOW = os.environ.get("BASELINE_WINDOW", "30m")
 
@@ -32,8 +36,8 @@ BASELINE_WINDOW = os.environ.get("BASELINE_WINDOW", "30m")
 # GitHub webhook handler (see safety_score.py's own comment on why), which
 # must respond well inside GitHub's webhook delivery timeout. The general
 # cluster_relay.DEFAULT_RELAY_TIMEOUT (20s, tuned for a Grafana panel load
-# or an agent's async tick — see #832/#840) would blow that budget on its
-# own before GitHub's ~10s limit is even reached.
+# or an async agent tick) would blow that budget on its own before
+# GitHub's ~10s limit is even reached.
 SAFETY_SCORE_RELAY_TIMEOUT_SECONDS = float(os.environ.get("SAFETY_SCORE_RELAY_TIMEOUT_SECONDS", "4"))
 
 _UNSAFE_LABEL_RE = re.compile(r'[\\"\n\r]')
@@ -44,15 +48,32 @@ def _sanitize_label(value: str) -> str:
     return _UNSAFE_LABEL_RE.sub(lambda m: "\\" + m.group(0), value)
 
 
-def _parse_scalar(envelope: dict) -> float | None:
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(base_url=PROM_URL, timeout=10.0)
+    return _client
+
+
+async def close_prom_client() -> None:
+    global _client
+    if _client is not None and not _client.is_closed:
+        await _client.aclose()
+        _client = None
+
+
+def _parse_envelope(data: dict) -> float | None:
     """Extract a single scalar from a Prometheus /api/v1/query response
-    envelope. Returns None for a legitimately empty result or a NaN —
+    envelope. Returns None for a legitimately empty result or a NaN -
     the caller can't distinguish that from a relay failure by this return
     value alone, which is why callers that need to (fetch_cluster_utilization)
     catch cluster_relay.RelayError separately instead of relying on this."""
-    if envelope.get("status") != "success":
+    if data.get("status") != "success":
         return None
-    results = envelope.get("data", {}).get("result", [])
+    results = data.get("data", {}).get("result", [])
     if not results:
         return None
     try:
@@ -64,25 +85,44 @@ def _parse_scalar(envelope: dict) -> float | None:
     return value
 
 
-async def _query(
-    session: AsyncSession, org_id: uuid.UUID, promql: str, time: datetime, *, timeout: float | None = None
-) -> float | None:
+async def _query_direct(promql: str, time: datetime) -> float | None:
+    """Legacy/local path: query PROM_URL directly over HTTP. No DB
+    session involved, so concurrent calls (asyncio.gather) are safe."""
+    client = _get_client()
     try:
-        envelope = await cluster_relay.relay_query(
-            session, org_id, promql, "instant", {"time": time.timestamp()}, timeout=timeout
+        resp = await client.get(
+            "/api/v1/query",
+            params={"query": promql, "time": time.timestamp()},
+        )
+        resp.raise_for_status()
+        return _parse_envelope(resp.json())
+    except (httpx.HTTPError, KeyError, IndexError, ValueError):
+        return None
+
+
+async def _query(
+    session: AsyncSession, cluster_id: uuid.UUID | None, promql: str, time: datetime,
+    *, timeout: float | None = None,
+) -> float | None:
+    if cluster_id is None:
+        return await _query_direct(promql, time)
+    try:
+        envelope = await cluster_relay.queue_and_wait(
+            session, cluster_id, promql, "instant", {"time": time.timestamp()}, timeout=timeout,
         )
     except cluster_relay.RelayError as e:
-        logger.warning("Relay query failed for org %s: %s", org_id, e)
+        logger.warning("Relay query failed for cluster %s: %s", cluster_id, e)
         return None
-    return _parse_scalar(envelope)
+    return _parse_envelope(envelope)
 
 
 async def fetch_metrics_at(
-    session: AsyncSession, org_id: uuid.UUID, service: str, namespace: str, window: str, timestamp: datetime,
+    session: AsyncSession, cluster_id: uuid.UUID | None, service: str, namespace: str,
+    window: str, timestamp: datetime,
 ) -> dict[str, float | None]:
     svc, ns = _sanitize_label(service), _sanitize_label(namespace)
     error_rate = await _query(
-        session, org_id,
+        session, cluster_id,
         f'sum(rate(http_requests_total{{service="{svc}",'
         f'namespace="{ns}",status=~"5.."}}[{window}]))'
         f' / '
@@ -92,7 +132,7 @@ async def fetch_metrics_at(
     )
 
     latency_raw = await _query(
-        session, org_id,
+        session, cluster_id,
         f'histogram_quantile(0.99,'
         f'sum(rate(http_request_duration_seconds_bucket{{service="{svc}",'
         f'namespace="{ns}"}}[{window}])) by (le))',
@@ -101,7 +141,7 @@ async def fetch_metrics_at(
     latency_p99_ms = latency_raw * 1000 if latency_raw is not None else None
 
     restarts = await _query(
-        session, org_id,
+        session, cluster_id,
         f'sum(increase(kube_pod_container_status_restarts_total'
         f'{{namespace="{ns}",container="{svc}"}}[{window}]))',
         timestamp,
@@ -115,44 +155,51 @@ async def fetch_metrics_at(
 
 
 async def fetch_cluster_utilization(
-    session: AsyncSession, org_id: uuid.UUID, timestamp: datetime,
+    session: AsyncSession, cluster_id: uuid.UUID | None, timestamp: datetime,
 ) -> dict[str, float | bool | None]:
     """Cluster-wide CPU/memory utilization percentage, from node_exporter.
 
-    Used by the safety score's "cluster is under load" risk factor — this
+    Used by the safety score's "cluster is under load" risk factor - this
     is intentionally cluster-wide (not per-service), unlike fetch_metrics_at.
 
-    Run concurrently, not sequentially: this is called synchronously from
-    the GitHub webhook handler (safety score is computed on
-    workflow_run.requested, not in the agent's async loop), so a slow or
-    unreachable relay must not cost two serial timeouts on top of each
-    other and risk exceeding GitHub's webhook delivery timeout.
-
     Returns an explicit `unreachable` flag rather than silently folding a
-    relay failure into the same None as "genuinely no data" — the caller
+    relay failure into the same None as "genuinely no data" - the caller
     (safety_score.py) records this in `risk_factors` so a 0-point cluster
-    factor because the org has no connected cluster reads differently from
-    a 0-point factor because the cluster is simply under 75%/80% load.
+    factor because the org has no *connected* cluster reads differently
+    from a 0-point factor because the cluster is simply under 75%/80% load.
+
+    The two queries run sequentially on the relay path (not
+    asyncio.gather) - both would otherwise call cluster_relay.queue_and_wait
+    concurrently on the same AsyncSession, which SQLAlchemy's AsyncSession
+    does not support from more than one concurrent task. The legacy direct
+    path has no such constraint (a plain httpx client, no shared session)
+    and keeps its concurrency.
     """
     cpu_promql = "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))"
     mem_promql = "100 * (1 - avg(node_memory_MemAvailable_bytes) / avg(node_memory_MemTotal_bytes))"
+
+    if cluster_id is None:
+        cpu_pct, mem_pct = await asyncio.gather(
+            _query_direct(cpu_promql, timestamp),
+            _query_direct(mem_promql, timestamp),
+        )
+        return {"cpu_pct": cpu_pct, "mem_pct": mem_pct, "unreachable": False}
+
     try:
-        cpu_envelope, mem_envelope = await asyncio.gather(
-            cluster_relay.relay_query(
-                session, org_id, cpu_promql, "instant", {"time": timestamp.timestamp()},
-                timeout=SAFETY_SCORE_RELAY_TIMEOUT_SECONDS,
-            ),
-            cluster_relay.relay_query(
-                session, org_id, mem_promql, "instant", {"time": timestamp.timestamp()},
-                timeout=SAFETY_SCORE_RELAY_TIMEOUT_SECONDS,
-            ),
+        cpu_envelope = await cluster_relay.queue_and_wait(
+            session, cluster_id, cpu_promql, "instant", {"time": timestamp.timestamp()},
+            timeout=SAFETY_SCORE_RELAY_TIMEOUT_SECONDS,
+        )
+        mem_envelope = await cluster_relay.queue_and_wait(
+            session, cluster_id, mem_promql, "instant", {"time": timestamp.timestamp()},
+            timeout=SAFETY_SCORE_RELAY_TIMEOUT_SECONDS,
         )
     except cluster_relay.RelayError as e:
-        logger.info("Cluster utilization unreachable for org %s: %s", org_id, e)
+        logger.info("Cluster utilization unreachable for cluster %s: %s", cluster_id, e)
         return {"cpu_pct": None, "mem_pct": None, "unreachable": True}
 
     return {
-        "cpu_pct": _parse_scalar(cpu_envelope),
-        "mem_pct": _parse_scalar(mem_envelope),
+        "cpu_pct": _parse_envelope(cpu_envelope),
+        "mem_pct": _parse_envelope(mem_envelope),
         "unreachable": False,
     }
