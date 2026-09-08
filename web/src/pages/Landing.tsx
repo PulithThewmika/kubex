@@ -1,9 +1,17 @@
-import { Hero } from '../components/landing/Hero'
+import { lazy, Suspense } from 'react'
 import { HowItWorks } from '../components/landing/HowItWorks'
 import { Features } from '../components/landing/Features'
 import { IntegrationTiers } from '../components/landing/IntegrationTiers'
 import { LandingFooter } from '../components/landing/LandingFooter'
 import { Logo } from '../components/layout/Logo'
+
+// gsap + ScrollTrigger are heavy and only the marketing hero needs them — keep
+// them out of the app bundle and the test import graph.
+const LipScrollZoominAnimation = lazy(() =>
+  import('@/components/ui/lip-scroll-zoomin-animation').then((m) => ({
+    default: m.LipScrollZoominAnimation,
+  })),
+)
 
 const GITHUB_HREF = '/auth/github?redirect=%2Fapp'
 
@@ -40,7 +48,9 @@ export function Landing({ isAuthenticated = false }: { isAuthenticated?: boolean
       <div className="relative">
         <LandingNav cta={cta} />
         <main>
-          <Hero cta={cta} />
+          <Suspense fallback={<div className="min-h-screen" />}>
+            <LipScrollZoominAnimation />
+          </Suspense>
           <HowItWorks />
           <Features />
           <IntegrationTiers cta={cta} />
