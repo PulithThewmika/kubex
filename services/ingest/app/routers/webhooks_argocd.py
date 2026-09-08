@@ -15,6 +15,7 @@ from ..correlation.engine import (
     utcnow,
 )
 from ..db import get_session
+from ..models.cluster import Cluster
 from ..models.deployment import Deployment
 from ..models.pipeline_event import PipelineEvent
 
@@ -27,7 +28,7 @@ router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 async def argocd_webhook(
     request: Request,
     session: AsyncSession = Depends(get_session),
-    _auth: None = Depends(verify_argocd_token),
+    cluster: Cluster | None = Depends(verify_argocd_token),
 ):
     payload = await request.json()
 
@@ -38,10 +39,16 @@ async def argocd_webhook(
     operation_state = app_data.get("status", {}).get("operationState", {})
     event_type = payload.get("type", "unknown")
 
-    # Read-only lookup (no auto-registration) so an event for an unknown
-    # app doesn't create a service row before we even know whether this
-    # event has a usable revision.
-    org_id = await resolve_org_id(session, argocd_app=app_name or None)
+    if cluster is not None:
+        # Authenticated as a specific connected cluster (per-cluster
+        # agent token) — its org_id is authoritative, unlike the legacy
+        # path below which has to guess from an argocd_app name match.
+        org_id = cluster.org_id
+    else:
+        # Legacy global-secret path: read-only lookup (no auto-registration)
+        # so an event for an unknown app doesn't create a service row
+        # before we even know whether this event has a usable revision.
+        org_id = await resolve_org_id(session, argocd_app=app_name or None)
 
     await session.execute(
         PipelineEvent.__table__.insert().values(

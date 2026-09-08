@@ -90,6 +90,18 @@ def _default_mock_execute(stmt, params=None):
         result = MagicMock()
         result.scalar_one_or_none.return_value = TEST_ORG_ID
         return result
+    if "token_hash" in str(stmt):
+        # find_cluster_by_token's bcrypt-walk (select(Cluster)) — matched on
+        # "token_hash" rather than "clusters" since several raw-SQL API
+        # queries LEFT JOIN clusters without selecting that column, and a
+        # bare "clusters" substring match would swallow those too. Empty by
+        # default so the legacy-token webhook tests (which never register a
+        # cluster) fall through to "no per-cluster match" instead of
+        # iterating a MagicMock. Tests that need an actual cluster match
+        # set mock_session.execute.return_value/side_effect directly.
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = []
+        return result
     return DEFAULT
 
 
