@@ -69,17 +69,17 @@ export function GrafanaPanel({ uid, panelId, service, from = 'now-6h', to = 'now
   }, [src])
 
   return (
-    <div className="relative h-64 overflow-hidden border-2 border-border-strong bg-surface">
+    <div className="relative h-64 overflow-hidden border-2 border-paper-line-soft bg-paper-raised">
       {status === 'loading' && (
-        <div className="absolute inset-0 flex items-center justify-center gap-2 font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
-          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-border border-t-accent" aria-hidden="true" />
+        <div className="absolute inset-0 flex items-center justify-center gap-2 font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-paper-line-soft border-t-accent" aria-hidden="true" />
           Loading {title}
         </div>
       )}
       {status === 'no-source' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 p-4 text-center">
-          <p className="font-heading text-sm font-bold uppercase tracking-tight text-text">No metrics source connected</p>
-          <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+          <p className="font-heading text-sm font-bold uppercase tracking-tight text-ink">No metrics source connected</p>
+          <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
             {title} needs a connected cluster. Connect one to start seeing metrics.
           </p>
           <Link
@@ -92,8 +92,8 @@ export function GrafanaPanel({ uid, panelId, service, from = 'now-6h', to = 'now
       )}
       {status === 'error' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 p-4 text-center">
-          <p className="font-heading text-sm font-bold uppercase tracking-tight text-text">Panel failed to load</p>
-          <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+          <p className="font-heading text-sm font-bold uppercase tracking-tight text-ink">Panel failed to load</p>
+          <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
             The {title} panel couldn't be rendered. Try again shortly.
           </p>
         </div>
