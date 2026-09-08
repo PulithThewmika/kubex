@@ -91,6 +91,13 @@ class TestExtractImageTagFromImages:
         assert extract_image_tag_from_images("  ") is None
         assert extract_image_tag_from_images("[]") is None
 
+    def test_json_array_from_webhook_template(self):
+        # {{toJson .app.status.summary.images}} deserializes to a real list,
+        # not a string — the on-sync-* webhook templates hit this path.
+        images = ["ghcr.io/o/app-frontend:abc1234", "ghcr.io/o/app-orders:abc1234"]
+        assert extract_image_tag_from_images(images) == "abc1234"
+        assert extract_image_tag_from_images([]) is None
+
 
 # ── parse_iso_timestamp ────────────────────────────────────────────
 
