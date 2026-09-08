@@ -66,6 +66,18 @@ async def test_login_redirects_to_github_authorize(client):
 
 
 @pytest.mark.asyncio
+async def test_login_redirect_uri_uses_shell_url_not_request_host(client):
+    # Behind Vercel's rewrite the request Host is the API destination, not
+    # the browser origin. redirect_uri must come from SHELL_URL or GitHub
+    # sends the callback (and its session cookie) to the wrong origin.
+    async with AsyncClient(transport=ASGITransport(app=client), base_url="http://api-host") as ac:
+        resp = await ac.get("/auth/github", follow_redirects=False)
+
+    qs = parse_qs(urlparse(resp.headers["location"]).query)
+    assert qs["redirect_uri"] == [f"{SHELL_URL}/auth/github/callback"]
+
+
+@pytest.mark.asyncio
 async def test_login_preserves_relative_redirect_param(client):
     async with AsyncClient(transport=ASGITransport(app=client), base_url="http://test") as ac:
         resp = await ac.get("/auth/github?redirect=/dashboard", follow_redirects=False)
