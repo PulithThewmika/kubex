@@ -1,4 +1,4 @@
-import { EmptyState } from '../components/EmptyState'
+import { NoServicesEmpty } from '../components/NoServicesEmpty'
 import { PageHeader } from '../components/PageHeader'
 import { ServiceCardGrid } from '../components/ServiceCardGrid'
 import { useServices } from '../hooks/useServices'
@@ -22,12 +22,7 @@ export function Overview() {
           Failed to load services. Retrying automatically.
         </div>
       ) : !isLoading && services?.length === 0 ? (
-        <EmptyState
-          image="/Noservice.png"
-          title="No services yet"
-          description="Services show up here once a deployment webhook fires. Connect a repository to get started."
-          action={{ label: 'Connect a repository', to: '/app/settings?tab=connections' }}
-        />
+        <NoServicesEmpty />
       ) : (
         <ServiceCardGrid services={services} isLoading={isLoading} />
       )}
