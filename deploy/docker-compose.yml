@@ -46,7 +46,7 @@ services:
       PROM_URL: ${PROM_URL:-http://host.docker.internal:9090}
       OBSERVATION_WINDOW: ${OBSERVATION_WINDOW:-15m}
       BASELINE_WINDOW: ${BASELINE_WINDOW:-30m}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       MCP_SERVER_URL: ${MCP_SERVER_URL:-http://mcp-server:3001/mcp}
       GRAFANA_URL: ${GRAFANA_URL:-http://grafana:3000}
       GRAFANA_SERVICE_ACCOUNT_TOKEN: ${GRAFANA_SERVICE_ACCOUNT_TOKEN:-}
@@ -131,7 +131,7 @@ services:
       GF_SERVER_SERVE_FROM_SUB_PATH: "false"
       # Only the fields datasources.yml's $__env{} expansion needs —
       # deliberately NOT `env_file: ../.env`, which would hand this
-      # container every ingest secret (ANTHROPIC_API_KEY,
+      # container every ingest secret (GEMINI_API_KEY,
       # MCP_INTERNAL_TOKEN, JWT_SECRET, GitHub OAuth/App secrets) it has
       # no reason to hold.
       SUPABASE_DB_HOST: ${SUPABASE_DB_HOST:-}
