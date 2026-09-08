@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { EmptyState } from '../components/EmptyState'
+import { PageHeader } from '../components/PageHeader'
 import { ServiceCardGrid } from '../components/ServiceCardGrid'
 import { useServices } from '../hooks/useServices'
 import { useClusters } from '../hooks/useClusters'
@@ -76,7 +77,7 @@ export function Services() {
 
   return (
     <div className="p-6">
-      <h1 className="mb-4 font-heading text-xl font-semibold text-text">Services</h1>
+      <PageHeader title="Services" description="Search, filter, and sort every tracked service." />
 
       <div className="mb-5 flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
@@ -86,7 +87,7 @@ export function Services() {
             value={query}
             onChange={(e) => setParam('q', e.target.value)}
             placeholder="Service name"
-            className="w-52 rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm text-text placeholder:text-text-muted focus:border-accent focus:outline-none"
+            className="w-52 rounded-md border border-border-strong bg-surface px-2.5 py-1.5 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
           />
         </label>
 
@@ -96,7 +97,7 @@ export function Services() {
             <select
               value={clusterFilter}
               onChange={(e) => setParam('cluster', e.target.value)}
-              className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
+              className="rounded-md border border-border-strong bg-surface px-2.5 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
             >
               <option value="">All clusters</option>
               {clusters?.map((c) => (
@@ -114,7 +115,7 @@ export function Services() {
           <select
             value={sort}
             onChange={(e) => setParam('sort', e.target.value)}
-            className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
+            className="rounded-md border border-border-strong bg-surface px-2.5 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
           >
             {SORTS.map((s) => (
               <option key={s.id} value={s.id}>
@@ -126,7 +127,9 @@ export function Services() {
       </div>
 
       {isError ? (
-        <p className="text-sm text-failed">Failed to load services. Retrying automatically.</p>
+        <div className="rounded-xl border border-failed/30 bg-failed/5 p-4 text-sm text-failed">
+          Failed to load services. Retrying automatically.
+        </div>
       ) : !isLoading && visible.length === 0 ? (
         services && services.length > 0 ? (
           <EmptyState
