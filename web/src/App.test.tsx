@@ -129,7 +129,7 @@ describe('App routing', () => {
 
     await renderApp()
 
-    expect(await screen.findByRole('heading', { name: /page not found/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /lost/i })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Overview' })).not.toBeInTheDocument()
   })
 
@@ -139,7 +139,7 @@ describe('App routing', () => {
 
     await renderApp()
 
-    expect(await screen.findByRole('heading', { name: /page not found/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /lost/i })).toBeInTheDocument()
   })
 })
 
