@@ -32,8 +32,8 @@ export function OrgSwitcher({ onSwitched }: { onSwitched: () => void }) {
   }
 
   return (
-    <div className="border-b border-border py-1">
-      <p className="px-3 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-text-faint">
+    <div className="border-b-2 border-text py-1">
+      <p className="px-3 pb-1 pt-1.5 font-body text-[11px] font-bold uppercase tracking-wide text-text-faint">
         Switch organization
       </p>
       {memberships.map((m) => {
@@ -45,8 +45,8 @@ export function OrgSwitcher({ onSwitched }: { onSwitched: () => void }) {
             role="menuitem"
             disabled={switching}
             onClick={() => handleSwitch(m.org_id)}
-            className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-surface disabled:opacity-50 ${
-              active ? 'font-medium text-accent' : 'text-text-muted hover:text-text'
+            className={`flex w-full items-center justify-between px-3 py-2 text-left font-body text-xs font-bold uppercase tracking-wide transition-colors hover:bg-surface disabled:opacity-50 ${
+              active ? 'text-accent' : 'text-text-muted hover:text-text'
             }`}
           >
             <span className="truncate">{m.org_name}</span>
