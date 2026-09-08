@@ -88,7 +88,7 @@ export function Alerts() {
   return (
     <div className="p-4">
       <div className="mb-4 flex items-center gap-3 border-b-2 border-paper-line pb-3">
-        <h1 className="font-display text-3xl uppercase tracking-tight text-ink sm:text-4xl">Alerts</h1>
+        <h1 className="font-heading text-2xl font-bold uppercase tracking-tight text-ink sm:text-3xl">Alerts</h1>
         {activeCount > 0 && (
           <span className="border-2 border-failed bg-failed/10 px-2 py-0.5 font-body text-xs font-bold uppercase tabular-nums tracking-wide text-failed">
             {activeCount} active
