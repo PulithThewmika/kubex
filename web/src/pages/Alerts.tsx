@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { formatDistanceStrict, formatDistanceToNow } from 'date-fns'
 import { AlertSeverityBadge } from '../components/AlertSeverityBadge'
 import { EmptyState } from '../components/EmptyState'
+import { IllustratedEmpty } from '../components/IllustratedEmpty'
 import { PageHeader } from '../components/PageHeader'
 import { useAlerts } from '../hooks/useAlerts'
 import type { Alert } from '../types/alert'
@@ -139,20 +140,15 @@ export function Alerts() {
         </ul>
       ) : visible.length === 0 ? (
         activeFilter === 'active' ? (
-          <div
-            role="status"
-            className="flex flex-col items-center gap-4 border-2 border-paper-line-soft bg-paper-raised px-4 py-10 text-center"
-          >
-            <img
-              src="/Noalerts.png"
-              alt=""
-              className="w-full max-w-xl select-none object-contain"
-            />
-            <h2 className="font-heading text-xl font-bold uppercase tracking-tight text-ink sm:text-2xl">All clear</h2>
-            <p className="max-w-md font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              No active alerts. Every service is within its health thresholds.
-            </p>
-          </div>
+          <IllustratedEmpty
+            image="/Noalerts.png"
+            title="All clear"
+            lines={[
+              'No active alerts. Every service is within its health thresholds.',
+              'KubeX scores each deployment and only fires an alert when error rate, latency or restarts regress against the baseline window.',
+              'Anything that has fired stays in the Resolved and All tabs with its time-to-resolve.',
+            ]}
+          />
         ) : (
           <EmptyState
             title="Nothing here"
