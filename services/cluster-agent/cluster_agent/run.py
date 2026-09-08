@@ -214,6 +214,14 @@ async def _query_relay_tick(cluster_id: str) -> None:
                     p.get("start", ""), p.get("end", ""),
                     p.get("limit", 1000), p.get("direction", "forward"),
                 )
+            elif kind == "range":
+                if prom_base_url is None:
+                    logger.warning("Skipping %s query %s: Prometheus not discovered", kind, q["id"])
+                    continue
+                p = q.get("params") or {}
+                result = await prometheus.query_range(
+                    prom_base_url, q["promql"], p.get("start", ""), p.get("end", ""), p.get("step", ""),
+                )
             else:
                 if prom_base_url is None:
                     logger.warning("Skipping %s query %s: Prometheus not discovered", kind, q["id"])

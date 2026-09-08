@@ -79,3 +79,31 @@ async def test_query_rejects_oversized_promql_without_hitting_prometheus() -> No
     with pytest.raises(prometheus.QueryTooLongError):
         await prometheus.query("http://prom.test", "up" * (prometheus.MAX_PROMQL_LENGTH))
     await prometheus.close_client()
+
+
+@pytest.mark.asyncio
+async def test_query_range_returns_raw_response_json() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["query"] == 'up{service="frontend"}'
+        assert request.url.params["start"] == "0"
+        assert request.url.params["end"] == "100"
+        assert request.url.params["step"] == "15s"
+        return httpx.Response(200, json={"status": "success", "data": {"resultType": "matrix", "result": []}})
+
+    prometheus._client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://prom.test")
+    prometheus._base_url = "http://prom.test"
+    result = await prometheus.query_range("http://prom.test", 'up{service="frontend"}', "0", "100", "15s")
+    assert result == {"status": "success", "data": {"resultType": "matrix", "result": []}}
+    await prometheus.close_client()
+
+
+@pytest.mark.asyncio
+async def test_query_range_rejects_oversized_promql_without_hitting_prometheus() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("should never reach Prometheus")
+
+    prometheus._client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://prom.test")
+    prometheus._base_url = "http://prom.test"
+    with pytest.raises(prometheus.QueryTooLongError):
+        await prometheus.query_range("http://prom.test", "up" * (prometheus.MAX_PROMQL_LENGTH), "0", "1", "15s")
+    await prometheus.close_client()
