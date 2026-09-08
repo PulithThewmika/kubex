@@ -16,7 +16,7 @@ export function MaxFeatures() {
       <TornEdge tone="text" className="-mt-4 sm:-mt-8" />
       <div className="mx-auto max-w-6xl px-4 pt-10 sm:px-6">
         <Reveal>
-          <h2 className="font-display text-6xl uppercase leading-[0.82] text-flare sm:text-8xl lg:text-[8.5rem]">
+          <h2 className="font-display text-6xl uppercase leading-[0.82] text-accent sm:text-8xl lg:text-[8.5rem]">
             Deployment-aware
           </h2>
         </Reveal>
@@ -28,8 +28,8 @@ export function MaxFeatures() {
                 className="flex h-full flex-col border-2 border-background bg-text"
                 style={{ transform: `rotate(${(i % 2 === 0 ? -1 : 1) * 1.2}deg)` }}
               >
-                <div className="flex items-center justify-between bg-background px-4 py-2 text-flare halftone">
-                  <span className="font-display text-lg uppercase tracking-wider text-flare">KUBEX</span>
+                <div className="flex items-center justify-between bg-background px-4 py-2 text-accent halftone">
+                  <span className="font-display text-lg uppercase tracking-wider text-accent">KUBEX</span>
                   <span className="font-display text-lg tabular-nums text-text">#{f.no}</span>
                 </div>
                 <div className="flex flex-1 flex-col p-5">
@@ -42,7 +42,7 @@ export function MaxFeatures() {
         </div>
 
         <Reveal>
-          <h2 className="mt-12 text-right font-display text-5xl uppercase leading-[0.82] text-flare sm:text-8xl lg:text-[8.5rem]">
+          <h2 className="mt-12 text-right font-display text-5xl uppercase leading-[0.82] text-accent sm:text-8xl lg:text-[8.5rem]">
             by design
           </h2>
         </Reveal>

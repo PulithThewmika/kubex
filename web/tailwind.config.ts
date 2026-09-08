@@ -18,16 +18,12 @@ export default {
         border: '#262A31',
         'border-strong': '#363B44',
 
-        // The one accent — luminous green (CSS SpringGreen). Distinct in hue
-        // from the muted `healthy` status green (#3FB950): far brighter,
-        // cooler, decorative not stateful.
-        accent: '#00FF7F',
-        'accent-hover': '#7DFFB4',
-
-        // Secondary poster colour — the original brand orange, kept for the
-        // "Deployment-aware / by design" section only (deliberate colour
-        // block, the maximalist landing plays hot vs. cold section to section).
-        flare: '#F97316',
+        // The one accent — a warm poster orange (Material Deep Orange 500).
+        // Warmer and easier on the eye than a neon green over long reading,
+        // and it's the maximalist landing's single hot colour. Kept clear of
+        // the muted `healthy` status green so it never reads as state.
+        accent: '#FF5722',
+        'accent-hover': '#FF7A50',
 
         // Text ladder.
         text: '#E6E8EB',
