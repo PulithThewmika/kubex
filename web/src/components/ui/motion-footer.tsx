@@ -208,7 +208,7 @@ export function CinematicFooter({ cta }: { cta: Cta }) {
       {/* Curtain-reveal wrapper: clip-path makes it the containing block for
           the fixed footer, so the footer only shows within this box. */}
       <div ref={wrapperRef} className="relative h-screen w-full" style={{ clipPath: 'inset(0)' }}>
-        <footer className="kx-footer fixed bottom-0 left-0 flex h-screen w-full flex-col overflow-hidden border-t-2 border-background bg-text pt-14 text-background sm:pt-16">
+        <footer className="kx-footer fixed bottom-0 left-0 flex h-screen w-full flex-col overflow-hidden border-t-2 border-background bg-text pt-16 text-background sm:pt-20">
           {/* Halftone texture */}
           <div
             aria-hidden="true"
