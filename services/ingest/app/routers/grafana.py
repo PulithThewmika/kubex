@@ -153,9 +153,12 @@ async def grafana_proxy(
 
     params = {
         "panelId": panelId,
-        # Prometheus panels match service=~"$service" (RE2, auto-anchored);
-        # each component is escaped so it's a literal alternative.
-        "var-service": "|".join(_re2_quote(c) for c in components),
+        # Two distinct vars: SQL panels filter on the logical KubeX
+        # service name (services.name); Prometheus panels match
+        # service=~"$component" against the per-component labels a
+        # rolled-up service expands to (RE2, each component escaped).
+        "var-service": service,
+        "var-component": "|".join(_re2_quote(c) for c in components),
         "var-org": str(user.org_id),
         "from": from_,
         "to": to,

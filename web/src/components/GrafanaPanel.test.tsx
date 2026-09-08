@@ -46,4 +46,19 @@ describe('GrafanaPanel', () => {
     expect(screen.queryByText('Panel failed to load')).not.toBeInTheDocument()
     expect(screen.getByText(/loading error rate/i)).toBeInTheDocument()
   })
+
+  it('renders the PNG from a single fetch (no second render request)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      blob: async () => new Blob(['png']),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    vi.stubGlobal('URL', { ...URL, createObjectURL: () => 'blob:x', revokeObjectURL: () => {} })
+
+    renderPanel()
+
+    await waitFor(() => expect(screen.getByRole('img', { name: 'Error Rate' })).toBeInTheDocument())
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
 })
