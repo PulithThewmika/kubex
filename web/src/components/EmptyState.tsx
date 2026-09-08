@@ -42,11 +42,18 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
   return (
     <div
       role="status"
-      className="mx-auto flex max-w-sm flex-col items-center gap-2 px-4 py-12 text-center"
+      className="mx-auto flex max-w-sm flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-14 text-center"
     >
-      {icon && <div className="mb-1 text-text-muted">{icon}</div>}
+      <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface text-text-muted">
+        {icon ?? (
+          <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.75" />
+            <path d="M3 9h18M8 4v16" stroke="currentColor" strokeWidth="1.75" />
+          </svg>
+        )}
+      </div>
       <h3 className="font-heading text-base font-semibold text-text">{title}</h3>
-      {description && <p className="text-sm text-text-muted">{description}</p>}
+      {description && <p className="text-sm leading-relaxed text-text-muted">{description}</p>}
       {action && (
         <div className="mt-3">
           <ActionButton action={action} />

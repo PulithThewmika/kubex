@@ -12,11 +12,11 @@ export function ServiceCard({ service }: ServiceCardProps) {
   const shortSha = latest_deploy?.commit_sha ? latest_deploy.commit_sha.slice(0, 7) : null
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4 transition-colors hover:border-accent/50">
+    <div className="flex h-full flex-col gap-3 rounded-xl border border-border bg-surface p-4 shadow-card transition-all hover:border-border-strong hover:bg-surface-raised">
       <div className="flex items-start justify-between gap-2">
-        <div className="flex flex-col gap-1">
+        <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex items-center gap-2">
-            <span className="font-heading text-base font-semibold text-text">{name}</span>
+            <span className="truncate font-heading text-base font-semibold text-text">{name}</span>
             {active_alert_count > 0 && (
               <span
                 className="flex items-center gap-1 rounded-full bg-failed/10 px-1.5 py-0.5 text-xs font-medium text-failed"
@@ -27,23 +27,24 @@ export function ServiceCard({ service }: ServiceCardProps) {
               </span>
             )}
           </div>
-          <span className="w-fit rounded border border-border px-1.5 py-0.5 text-xs text-text-muted">
+          <span className="w-fit rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[11px] text-text-muted">
             {namespace}
           </span>
         </div>
         <HealthRing score={health?.score ?? null} verdict={health?.verdict ?? null} size={48} />
       </div>
 
-      <div className="text-xs text-text-muted">
+      <div className="mt-auto text-xs text-text-muted">
         {latest_deploy ? (
           <span>
-            {shortSha ?? latest_deploy.status} by {latest_deploy.author ?? 'unknown'}
+            <span className="font-mono text-text">{shortSha ?? latest_deploy.status}</span> by{' '}
+            {latest_deploy.author ?? 'unknown'}
             {latest_deploy.finished_at
-              ? ` — ${formatDistanceToNow(new Date(latest_deploy.finished_at), { addSuffix: true })}`
-              : ' — in progress'}
+              ? `, ${formatDistanceToNow(new Date(latest_deploy.finished_at), { addSuffix: true })}`
+              : ', in progress'}
           </span>
         ) : (
-          <span>No deploys yet</span>
+          <span className="text-text-faint">No deploys yet</span>
         )}
       </div>
 
