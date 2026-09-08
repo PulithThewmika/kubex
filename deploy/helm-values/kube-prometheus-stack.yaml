@@ -87,7 +87,12 @@ alertmanager:
             color: >-
               {{ if eq .Status "resolved" }}good{{ else if eq .CommonLabels.severity "critical" }}danger{{ else }}warning{{ end }}
         webhook_configs:
-          - url: http://host.docker.internal:8000/api/alerts/inbound
+          # host.docker.internal only reaches ingest when it's on the SAME
+          # docker host as this Kind cluster (local dev, ingest via
+          # docker-compose). For the Azure VM demo topology (Kind cluster
+          # local, ingest remote), this must be the VM's public URL instead
+          # — swap back to host.docker.internal:8000 for pure local dev.
+          - url: https://kubex-demo-pt.southeastasia.cloudapp.azure.com/api/alerts/inbound
             send_resolved: true
             http_config:
               authorization:
