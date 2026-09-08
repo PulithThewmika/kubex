@@ -1,0 +1,75 @@
+name: MCP Server Image
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "services/mcp-server/**"
+      - ".github/workflows/mcp-server-image.yml"
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - "services/mcp-server/**"
+      - ".github/workflows/mcp-server-image.yml"
+
+# Repo-level default. `packages: write` lives only on the publish job below
+# (zizmor: excessive-permissions) — a PR build never pushes, so it never
+# needs it.
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/puliththewmika/kubex-mcp-server
+
+jobs:
+  # Runs on every PR and push — builds the image without pushing, so a
+  # broken Dockerfile fails CI before merge.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: services/mcp-server
+          push: false
+
+  # Only this job publishes, so only this job gets ghcr.io write access.
+  publish:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: vars
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          floating="${{ github.ref_name == 'main' && 'latest' || github.ref_name }}"
+          {
+            echo "tags<<EOF"
+            printf '%s:%s\n' "$IMAGE" "$short_sha"
+            printf '%s:%s\n' "$IMAGE" "$floating"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          IMAGE: ${{ env.IMAGE }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: services/mcp-server
+          push: true
+          tags: ${{ steps.vars.outputs.tags }}
