@@ -52,7 +52,7 @@ export function Settings() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="font-heading text-2xl font-semibold text-text">Settings</h1>
+      <h1 className="font-heading text-xl font-semibold tracking-tight text-text">Settings</h1>
 
       <div
         role="tablist"

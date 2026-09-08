@@ -27,10 +27,10 @@ export function HowItWorks() {
       <div className="mt-12 grid grid-cols-1 gap-8 sm:grid-cols-3 sm:gap-6">
         {STEPS.map((s, i) => (
           <Reveal key={s.step} delayMs={i * 120}>
-            <div className="border-t border-border pt-5">
-              <span className="font-heading text-sm text-text-muted">{s.step}</span>
+            <div className="border-t-2 border-border pt-5">
+              <span className="font-heading text-lg font-semibold tabular-nums text-accent">{s.step}</span>
               <h3 className="mt-2 font-heading text-lg font-medium text-text">{s.title}</h3>
-              <p className="mt-2 text-sm text-text-muted">{s.body}</p>
+              <p className="mt-2 text-sm leading-relaxed text-text-muted">{s.body}</p>
             </div>
           </Reveal>
         ))}

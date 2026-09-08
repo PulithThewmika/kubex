@@ -63,7 +63,7 @@ export function Modal({ titleId, title, onClose, children, widthClassName = 'max
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
@@ -72,14 +72,21 @@ export function Modal({ titleId, title, onClose, children, widthClassName = 'max
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`flex max-h-[85vh] w-full ${widthClassName} flex-col overflow-y-auto rounded-lg border border-border bg-surface p-6 outline-none`}
+        className={`flex max-h-[85vh] w-full ${widthClassName} animate-fade-in flex-col overflow-y-auto rounded-xl border border-border bg-surface-raised p-6 shadow-raised outline-none`}
       >
         <div className="flex items-center justify-between">
           <h2 id={titleId} className="font-heading text-lg font-semibold text-text">
             {title}
           </h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-text-muted hover:text-text">
-            ✕
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="-mr-1 -mt-1 rounded p-1 text-text-muted transition-colors hover:bg-surface hover:text-text"
+          >
+            <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
           </button>
         </div>
         {children}

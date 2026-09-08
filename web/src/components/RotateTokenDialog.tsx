@@ -53,7 +53,7 @@ export function RotateTokenDialog({ cluster, onClose }: RotateTokenDialogProps) 
               type="button"
               onClick={() => mutation.mutate()}
               disabled={mutation.isPending}
-              className="w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90 disabled:opacity-50"
+              className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px disabled:opacity-50"
             >
               {mutation.isPending ? 'Rotating…' : 'Rotate token'}
             </button>
@@ -79,7 +79,7 @@ export function RotateTokenDialog({ cluster, onClose }: RotateTokenDialogProps) 
           <button
             type="button"
             onClick={onClose}
-            className="w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90"
+            className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px"
           >
             Done
           </button>
