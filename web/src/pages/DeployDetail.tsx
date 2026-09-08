@@ -23,7 +23,7 @@ export function DeployDetail() {
   if (isLoading) {
     return (
       <div className="p-6">
-        <div className="h-40 animate-pulse border-2 border-border-strong bg-surface" />
+        <div className="h-40 animate-pulse border-2 border-paper-line-soft bg-paper-raised" />
       </div>
     )
   }
@@ -42,24 +42,24 @@ export function DeployDetail() {
     <div className="flex flex-col gap-6 p-6">
       <DeployMetadata deployment={deployment} />
       <section className="flex flex-col gap-3">
-        <h2 className="font-heading text-xs font-bold uppercase tracking-[0.15em] text-text-muted">
+        <h2 className="font-heading text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">
           Pipeline timeline
         </h2>
         <PipelineTimeline deployments={[toDeployment(deployment)]} size="large" />
       </section>
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-heading text-xs font-bold uppercase tracking-[0.15em] text-text-muted">
+          <h2 className="font-heading text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">
             Health evidence
           </h2>
           <GrafanaTimeWindowLink deployment={deployment} />
         </div>
         {!deployment.health_assessment ? (
-          <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+          <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
             Assessment pending.
           </p>
         ) : deployment.health_evidence.length === 0 ? (
-          <p className="font-body text-xs font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
+          <p className="font-body text-xs font-semibold uppercase leading-relaxed tracking-wide text-ink-muted">
             Assessed as {deployment.health_assessment.verdict} ({deployment.health_assessment.score}/100) — no
             per-metric evidence available (insufficient request volume in the baseline/observation windows).
           </p>
@@ -124,8 +124,8 @@ function DeployMetadata({ deployment }: { deployment: DeploymentDetail }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-3 border-b-2 border-text pb-5">
-        <h1 className="font-mono text-2xl font-bold text-text sm:text-3xl">
+      <div className="flex flex-wrap items-center gap-3 border-b-2 border-paper-line pb-5">
+        <h1 className="font-mono text-2xl font-bold text-ink sm:text-3xl">
           {commitUrl ? (
             <a href={commitUrl} target="_blank" rel="noreferrer" className="hover:text-accent hover:underline">
               {shortSha}
@@ -134,7 +134,7 @@ function DeployMetadata({ deployment }: { deployment: DeploymentDetail }) {
             shortSha ?? deployment.status
           )}
         </h1>
-        <span className="border-2 border-border-strong bg-surface px-2 py-0.5 font-body text-xs font-bold uppercase tracking-wide text-text-muted">
+        <span className="border-2 border-paper-line-soft bg-paper-raised px-2 py-0.5 font-body text-xs font-bold uppercase tracking-wide text-ink-muted">
           {deployment.status}
         </span>
       </div>
@@ -154,9 +154,9 @@ function DeployMetadata({ deployment }: { deployment: DeploymentDetail }) {
 
 function MetaField({ label, value }: { label: string; value: string | null }) {
   return (
-    <div className="border-2 border-border-strong bg-surface p-3">
-      <div className="font-body text-[11px] font-bold uppercase tracking-wide text-text-faint">{label}</div>
-      <div className="mt-0.5 truncate text-text">{value ?? '—'}</div>
+    <div className="border-2 border-paper-line-soft bg-paper-raised p-3">
+      <div className="font-body text-[11px] font-bold uppercase tracking-wide text-ink-faint">{label}</div>
+      <div className="mt-0.5 truncate text-ink">{value ?? '—'}</div>
     </div>
   )
 }

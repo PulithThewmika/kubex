@@ -39,7 +39,7 @@ function DeliveryStatus({ channel }: { channel: SlackChannel }) {
     return <span className="font-body text-xs font-bold uppercase tracking-wide text-healthy">Delivering</span>
   }
   return (
-    <span className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+    <span className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
       No messages sent yet
     </span>
   )
@@ -49,9 +49,9 @@ function ChannelRow({ channel }: { channel: SlackChannel }) {
   const remove = useRemoveSlackChannel()
   const test = useTestSlackChannel()
   return (
-    <li className="flex flex-col gap-2 border-2 border-border-strong bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
+    <li className="flex flex-col gap-2 border-2 border-paper-line-soft bg-paper-raised p-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-col gap-1">
-        <p className="font-body text-sm font-bold text-text">#{channel.slack_channel_name}</p>
+        <p className="font-body text-sm font-bold text-ink">#{channel.slack_channel_name}</p>
         <DeliveryStatus channel={channel} />
       </div>
       <div className="flex items-center gap-2">
@@ -59,7 +59,7 @@ function ChannelRow({ channel }: { channel: SlackChannel }) {
           type="button"
           onClick={() => test.mutate(channel.id)}
           disabled={test.isPending}
-          className="border-2 border-text-muted px-2.5 py-1.5 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+          className="border-2 border-ink-muted px-2.5 py-1.5 font-body text-xs font-bold uppercase tracking-wide text-ink transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
         >
           {test.isPending ? 'Sending…' : 'Send test'}
         </button>
@@ -91,7 +91,7 @@ function AddChannel({ existingIds }: { existingIds: Set<string> }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-fit border-2 border-text-muted px-3 py-1.5 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent"
+        className="w-fit border-2 border-ink-muted px-3 py-1.5 font-body text-xs font-bold uppercase tracking-wide text-ink transition-colors hover:border-accent hover:text-accent"
       >
         Add a channel
       </button>
@@ -103,7 +103,7 @@ function AddChannel({ existingIds }: { existingIds: Set<string> }) {
   return (
     <div className="flex flex-col gap-2">
       {available.isLoading && (
-        <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+        <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
           Loading channels…
         </p>
       )}
@@ -116,7 +116,7 @@ function AddChannel({ existingIds }: { existingIds: Set<string> }) {
         <ul className="flex flex-col gap-1.5">
           {choices.map((c) => (
             <li key={c.slack_channel_id} className="flex items-center justify-between gap-2">
-              <span className="font-body text-sm text-text">
+              <span className="font-body text-sm text-ink">
                 #{c.name}
                 {c.is_private && !c.is_member && (
                   <span className="ml-2 font-body text-xs font-bold uppercase tracking-wide text-degraded">
@@ -133,14 +133,14 @@ function AddChannel({ existingIds }: { existingIds: Set<string> }) {
                   )
                 }
                 disabled={add.isPending}
-                className="border-2 border-text-muted px-2.5 py-1 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                className="border-2 border-ink-muted px-2.5 py-1 font-body text-xs font-bold uppercase tracking-wide text-ink transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
               >
                 Add
               </button>
             </li>
           ))}
           {choices.length === 0 && (
-            <li className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+            <li className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
               No more channels the bot can see.
             </li>
           )}
@@ -154,7 +154,7 @@ function AddChannel({ existingIds }: { existingIds: Set<string> }) {
       <button
         type="button"
         onClick={() => setOpen(false)}
-        className="w-fit font-body text-xs font-bold uppercase tracking-wide text-text-muted underline-offset-4 hover:text-accent hover:underline"
+        className="w-fit font-body text-xs font-bold uppercase tracking-wide text-ink-muted underline-offset-4 hover:text-accent hover:underline"
       >
         Cancel
       </button>
@@ -170,8 +170,8 @@ export function SlackSection() {
 
   return (
     <section className="mt-10">
-      <h2 className="font-body text-xs font-bold uppercase tracking-[0.15em] text-text-muted">Slack</h2>
-      <p className="mt-1 font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+      <h2 className="font-body text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">Slack</h2>
+      <p className="mt-1 font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
         Get deploy health alerts in your own Slack workspace. Optional — deployments are still tracked
         without it.
       </p>
@@ -193,10 +193,10 @@ export function SlackSection() {
       )}
 
       {isLoading && (
-        <p className="mt-4 font-body text-xs font-semibold uppercase tracking-wide text-text-muted">Loading…</p>
+        <p className="mt-4 font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">Loading…</p>
       )}
       {isError && (
-        <p className="mt-4 font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+        <p className="mt-4 font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
           Slack integration is unavailable on this server.
         </p>
       )}
@@ -214,7 +214,7 @@ export function SlackSection() {
       {data && data.connected && (
         <div className="mt-4 flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-body text-sm text-text">
+            <p className="font-body text-sm text-ink">
               Connected to <span className="font-bold">{data.team_name ?? 'your workspace'}</span>
             </p>
             <button

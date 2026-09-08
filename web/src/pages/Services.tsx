@@ -80,24 +80,24 @@ export function Services() {
       <PageHeader title="Services" description="Search, filter, and sort every tracked service." />
 
       <div className="mb-6 flex flex-wrap items-end gap-4">
-        <label className="flex flex-col gap-1.5 font-body text-[11px] font-bold uppercase tracking-wide text-text-muted">
+        <label className="flex flex-col gap-1.5 font-body text-[11px] font-bold uppercase tracking-wide text-ink-muted">
           Search
           <input
             type="search"
             value={query}
             onChange={(e) => setParam('q', e.target.value)}
             placeholder="Service name"
-            className="w-52 border-2 border-border-strong bg-surface px-2.5 py-2 font-body text-sm normal-case tracking-normal text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
+            className="w-52 border-2 border-paper-line-soft bg-paper-raised px-2.5 py-2 font-body text-sm normal-case tracking-normal text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
           />
         </label>
 
         {(hasClusterAssignments || clusterFilter) && (
-          <label className="flex flex-col gap-1.5 font-body text-[11px] font-bold uppercase tracking-wide text-text-muted">
+          <label className="flex flex-col gap-1.5 font-body text-[11px] font-bold uppercase tracking-wide text-ink-muted">
             Cluster
             <select
               value={clusterFilter}
               onChange={(e) => setParam('cluster', e.target.value)}
-              className="border-2 border-border-strong bg-surface px-2.5 py-2 font-body text-sm normal-case tracking-normal text-text focus:border-accent focus:outline-none"
+              className="border-2 border-paper-line-soft bg-paper-raised px-2.5 py-2 font-body text-sm normal-case tracking-normal text-ink focus:border-accent focus:outline-none"
             >
               <option value="">All clusters</option>
               {clusters?.map((c) => (
@@ -110,12 +110,12 @@ export function Services() {
           </label>
         )}
 
-        <label className="flex flex-col gap-1.5 font-body text-[11px] font-bold uppercase tracking-wide text-text-muted">
+        <label className="flex flex-col gap-1.5 font-body text-[11px] font-bold uppercase tracking-wide text-ink-muted">
           Sort by
           <select
             value={sort}
             onChange={(e) => setParam('sort', e.target.value)}
-            className="border-2 border-border-strong bg-surface px-2.5 py-2 font-body text-sm normal-case tracking-normal text-text focus:border-accent focus:outline-none"
+            className="border-2 border-paper-line-soft bg-paper-raised px-2.5 py-2 font-body text-sm normal-case tracking-normal text-ink focus:border-accent focus:outline-none"
           >
             {SORTS.map((s) => (
               <option key={s.id} value={s.id}>

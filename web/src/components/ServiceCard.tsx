@@ -12,11 +12,11 @@ export function ServiceCard({ service }: ServiceCardProps) {
   const shortSha = latest_deploy?.commit_sha ? latest_deploy.commit_sha.slice(0, 7) : null
 
   return (
-    <div className="flex h-full flex-col gap-3 border-2 border-border-strong bg-surface p-4 transition-colors hover:border-accent">
+    <div className="flex h-full flex-col gap-3 border-2 border-paper-line-soft bg-paper-raised p-4 transition-colors hover:border-accent">
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex items-center gap-2">
-            <span className="truncate font-heading text-base font-bold uppercase tracking-tight text-text">
+            <span className="truncate font-heading text-base font-bold uppercase tracking-tight text-ink">
               {name}
             </span>
             {active_alert_count > 0 && (
@@ -29,17 +29,17 @@ export function ServiceCard({ service }: ServiceCardProps) {
               </span>
             )}
           </div>
-          <span className="w-fit border border-border-strong bg-background px-1.5 py-0.5 font-mono text-[11px] text-text-muted">
+          <span className="w-fit border border-paper-line-soft bg-paper px-1.5 py-0.5 font-mono text-[11px] text-ink-muted">
             {namespace}
           </span>
         </div>
         <HealthRing score={health?.score ?? null} verdict={health?.verdict ?? null} size={48} />
       </div>
 
-      <div className="mt-auto font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+      <div className="mt-auto font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
         {latest_deploy ? (
           <span>
-            <span className="font-mono normal-case tracking-normal text-text">
+            <span className="font-mono normal-case tracking-normal text-ink">
               {shortSha ?? latest_deploy.status}
             </span>{' '}
             by {latest_deploy.author ?? 'unknown'}
@@ -48,7 +48,7 @@ export function ServiceCard({ service }: ServiceCardProps) {
               : ', in progress'}
           </span>
         ) : (
-          <span className="text-text-faint">No deploys yet</span>
+          <span className="text-ink-faint">No deploys yet</span>
         )}
       </div>
 
