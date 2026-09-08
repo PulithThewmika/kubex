@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import tailwindConfig from '../../tailwind.config'
 
 const VERDICT_COLORS: Record<string, string> = {
-  healthy: '#22C55E',
-  degraded: '#F59E0B',
-  failed: '#EF4444',
+  healthy: '#3FB950',
+  degraded: '#D29922',
+  failed: '#F85149',
 }
 
 const TRACK_COLOR = tailwindConfig.theme.extend.colors.border
