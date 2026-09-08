@@ -1,3 +1,4 @@
+import { CinematicFooter } from '@/components/ui/motion-footer'
 import { Reveal } from '../components/landing/Reveal'
 import { Ticker } from '../components/landing/Ticker'
 import { TornEdge } from '../components/landing/TornEdge'
@@ -175,42 +176,6 @@ function FinalCta({ cta }: { cta: Cta }) {
   )
 }
 
-const FOOTER_LINKS = [
-  { label: 'GitHub', href: SOURCE_HREF },
-  { label: 'Docs', href: 'https://github.com/PulithThewmika/kubex#readme' },
-  { label: 'Project board', href: 'https://github.com/users/PulithThewmika/projects/3' },
-]
-
-function Footer() {
-  return (
-    <footer className="overflow-hidden border-t-2 border-text bg-background">
-      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-          <p className="max-w-xs font-body text-xs font-bold uppercase tracking-[0.15em] text-text-faint">
-            Deployment-aware observability. A solo build.
-          </p>
-          <nav className="flex gap-6">
-            {FOOTER_LINKS.map((l) => (
-              <a
-                key={l.label}
-                href={l.href}
-                target="_blank"
-                rel="noreferrer"
-                className="font-body text-xs font-bold uppercase tracking-[0.15em] text-text-muted transition-colors hover:text-accent"
-              >
-                {l.label}
-              </a>
-            ))}
-          </nav>
-        </div>
-        <p className="mt-6 font-display text-[22vw] uppercase leading-[0.75] text-outline text-text/40">
-          KubeX
-        </p>
-      </div>
-    </footer>
-  )
-}
-
 export function Landing({ isAuthenticated = false }: { isAuthenticated?: boolean }) {
   const cta: Cta = isAuthenticated
     ? { href: '/app', label: 'Go to dashboard' }
@@ -228,7 +193,7 @@ export function Landing({ isAuthenticated = false }: { isAuthenticated?: boolean
         <HowItWorks />
         <FinalCta cta={cta} />
       </main>
-      <Footer />
+      <CinematicFooter cta={cta} />
     </div>
   )
 }
