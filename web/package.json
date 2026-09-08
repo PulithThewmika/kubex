@@ -22,7 +22,8 @@
     "react-dom": "^18.3.1",
     "react-markdown": "^9.1.0",
     "react-router-dom": "^7.18.3",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "thinking-orbs": "^0.3.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.1",
