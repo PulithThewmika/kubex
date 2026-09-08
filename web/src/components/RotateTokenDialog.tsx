@@ -43,17 +43,21 @@ export function RotateTokenDialog({ cluster, onClose }: RotateTokenDialogProps) 
     <Modal titleId="rotate-token-title" title={`Rotate token for ${cluster.name}`} onClose={handleClose} widthClassName="max-w-md">
       {!rotated && (
         <div className="mt-4 flex flex-col gap-4">
-          <p className="text-sm text-text-muted">
+          <p className="font-body text-xs font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
             The agent currently running in this cluster will need to be updated with the new token. Its old token
             keeps working for a 10-minute grace period so you have time to redeploy it.
           </p>
-          {mutation.isError && <p className="text-sm text-failed">{(mutation.error as Error).message}</p>}
+          {mutation.isError && (
+            <p className="font-body text-xs font-bold uppercase tracking-wide text-failed">
+              {(mutation.error as Error).message}
+            </p>
+          )}
           <div className="flex gap-3">
             <button
               type="button"
               onClick={() => mutation.mutate()}
               disabled={mutation.isPending}
-              className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px disabled:opacity-50"
+              className="w-fit border-2 border-accent bg-accent px-5 py-2.5 font-body text-xs font-bold uppercase tracking-wide text-background transition-colors hover:bg-accent-hover active:translate-y-px disabled:opacity-50"
             >
               {mutation.isPending ? 'Rotating…' : 'Rotate token'}
             </button>
@@ -61,7 +65,7 @@ export function RotateTokenDialog({ cluster, onClose }: RotateTokenDialogProps) 
               type="button"
               onClick={handleClose}
               disabled={mutation.isPending}
-              className="w-fit rounded-md border border-border px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-background disabled:opacity-50"
+              className="w-fit border-2 border-text-muted px-5 py-2.5 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
             >
               Cancel
             </button>
@@ -71,7 +75,7 @@ export function RotateTokenDialog({ cluster, onClose }: RotateTokenDialogProps) 
 
       {rotated && (
         <div className="mt-4 flex flex-col gap-4">
-          <p className="text-sm text-text-muted">
+          <p className="font-body text-xs font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
             New token — shown only once. Update the agent's <code>CLUSTER_TOKEN</code> secret with this value
             before the old one's grace period expires.
           </p>
@@ -79,7 +83,7 @@ export function RotateTokenDialog({ cluster, onClose }: RotateTokenDialogProps) 
           <button
             type="button"
             onClick={onClose}
-            className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px"
+            className="w-fit border-2 border-accent bg-accent px-5 py-2.5 font-body text-xs font-bold uppercase tracking-wide text-background transition-colors hover:bg-accent-hover active:translate-y-px"
           >
             Done
           </button>
