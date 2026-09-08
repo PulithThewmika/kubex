@@ -60,12 +60,16 @@ async def heartbeat(
     argocd_version: str | None,
     argocd_status: str | None,
     prometheus_status: str | None,
+    prometheus_namespace: str | None = None,
+    prometheus_service: str | None = None,
 ) -> dict:
     body = {
         "agent_version": agent_version,
         "argocd_version": argocd_version,
         "argocd_status": argocd_status,
         "prometheus_status": prometheus_status,
+        "prometheus_namespace": prometheus_namespace,
+        "prometheus_service": prometheus_service,
     }
     resp = await get_client().post("/api/clusters/heartbeat", json=body)
     _raise_for_status(resp)

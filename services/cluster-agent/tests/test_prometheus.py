@@ -84,6 +84,7 @@ async def test_query_rejects_oversized_promql_without_hitting_prometheus() -> No
 @pytest.mark.asyncio
 async def test_query_range_returns_raw_response_json() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/v1/query_range"
         assert request.url.params["query"] == 'up{service="frontend"}'
         assert request.url.params["start"] == "0"
         assert request.url.params["end"] == "100"

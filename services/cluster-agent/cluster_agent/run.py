@@ -163,6 +163,8 @@ async def _heartbeat_tick() -> None:
         argocd_version=_state["argocd_version"],
         argocd_status=_state["argocd_status"],
         prometheus_status=_state["prometheus_status"],
+        prometheus_namespace=_state["prometheus_namespace"],
+        prometheus_service=_state["prometheus_service"],
     )
     if event_buffer.size():
         # Reaching here means the heartbeat POST above just succeeded, so
