@@ -59,6 +59,18 @@ NONCE_COOKIE = "oauth_nonce"
 _client: httpx.AsyncClient | None = None
 
 
+def _github_callback_url() -> str:
+    """Build the OAuth redirect_uri from SHELL_URL rather than
+    request.url_for(). Behind a reverse proxy that rewrites by dialing a
+    fixed destination host (Vercel's rewrites do this for an external
+    destination), request.url_for() resolves to that destination's own
+    Host header — not the browser-facing origin — which sends GitHub's
+    redirect straight to the API host instead of back through the shell's
+    origin. The session cookie then gets set for the wrong origin and the
+    login silently doesn't stick (see deploy runbook B1/B2)."""
+    return urljoin(SHELL_URL, "/auth/github/callback")
+
+
 def _get_client() -> httpx.AsyncClient:
     """Lazily-cached client, mirroring routers/grafana.py's pattern — a new
     AsyncClient per request would pay a fresh TCP/TLS handshake to GitHub
@@ -101,7 +113,7 @@ async def github_login(request: Request, redirect: str | None = Query(default=No
     params = httpx.QueryParams(
         {
             "client_id": GITHUB_CLIENT_ID,
-            "redirect_uri": str(request.url_for("github_callback")),
+            "redirect_uri": _github_callback_url(),
             "scope": OAUTH_SCOPES,
             "state": state,
         }
@@ -223,7 +235,7 @@ async def github_callback(
             "client_id": GITHUB_CLIENT_ID,
             "client_secret": GITHUB_CLIENT_SECRET,
             "code": code,
-            "redirect_uri": str(request.url_for("github_callback")),
+            "redirect_uri": _github_callback_url(),
         },
         headers={"Accept": "application/json"},
     )
