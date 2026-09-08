@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from agent.health_score import clamp, penalty, compute_health_score, _max_of, _sum_of
+import uuid
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, patch
+
+from agent import promql
+from agent.health_score import (
+    clamp, penalty, compute_health_score, _max_of, _sum_of, assess_deployment,
+)
 
 
 # ── clamp ────────────────────────────────────────────────────────────
@@ -275,3 +282,63 @@ class TestAggregationHelpers:
 
     def test_sum_of_empty(self):
         assert _sum_of([]) is None
+
+
+# ── Relay unreachable vs. low traffic (#840) ─────────────────────────
+#
+# Acceptance criterion from #840: an unreachable metrics source and
+# genuinely-low traffic must produce DIFFERENT stored outcomes. Before
+# this fix both collapsed into the low-traffic guard rail's
+# score=100/verdict="healthy" path -- exactly the gotcha that once scored
+# a whole E2E run 100/healthy when the real cause was Prometheus being
+# unreachable.
+
+class _FakeDeployment:
+    def __init__(self):
+        self.id = 1
+        self.service_id = 1
+        self.finished_at = datetime(2026, 8, 4, 12, 0, 0, tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_relay_unreachable_is_not_scored_as_healthy():
+    """A connected remote cluster whose agent never answers must NOT be
+    scored 100/healthy -- it must come back as an explicit, distinguishable
+    "unreachable" outcome."""
+    cluster_id = uuid.uuid4()
+    with patch.object(
+        promql, "query_error_rate", AsyncMock(side_effect=promql.MetricsUnreachableError("timed out")),
+    ), patch.object(promql, "query_latency_p99", AsyncMock(return_value=None)),          patch.object(promql, "query_restarts", AsyncMock(return_value=None)),          patch.object(promql, "query_request_rate", AsyncMock(return_value=None)):
+        score, verdict, details = await assess_deployment(
+            session=object(),
+            deployment=_FakeDeployment(),
+            components=["orders"],
+            namespace="kubex",
+            prometheus_available=True,
+            cluster_id=cluster_id,
+        )
+
+    assert score is None
+    assert verdict == "unknown"
+    assert details["metrics_source"] == "unreachable"
+
+
+@pytest.mark.asyncio
+async def test_genuinely_low_traffic_still_scores_normally():
+    """Genuinely low traffic (relay answers fine, request_rate is just
+    under the threshold) must take the existing low_traffic guard-rail
+    path -- a real, scoreable result -- not the unreachable path."""
+    with patch.object(promql, "query_error_rate", AsyncMock(return_value=0.0)),          patch.object(promql, "query_latency_p99", AsyncMock(return_value=50.0)),          patch.object(promql, "query_restarts", AsyncMock(return_value=0.0)),          patch.object(promql, "query_request_rate", AsyncMock(return_value=0.01)):
+        score, verdict, details = await assess_deployment(
+            session=object(),
+            deployment=_FakeDeployment(),
+            components=["orders"],
+            namespace="kubex",
+            prometheus_available=True,
+            cluster_id=None,
+        )
+
+    assert score is not None
+    assert verdict in ("healthy", "degraded", "failed")
+    assert details["metrics_source"] == "prometheus"
+    assert details["low_traffic"] is True
