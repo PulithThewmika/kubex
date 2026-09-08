@@ -54,7 +54,7 @@ function Hero({ cta }: { cta: Cta }) {
     >
       <div aria-hidden="true" className="absolute inset-0 text-accent/[0.08] halftone-lg" />
       <div className="relative flex w-full flex-1 items-center px-6 pt-16 sm:px-10 sm:pt-20 lg:px-14">
-        <Reveal className="w-full lg:max-w-[46%]">
+        <Reveal className="w-full lg:max-w-[44%] xl:max-w-[40%]">
           <h1 className="font-display text-6xl uppercase leading-[0.82] text-text sm:text-8xl lg:text-8xl">
             <span className="block">Know if your</span>
             <span className="block">last deploy</span>
@@ -83,16 +83,15 @@ function Hero({ cta }: { cta: Cta }) {
           </div>
         </Reveal>
 
-        {/* Collage sits just right of the copy, base on the marquee. Sized to
-            clear the top of the hero so it's never cropped. Dropped on narrow
-            screens. */}
+        {/* Collage anchored to the bottom-right corner, its base meeting the
+            marquee bar. Decorative — dropped on narrow screens. */}
         <img
           src="/hero-image.png"
           alt="An analyst scanning the horizon through binoculars, deployment charts rising behind"
           width={1080}
           height={1147}
           draggable={false}
-          className="pointer-events-none absolute bottom-0 left-[50%] hidden w-[21rem] select-none lg:block xl:w-[27rem] 2xl:w-[30rem]"
+          className="pointer-events-none absolute bottom-0 right-0 hidden w-[36rem] select-none lg:block xl:right-4 xl:w-[44rem] 2xl:w-[48rem]"
         />
       </div>
 
