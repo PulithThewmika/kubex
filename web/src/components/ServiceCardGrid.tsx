@@ -17,12 +17,16 @@ function AddServiceTile() {
     <Link
       to="/app/settings?tab=connections"
       aria-label="Add a new service"
-      className="group flex h-full min-h-[15rem] flex-col items-center justify-center gap-3 border-2 border-dashed border-paper-line-soft bg-paper-raised text-ink-faint outline-offset-4 transition-all duration-300 hover:-translate-y-1 hover:border-solid hover:border-accent hover:text-accent hover:shadow-[6px_6px_0_0_rgba(255,87,34,0.18)]"
+      className="group flex h-full min-h-[15rem] flex-col border-2 border-dashed border-paper-line-soft bg-paper-raised p-6 outline-offset-4 transition-all duration-300 hover:-translate-y-1 hover:border-solid hover:border-accent hover:shadow-[6px_6px_0_0_rgba(255,87,34,0.18)]"
     >
-      <span className="flex h-12 w-12 items-center justify-center border-2 border-current transition-transform duration-300 group-hover:rotate-90">
-        <Plus className="h-6 w-6" strokeWidth={2.5} />
-      </span>
-      <span className="font-body text-xs font-bold uppercase tracking-[0.15em]">Add service</span>
+      <Plus
+        className="h-14 w-14 text-accent transition-transform duration-300 group-hover:rotate-90"
+        strokeWidth={2.5}
+      />
+      <h3 className="mt-3 font-display text-3xl uppercase leading-none text-ink">Add service</h3>
+      <p className="mt-3 font-body text-sm leading-relaxed text-ink-muted">
+        Connect a repository or cluster to start tracking a new service and scoring its deploys.
+      </p>
     </Link>
   )
 }
