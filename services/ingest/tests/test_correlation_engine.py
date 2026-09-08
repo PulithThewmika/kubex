@@ -91,6 +91,13 @@ class TestExtractImageTagFromImages:
         assert extract_image_tag_from_images("  ") is None
         assert extract_image_tag_from_images("[]") is None
 
+    def test_json_array_from_webhook_template(self):
+        # {{toJson .app.status.summary.images}} deserializes to a real list,
+        # not a string — the on-sync-* webhook templates hit this path.
+        images = ["ghcr.io/o/app-frontend:abc1234", "ghcr.io/o/app-orders:abc1234"]
+        assert extract_image_tag_from_images(images) == "abc1234"
+        assert extract_image_tag_from_images([]) is None
+
 
 # ── parse_iso_timestamp ────────────────────────────────────────────
 
@@ -140,6 +147,42 @@ class TestResolveService:
         service_id, resolved_org_id = await resolve_service(session, org_id=org_id, argocd_app="sample-app")
         assert service_id == 31
         assert resolved_org_id == org_id
+
+    @pytest.mark.asyncio
+    async def test_sets_cluster_id_on_matched_service_by_argocd_app(self):
+        """A per-cluster-token-authenticated ArgoCD event (webhooks_argocd.py)
+        passes cluster_id through so the detection agent can later route
+        health scoring through the cluster_queries relay instead of the
+        legacy PROM_URL default (found live 2026-09-08: cluster_id staying
+        NULL forever meant health scoring never saw real metrics)."""
+        org_id = uuid.uuid4()
+        new_cluster_id = uuid.uuid4()
+        mock_service = MagicMock(id=31, org_id=org_id, cluster_id=None)
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [mock_service]
+
+        session = AsyncMock()
+        session.execute = AsyncMock(return_value=mock_result)
+        session.flush = AsyncMock()
+
+        await resolve_service(session, org_id=org_id, argocd_app="sample-app", cluster_id=new_cluster_id)
+        assert mock_service.cluster_id == new_cluster_id
+        session.flush.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_does_not_flush_when_cluster_id_already_matches(self):
+        org_id = uuid.uuid4()
+        same_cluster_id = uuid.uuid4()
+        mock_service = MagicMock(id=31, org_id=org_id, cluster_id=same_cluster_id)
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [mock_service]
+
+        session = AsyncMock()
+        session.execute = AsyncMock(return_value=mock_result)
+        session.flush = AsyncMock()
+
+        await resolve_service(session, org_id=org_id, argocd_app="sample-app", cluster_id=same_cluster_id)
+        session.flush.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_finds_oldest_by_repo_when_duplicates_exist(self) -> None:
@@ -199,6 +242,26 @@ class TestResolveService:
         assert org_id == given_org_id
         added_service = session.add.call_args_list[0][0][0]
         assert added_service.org_id == given_org_id
+
+    @pytest.mark.asyncio
+    async def test_auto_registers_with_cluster_id_when_given(self) -> None:
+        given_org_id = uuid.uuid4()
+        given_cluster_id = uuid.uuid4()
+
+        async def mock_execute(_stmt: object) -> MagicMock:
+            result = MagicMock()
+            result.scalars.return_value.all.return_value = []
+            result.scalar_one_or_none.return_value = None
+            return result
+
+        session = _session_with_begin_nested()
+        session.execute = mock_execute
+        session.flush = AsyncMock()
+        session.add = MagicMock()
+
+        await resolve_service(session, org_id=given_org_id, argocd_app="new-app", cluster_id=given_cluster_id)
+        added_service = session.add.call_args_list[0][0][0]
+        assert added_service.cluster_id == given_cluster_id
 
     @pytest.mark.asyncio
     async def test_recovers_from_lost_registration_race(self) -> None:
