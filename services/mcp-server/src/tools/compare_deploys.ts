@@ -37,9 +37,9 @@ interface MetricDiff {
   change_pct: number | null;
 }
 
-async function queryScalar(promql: string, time: string): Promise<number | null> {
+async function queryScalar(promql: string, time: string, orgId: string | null): Promise<number | null> {
   try {
-    const results = await instantQuery(promql, time);
+    const results = await instantQuery(promql, time, orgId);
     if (results.length === 0) return null;
     const val = parseFloat(results[0].value[1]);
     if (Number.isNaN(val)) return null;
@@ -54,13 +54,14 @@ async function fetchMetrics(
   service: string,
   namespace: string,
   finishedAt: Date,
+  orgId: string | null,
 ): Promise<MetricValues> {
   const ts = (finishedAt.getTime() / 1000 + parseWindowSeconds(OBSERVATION_WINDOW)).toString();
 
   const [errorRate, latencyRaw, restarts] = await Promise.all([
-    queryScalar(buildPromQL("error_rate", service, namespace, OBSERVATION_WINDOW), ts),
-    queryScalar(buildPromQL("latency_p99", service, namespace, OBSERVATION_WINDOW), ts),
-    queryScalar(buildPromQL("restarts", service, namespace, OBSERVATION_WINDOW), ts),
+    queryScalar(buildPromQL("error_rate", service, namespace, OBSERVATION_WINDOW), ts, orgId),
+    queryScalar(buildPromQL("latency_p99", service, namespace, OBSERVATION_WINDOW), ts, orgId),
+    queryScalar(buildPromQL("restarts", service, namespace, OBSERVATION_WINDOW), ts, orgId),
   ]);
 
   return {
@@ -150,8 +151,8 @@ export async function compareDeploys(input: {
   }
 
   const [metricsA, metricsB] = await Promise.all([
-    fetchMetrics(rowA.service_name, rowA.namespace, rowA.finished_at),
-    fetchMetrics(rowB.service_name, rowB.namespace, rowB.finished_at),
+    fetchMetrics(rowA.service_name, rowA.namespace, rowA.finished_at, orgId),
+    fetchMetrics(rowB.service_name, rowB.namespace, rowB.finished_at, orgId),
   ]);
 
   const allNull = (m: MetricValues) =>
