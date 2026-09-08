@@ -24,6 +24,6 @@ describe('DeployDiffTable', () => {
     const metrics: CompareMetric[] = [{ metric: 'restarts', deploy_a: null, deploy_b: null, change_pct: null }]
     render(<DeployDiffTable metrics={metrics} />)
     const cells = screen.getAllByText('—')
-    expect(cells.some((el) => el.className.includes('text-text-muted'))).toBe(true)
+    expect(cells.some((el) => el.className.includes('text-ink-muted'))).toBe(true)
   })
 })

@@ -63,7 +63,7 @@ export function Modal({ titleId, title, onClose, children, widthClassName = 'max
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
@@ -72,17 +72,17 @@ export function Modal({ titleId, title, onClose, children, widthClassName = 'max
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`flex max-h-[85vh] w-full ${widthClassName} animate-fade-in flex-col overflow-y-auto border-2 border-text bg-surface p-6 outline-none sm:p-8`}
+        className={`flex max-h-[85vh] w-full ${widthClassName} animate-fade-in flex-col overflow-y-auto border-2 border-paper-line bg-paper-raised p-6 outline-none sm:p-8`}
       >
-        <div className="flex items-center justify-between border-b-2 border-text pb-4">
-          <h2 id={titleId} className="font-display text-2xl uppercase leading-none text-text">
+        <div className="flex items-center justify-between border-b-2 border-paper-line pb-4">
+          <h2 id={titleId} className="font-display text-2xl uppercase leading-none text-ink">
             {title}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="-mr-1 -mt-1 border-2 border-transparent p-1.5 text-text-muted transition-colors hover:border-accent hover:text-accent"
+            className="-mr-1 -mt-1 border-2 border-transparent p-1.5 text-ink-muted transition-colors hover:border-accent hover:text-accent"
           >
             <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
               <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
