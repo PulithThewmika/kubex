@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { EmptyState } from '../components/EmptyState'
+import { NoServicesEmpty } from '../components/NoServicesEmpty'
 import { PageHeader } from '../components/PageHeader'
 import { ServiceCardGrid } from '../components/ServiceCardGrid'
 import { useServices } from '../hooks/useServices'
@@ -150,12 +151,7 @@ export function Services() {
             }}
           />
         ) : (
-          <EmptyState
-            image="/Noservice.png"
-            title="No services yet"
-            description="Services appear here once a deployment webhook fires."
-            action={{ label: 'Connect a repository', to: '/app/settings?tab=connections' }}
-          />
+          <NoServicesEmpty />
         )
       ) : (
         <ServiceCardGrid services={visible} isLoading={isLoading} />
