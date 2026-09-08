@@ -181,7 +181,7 @@ async def run_chat_turn(
                     response={"result": result_text, "is_error": is_error},
                 )
             )
-        current_contents.append(types.Content(role="tool", parts=response_parts))
+        current_contents.append(types.Content(role="user", parts=response_parts))
 
     yield sse(
         "error",
