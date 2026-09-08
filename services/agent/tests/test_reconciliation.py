@@ -208,7 +208,7 @@ async def test_multiple_alerts_independent(mock_session):
     ]
     mock_session.execute.return_value = result
 
-    async def agg_side_effect(components, namespace, window, timestamp):
+    async def agg_side_effect(components, namespace, window, timestamp, **_kwargs):
         if components == ["orders"]:
             return _healthy_aggregated()
         # payments: baseline healthy, observation degraded → penalty fires
@@ -224,3 +224,36 @@ async def test_multiple_alerts_independent(mock_session):
 
         assert _recovery_counters[40] == 1  # orders: healthy
         assert _recovery_counters[41] == 0  # payments: still degraded
+
+
+@pytest.mark.asyncio
+async def test_unreachable_alert_skipped_without_crashing_batch(mock_session):
+    """#840: one alert's cluster relay timing out must not stop every
+    other alert (including local/legacy ones) from being reconciled this
+    cycle."""
+    from agent import promql
+
+    result = MagicMock()
+    result.fetchall.return_value = [
+        _make_alert_row(alert_id=50, service_name="orders"),
+        _make_alert_row(alert_id=51, service_name="payments"),
+    ]
+    mock_session.execute.return_value = result
+
+    async def agg_side_effect(components, namespace, window, timestamp, **_kwargs):
+        if components == ["orders"]:
+            raise promql.MetricsUnreachableError("timed out")
+        return _healthy_aggregated()
+
+    with patch("agent.reconciliation._aggregate_metrics", new_callable=AsyncMock,
+               side_effect=agg_side_effect), \
+         patch("agent.reconciliation.resolve_alert", new_callable=AsyncMock):
+
+        await reconcile_active_alerts(mock_session)
+
+        # orders' counter is reset to 0, same treatment as a low_confidence
+        # cycle — "consecutive" healthy cycles must stay genuinely
+        # consecutive, not skip over a gap with no information.
+        assert _recovery_counters[50] == 0
+        # payments (a different, reachable cluster) still got processed.
+        assert _recovery_counters[51] == 1

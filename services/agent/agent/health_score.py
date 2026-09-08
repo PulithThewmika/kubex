@@ -16,6 +16,7 @@ error/latency penalties and note in details JSONB.
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -301,6 +302,17 @@ def no_metrics_score(reason: str) -> tuple[None, str, dict]:
     return None, "unknown", {"metrics_source": "none", "reason": reason, "raw_metrics": {}}
 
 
+def metrics_unreachable_score(reason: str) -> tuple[None, str, dict]:
+    """A remote cluster's relay didn't answer in time (#840) -- distinct from
+    no_metrics_score's "none configured" outcome. Both score None/"unknown"
+    (there IS no score to give), but `metrics_source`/`reason` differ so a
+    human or a test can tell "we have no metrics source at all" apart from
+    "we have one but it didn't answer" -- collapsing these into the same
+    shape is exactly the ambiguity that let a missing Prometheus
+    port-forward once score a whole E2E run 100/healthy."""
+    return None, "unknown", {"metrics_source": "unreachable", "reason": reason, "raw_metrics": {}}
+
+
 def _max_of(values: list[float | None]) -> float | None:
     """Return the max of non-None values, or None if all are None."""
     valid = [v for v in values if v is not None]
@@ -314,14 +326,27 @@ def _sum_of(values: list[float | None]) -> float | None:
 
 
 async def _query_component(
-    component: str, namespace: str, window: str, timestamp: datetime
+    component: str, namespace: str, window: str, timestamp: datetime,
+    *, session: AsyncSession | None = None, cluster_id: uuid.UUID | None = None,
 ) -> dict:
-    """Query all metrics for a single Prometheus component."""
+    """Query all metrics for a single Prometheus component.
+
+    Sequential, not asyncio.gather (#840 correctness fix) -- on the relay
+    transport (cluster_id set) each of these four independently calls
+    cluster_relay.queue_and_wait(session, ...), and SQLAlchemy's
+    AsyncSession is not safe for concurrent use by more than one task at
+    once. An earlier revision gathered these to avoid one relay timeout
+    costing 4x, but that traded a real correctness bug (races on the
+    shared session, surfacing as SQLAlchemy errors or worse) for a
+    latency win that direct-PROM_URL queries (session=None) never needed
+    in the first place. The 4x-timeout cost on an unreachable relay is
+    accepted as-is; components/windows are also queried sequentially in
+    _aggregate_metrics/assess_deployment for the same reason."""
     return {
-        "error_rate": await promql.query_error_rate(component, namespace, window, timestamp),
-        "latency_p99": await promql.query_latency_p99(component, namespace, window, timestamp),
-        "restarts": await promql.query_restarts(component, namespace, window, timestamp),
-        "request_rate": await promql.query_request_rate(component, namespace, window, timestamp),
+        "error_rate": await promql.query_error_rate(component, namespace, window, timestamp, session=session, cluster_id=cluster_id),
+        "latency_p99": await promql.query_latency_p99(component, namespace, window, timestamp, session=session, cluster_id=cluster_id),
+        "restarts": await promql.query_restarts(component, namespace, window, timestamp, session=session, cluster_id=cluster_id),
+        "request_rate": await promql.query_request_rate(component, namespace, window, timestamp, session=session, cluster_id=cluster_id),
     }
 
 
@@ -344,11 +369,16 @@ def _coverage(results: list[dict]) -> float:
 
 
 async def _aggregate_metrics(
-    components: list[str], namespace: str, window: str, timestamp: datetime
+    components: list[str], namespace: str, window: str, timestamp: datetime,
+    *, session: AsyncSession | None = None, cluster_id: uuid.UUID | None = None,
 ) -> dict:
-    """Query each component and aggregate: max for rates/latency, sum for restarts/rps."""
+    """Query each component and aggregate: max for rates/latency, sum for restarts/rps.
+
+    A promql.MetricsUnreachableError from any component/metric propagates
+    straight up (not caught here) -- assess_deployment treats "the relay
+    didn't answer" as a whole-deployment outcome, not a per-metric None."""
     results = [
-        await _query_component(comp, namespace, window, timestamp)
+        await _query_component(comp, namespace, window, timestamp, session=session, cluster_id=cluster_id)
         for comp in components
     ]
     return {
@@ -368,6 +398,7 @@ async def assess_deployment(
     prometheus_available: bool = True,
     health_check_url: str | None = None,
     health_check_interval_s: int = 30,
+    cluster_id: uuid.UUID | None = None,
 ) -> tuple[int | None, str, dict] | None:
     """Fetch metrics for both windows, compute health score, and write to DB.
 
@@ -405,24 +436,37 @@ async def assess_deployment(
             baseline_end.isoformat(), OBSERVATION_WINDOW,
         )
 
-        base = await _aggregate_metrics(components, namespace, BASELINE_WINDOW, baseline_end)
-        post = await _aggregate_metrics(components, namespace, OBSERVATION_WINDOW, observation_end)
+        try:
+            base = await _aggregate_metrics(
+                components, namespace, BASELINE_WINDOW, baseline_end,
+                session=session, cluster_id=cluster_id,
+            )
+            post = await _aggregate_metrics(
+                components, namespace, OBSERVATION_WINDOW, observation_end,
+                session=session, cluster_id=cluster_id,
+            )
+        except promql.MetricsUnreachableError as e:
+            logger.warning(
+                "Metrics source unreachable for deployment %d (cluster %s): %s",
+                deployment.id, cluster_id, e,
+            )
+            score, verdict, details = metrics_unreachable_score(str(e))
+        else:
+            metrics = {
+                "error_rate_base": base["error_rate"],
+                "error_rate_post": post["error_rate"],
+                "latency_p99_base_ms": base["latency_p99"],
+                "latency_p99_post_ms": post["latency_p99"],
+                "restarts_base": base["restarts"],
+                "restarts_post": post["restarts"],
+                "request_rate_base": base["request_rate"],
+                "request_rate_post": post["request_rate"],
+                "coverage_base": base["coverage"],
+                "coverage_post": post["coverage"],
+            }
 
-        metrics = {
-            "error_rate_base": base["error_rate"],
-            "error_rate_post": post["error_rate"],
-            "latency_p99_base_ms": base["latency_p99"],
-            "latency_p99_post_ms": post["latency_p99"],
-            "restarts_base": base["restarts"],
-            "restarts_post": post["restarts"],
-            "request_rate_base": base["request_rate"],
-            "request_rate_post": post["request_rate"],
-            "coverage_base": base["coverage"],
-            "coverage_post": post["coverage"],
-        }
-
-        score, verdict, details = compute_health_score(metrics)
-        details["components"] = components
+            score, verdict, details = compute_health_score(metrics)
+            details["components"] = components
 
     elif health_check_url:
         logger.info(

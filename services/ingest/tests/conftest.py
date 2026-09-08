@@ -14,6 +14,7 @@ os.environ.setdefault("ALERTMANAGER_WEBHOOK_TOKEN", "test-am-token")
 os.environ.setdefault("GITHUB_CLIENT_ID", "test-client-id")
 os.environ.setdefault("GITHUB_CLIENT_SECRET", "test-client-secret")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-at-least-32-bytes-long")
+os.environ.setdefault("MCP_INTERNAL_TOKEN", "test-internal-token")
 
 # Several integration tests (test_org_isolation.py, test_dora_integration.py
 # and its siblings, test_auth_github_oauth.py) accept a "real Postgres" env

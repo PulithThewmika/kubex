@@ -27,6 +27,7 @@ from .routers import (
     install,
     integrations_slack,
     prom,
+    relay_internal,
     settings,
 )
 
@@ -116,6 +117,7 @@ app.include_router(integrations_slack.api_router)
 app.include_router(integrations_slack.events_router)
 app.include_router(grafana.router)
 app.include_router(prom.router)
+app.include_router(relay_internal.router)
 app.include_router(settings.router)
 app.include_router(settings.installations_router)
 app.include_router(settings.onboarding_router)

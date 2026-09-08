@@ -1,4 +1,10 @@
-const LOKI_URL = process.env.LOKI_URL ?? "http://localhost:3100";
+// Routed through ingest's org-scoped telemetry relay (#840) rather than a
+// direct LOKI_URL — see clients/ingest-relay.ts for why, and
+// cluster_agent/loki.py + run.py's "logql" kind dispatch for how a
+// relayed LogQL query actually gets executed against the customer's own
+// Loki.
+
+import { relayGet, pingIngest } from "./ingest-relay.js";
 
 export interface LokiStream {
   stream: Record<string, string>;
@@ -17,6 +23,7 @@ export async function queryRange(
   query: string,
   start: string,
   end: string,
+  orgId: string | null,
   limit = 1000,
   direction: "forward" | "backward" = "forward",
 ): Promise<LokiStream[]> {
@@ -28,13 +35,7 @@ export async function queryRange(
     direction,
   });
 
-  const url = `${LOKI_URL}/loki/api/v1/query_range?${params}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Loki query failed: ${res.status} ${await res.text()}`);
-  }
-
-  const body = (await res.json()) as LokiResponse;
+  const body = await relayGet<LokiResponse>("/internal/relay/loki/query_range", params, orgId);
   if (body.status !== "success") {
     throw new Error(`Loki query error: ${JSON.stringify(body)}`);
   }
@@ -42,9 +43,8 @@ export async function queryRange(
 }
 
 export async function testConnection(): Promise<void> {
-  const res = await fetch(`${LOKI_URL}/ready`);
-  if (!res.ok) {
-    throw new Error(`Loki unreachable: ${res.status}`);
-  }
-  console.log("[loki] connection verified");
+  // See prometheus.ts's testConnection for why this only confirms ingest
+  // itself is reachable, not the relay end-to-end.
+  await pingIngest();
+  console.log("[loki] ingest relay reachable");
 }

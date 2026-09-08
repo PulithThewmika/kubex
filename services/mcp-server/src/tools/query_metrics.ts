@@ -213,12 +213,12 @@ function formatValue(v: number, metric: MetricName): string {
 
 // ── Service lookup ─────────────────────────────────────────────
 
-interface ServiceRow {
+export interface ServiceRow {
   name: string;
   namespace: string;
 }
 
-async function resolveService(name: string, orgId: string | null): Promise<ServiceRow | null> {
+export async function resolveService(name: string, orgId: string | null): Promise<ServiceRow | null> {
   const org = orgFilter(orgId, 2, "org_id");
   return queryOne<ServiceRow>(
     `SELECT name, namespace FROM services WHERE name = $1 ${org.clause}`,
@@ -286,6 +286,7 @@ export async function queryMetrics(input: {
       startEpoch.toString(),
       endEpoch.toString(),
       step,
+      orgId,
     );
   } catch (err) {
     return {
