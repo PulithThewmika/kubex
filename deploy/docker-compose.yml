@@ -117,7 +117,7 @@ services:
   # PostgreSQL) and dashboards load automatically from mounted YAML.
   # Embedding enabled for the React shell iframe integration.
   grafana:
-    image: grafana/grafana:11.6.0
+    image: grafana/grafana:13.2.1
     container_name: kubex-grafana
     restart: unless-stopped
     ports:
@@ -148,6 +148,10 @@ services:
       # the renderer, which loads the panel back from GF_RENDERING_CALLBACK_URL.
       GF_RENDERING_SERVER_URL: http://renderer:8081/render
       GF_RENDERING_CALLBACK_URL: http://grafana:3000/
+      # Grafana 13+ refuses to start rendering at all without a non-default
+      # renderer_token (must match the renderer's AUTH_TOKEN below) — found
+      # 2026-09-08 bumping from 11.6.0, where this wasn't required.
+      GF_RENDERING_RENDERER_TOKEN: ${GRAFANA_RENDERER_TOKEN:-}
     volumes:
       - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
@@ -159,13 +163,20 @@ services:
         required: false
 
   renderer:
-    image: grafana/grafana-image-renderer:3.11.6
+    # 3.11.6 (paired with Grafana 11.6.0) never signals render-readiness
+    # for /d-solo/ solo-panel embeds under Grafana's dashboardSceneSolo —
+    # every panel PNG render hung until timeout regardless of panel state
+    # (found 2026-09-08). v5.12.2 (paired with the Grafana 13.2.1 bump
+    # above) fixed it outright — verified render times dropped to ~8-17s.
+    image: grafana/grafana-image-renderer:v5.12.2
     container_name: kubex-grafana-renderer
     restart: unless-stopped
     environment:
       ENABLE_METRICS: "false"
       # The renderer only ever needs to reach Grafana on the compose net.
       RENDERING_MODE: default
+      # Must match Grafana's GF_RENDERING_RENDERER_TOKEN above.
+      AUTH_TOKEN: ${GRAFANA_RENDERER_TOKEN:-}
     expose:
       - "8081"
 
