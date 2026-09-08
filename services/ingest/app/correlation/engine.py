@@ -223,6 +223,7 @@ async def resolve_service(
     repo: str | None = None,
     argocd_app: str | None = None,
     name: str | None = None,
+    cluster_id: uuid.UUID | None = None,
 ) -> tuple[int, uuid.UUID]:
     # org_id is the caller's already-resolved org for this event (today,
     # always resolve_org_id()'s result — the default org, since webhooks
@@ -234,6 +235,17 @@ async def resolve_service(
     # not — two orgs can derive the same `name` from different repos, and
     # without this scope it would match (and mis-attribute to) another
     # org's row. See #792.
+    #
+    # cluster_id, when the caller has one (a per-cluster-token-authenticated
+    # ArgoCD event — see webhooks_argocd.py), is opportunistically written
+    # onto the matched/created service row. This is what lets the detection
+    # agent's health scoring (services/agent/agent/promql.py::_execute)
+    # route through the EPIC-022 cluster_queries relay instead of the
+    # legacy PROM_URL default — without it, cluster_id stays NULL forever
+    # and every health assessment silently falls back to the low-traffic
+    # guard rail (found live 2026-09-08: every assessment showed
+    # data_gap=true with all-null raw_metrics, making alerts structurally
+    # unable to fire regardless of the connected cluster's real state).
     if repo:
         result = await session.execute(
             select(Service)
@@ -253,7 +265,11 @@ async def resolve_service(
                     "manual reconciliation needed",
                     repo, [s.id for s in services], services[0].id,
                 )
-            return services[0].id, services[0].org_id
+            matched = services[0]
+            if cluster_id and matched.cluster_id != cluster_id:
+                matched.cluster_id = cluster_id
+                await session.flush()
+            return matched.id, matched.org_id
 
     if argocd_app:
         result = await session.execute(
@@ -269,7 +285,11 @@ async def resolve_service(
                     "manual reconciliation needed",
                     argocd_app, [s.id for s in services], services[0].id,
                 )
-            return services[0].id, services[0].org_id
+            matched = services[0]
+            if cluster_id and matched.cluster_id != cluster_id:
+                matched.cluster_id = cluster_id
+                await session.flush()
+            return matched.id, matched.org_id
 
     # `name` lets callers with no repo/argocd_app (e.g. the generic deploy
     # notification endpoint, E21-T3) resolve/register a service directly by
@@ -291,10 +311,12 @@ async def resolve_service(
         if argocd_app and not existing.argocd_app:
             existing.argocd_app = argocd_app
             logger.info("Linked ArgoCD app '%s' to existing service '%s' (id=%d)", argocd_app, name, existing.id)
+        if cluster_id and existing.cluster_id != cluster_id:
+            existing.cluster_id = cluster_id
         await session.flush()
         return existing.id, existing.org_id
 
-    service = Service(name=name, repo=repo, argocd_app=argocd_app, org_id=org_id)
+    service = Service(name=name, repo=repo, argocd_app=argocd_app, org_id=org_id, cluster_id=cluster_id)
     try:
         async with session.begin_nested():
             session.add(service)
