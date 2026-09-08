@@ -21,8 +21,8 @@ type Tier = {
 function Pill({ label, connected, detail }: Omit<Tier, 'key'>) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${
-        connected ? 'bg-healthy/10 text-healthy ring-healthy/25' : 'bg-surface-raised text-text-faint ring-border'
+      className={`inline-flex items-center gap-1 border px-1.5 py-0.5 font-body text-[11px] font-bold uppercase tracking-wide ${
+        connected ? 'border-healthy bg-healthy/10 text-healthy' : 'border-border-strong bg-surface-raised text-text-faint'
       }`}
       title={`${label}: ${detail}`}
       aria-label={`${label}: ${detail}`}
