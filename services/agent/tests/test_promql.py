@@ -243,3 +243,13 @@ async def test_relay_timeout_raises_metrics_unreachable_not_none():
             await query_error_rate(
                 "orders", "kubex", "30m", TS, session=fake_session, cluster_id=CLUSTER_ID,
             )
+
+
+@pytest.mark.asyncio
+async def test_cluster_id_without_session_raises_value_error(mock_client):
+    """cluster_id set with no session to relay through can never be a
+    legitimate call -- must raise loudly, not silently fall through to
+    querying PROM_URL (found in review, #840)."""
+    with pytest.raises(ValueError):
+        await query_error_rate("orders", "kubex", "30m", TS, cluster_id=CLUSTER_ID)
+    mock_client.get.assert_not_called()
