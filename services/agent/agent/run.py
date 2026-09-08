@@ -119,6 +119,7 @@ async def _process_deployment(session, row) -> None:
         prometheus_available=prometheus_available,
         health_check_url=row.health_check_url,
         health_check_interval_s=row.health_check_interval_s,
+        cluster_id=row.cluster_id,
     )
     if result is None:
         logger.warning("Could not assess deployment %d, skipping", deploy_id)
