@@ -162,14 +162,14 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
       {step === 'name' && (
         <div className="mt-5 flex flex-col gap-4">
           <label className="flex flex-col gap-2 font-body text-xs font-bold uppercase tracking-wide">
-            <span className="text-text">Cluster name</span>
+            <span className="text-ink">Cluster name</span>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="production"
               autoFocus
-              className="border-2 border-border-strong bg-background px-3 py-2.5 font-body text-sm normal-case tracking-normal text-text focus:border-accent focus:outline-none"
+              className="border-2 border-paper-line-soft bg-paper px-3 py-2.5 font-body text-sm normal-case tracking-normal text-ink focus:border-accent focus:outline-none"
             />
           </label>
           {createMutation.isError && (
@@ -190,7 +190,7 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
 
       {step === 'token' && created && (
         <div className="mt-5 flex flex-col gap-4">
-          <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+          <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
             This token authenticates the agent to KubeX. It's shown only once — copy it now, or you'll need to
             rotate it to get a new one.
           </p>
@@ -207,14 +207,14 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
 
       {step === 'install' && created && (
         <div className="mt-5 flex flex-col gap-4">
-          <div className="flex gap-1 border-b-2 border-border-strong">
+          <div className="flex gap-1 border-b-2 border-paper-line-soft">
             {INSTALL_TABS.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setInstallMethod(tab.id)}
                 className={`px-3 py-2 font-body text-xs font-bold uppercase tracking-wide transition-colors ${
-                  installMethod === tab.id ? 'border-b-2 border-accent text-accent' : 'text-text-muted hover:text-text'
+                  installMethod === tab.id ? 'border-b-2 border-accent text-accent' : 'text-ink-muted hover:text-ink'
                 }`}
               >
                 {tab.label}
@@ -224,20 +224,20 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
           {installInfo ? (
             <CodeBlock code={installCommand(installMethod, created.token, name.trim(), installInfo)} />
           ) : installInfoError ? (
-            <div className="flex items-center justify-between gap-3 border-2 border-failed bg-background p-3">
+            <div className="flex items-center justify-between gap-3 border-2 border-failed bg-paper p-3">
               <p className="font-body text-xs font-bold uppercase tracking-wide text-failed">
                 Couldn't load install instructions.
               </p>
               <button
                 type="button"
                 onClick={() => retryInstallInfo()}
-                className="w-fit border-2 border-text-muted px-3 py-1.5 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent"
+                className="w-fit border-2 border-ink-muted px-3 py-1.5 font-body text-xs font-bold uppercase tracking-wide text-ink transition-colors hover:border-accent hover:text-accent"
               >
                 Retry
               </button>
             </div>
           ) : (
-            <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+            <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
               Loading install instructions…
             </p>
           )}
@@ -259,7 +259,7 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
               <span className="border-2 border-healthy bg-healthy/10 px-3 py-1 font-body text-xs font-bold uppercase tracking-wide text-healthy">
                 Connected
               </span>
-              <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+              <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
                 The agent is reporting heartbeats. You're all set.
               </p>
               <button
@@ -278,15 +278,15 @@ export function AddClusterModal({ onClose }: AddClusterModalProps) {
               <button
                 type="button"
                 onClick={() => retryWaiting()}
-                className="w-fit border-2 border-text-muted px-4 py-2 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent"
+                className="w-fit border-2 border-ink-muted px-4 py-2 font-body text-xs font-bold uppercase tracking-wide text-ink transition-colors hover:border-accent hover:text-accent"
               >
                 Retry
               </button>
             </>
           ) : (
             <>
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-accent" />
-              <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-paper-line-soft border-t-accent" />
+              <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
                 Waiting for the agent's first heartbeat…
               </p>
             </>

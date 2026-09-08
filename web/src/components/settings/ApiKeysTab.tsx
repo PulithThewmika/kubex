@@ -6,10 +6,10 @@ import { ApiKeyCreateModal } from './ApiKeyCreateModal'
 
 function KeyRow({ apiKey, onRevoke }: { apiKey: ApiKey; onRevoke: (key: ApiKey) => void }) {
   return (
-    <li className="flex flex-col gap-2 border-2 border-border-strong bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+    <li className="flex flex-col gap-2 border-2 border-paper-line-soft bg-paper-raised p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-col gap-1">
-        <span className="font-body text-sm font-bold text-text">{apiKey.name}</span>
-        <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+        <span className="font-body text-sm font-bold text-ink">{apiKey.name}</span>
+        <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
           Created {formatDistanceToNow(new Date(apiKey.created_at), { addSuffix: true })}
           {' · '}
           {apiKey.last_used
@@ -20,7 +20,7 @@ function KeyRow({ apiKey, onRevoke }: { apiKey: ApiKey; onRevoke: (key: ApiKey) 
       <button
         type="button"
         onClick={() => onRevoke(apiKey)}
-        className="w-fit border-2 border-text-muted px-3 py-1.5 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent"
+        className="w-fit border-2 border-ink-muted px-3 py-1.5 font-body text-xs font-bold uppercase tracking-wide text-ink transition-colors hover:border-accent hover:text-accent"
       >
         Revoke
       </button>
@@ -41,8 +41,8 @@ function RevokeDialog({ apiKey, onClose }: { apiKey: ApiKey; onClose: () => void
   return (
     <Modal titleId="revoke-api-key-title" title="Revoke API key" onClose={handleClose}>
       <div className="mt-4 flex flex-col gap-4">
-        <p className="font-body text-xs font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
-          Revoke <span className="font-bold text-text">{apiKey.name}</span>? Any client using it will
+        <p className="font-body text-xs font-semibold uppercase leading-relaxed tracking-wide text-ink-muted">
+          Revoke <span className="font-bold text-ink">{apiKey.name}</span>? Any client using it will
           immediately lose access. This can't be undone.
         </p>
         {revokeMutation.isError && (
@@ -63,7 +63,7 @@ function RevokeDialog({ apiKey, onClose }: { apiKey: ApiKey; onClose: () => void
             type="button"
             disabled={revokeMutation.isPending}
             onClick={onClose}
-            className="w-fit border-2 border-text-muted px-5 py-2.5 font-body text-xs font-bold uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+            className="w-fit border-2 border-ink-muted px-5 py-2.5 font-body text-xs font-bold uppercase tracking-wide text-ink transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
           >
             Cancel
           </button>
@@ -81,7 +81,7 @@ export function ApiKeysTab() {
   return (
     <section>
       <div className="flex items-center justify-between">
-        <h2 className="font-body text-xs font-bold uppercase tracking-[0.15em] text-text-muted">API keys</h2>
+        <h2 className="font-body text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">API keys</h2>
         <button
           type="button"
           onClick={() => setShowCreate(true)}
@@ -90,13 +90,13 @@ export function ApiKeysTab() {
           Create API key
         </button>
       </div>
-      <p className="mt-1 font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+      <p className="mt-1 font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
         Keys authenticate scripts and integrations to the KubeX API on behalf of this org.
       </p>
 
       <div className="mt-4">
         {isLoading && (
-          <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+          <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
             Loading API keys…
           </p>
         )}
@@ -106,7 +106,7 @@ export function ApiKeysTab() {
           </p>
         )}
         {!isLoading && !isError && keys && keys.length === 0 && (
-          <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+          <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
             No API keys yet.
           </p>
         )}
