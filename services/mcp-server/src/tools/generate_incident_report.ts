@@ -71,6 +71,7 @@ async function fetchMetricWindow(
   namespace: string,
   startEpoch: number,
   endEpoch: number,
+  orgId: string | null,
 ): Promise<Record<string, { t: string; v: number }[]>> {
   const step = autoStep(startEpoch, endEpoch);
   const rateWindow = "5m";
@@ -81,7 +82,7 @@ async function fetchMetricWindow(
       components.map(async (component) => {
         const promql = buildPromQL(metric, component, namespace, rateWindow);
         try {
-          const raw = await rangeQuery(promql, startEpoch.toString(), endEpoch.toString(), step);
+          const raw = await rangeQuery(promql, startEpoch.toString(), endEpoch.toString(), step, orgId);
           return formatResults(raw, metric);
         } catch {
           return [];
@@ -115,6 +116,7 @@ async function fetchErrorLogs(
   components: string[],
   startEpoch: number,
   endEpoch: number,
+  orgId: string | null,
 ): Promise<{ ts: string; line: string }[]> {
   const perComponentStreams = await Promise.all(
     components.map(async (component) => {
@@ -124,6 +126,7 @@ async function fetchErrorLogs(
           logql,
           (startEpoch * 1e9).toFixed(0),
           (endEpoch * 1e9).toFixed(0),
+          orgId,
           50,
         );
       } catch {
@@ -278,8 +281,8 @@ export async function generateIncidentReport(input: {
   const components = resolveComponents(row.service_name, row.prom_components);
 
   const [metricSeries, logs] = await Promise.all([
-    fetchMetricWindow(components, row.namespace, windowStart, windowEnd),
-    fetchErrorLogs(components, windowStart, windowEnd),
+    fetchMetricWindow(components, row.namespace, windowStart, windowEnd, orgId),
+    fetchErrorLogs(components, windowStart, windowEnd, orgId),
   ]);
 
   const report = buildMarkdownReport(row, metricSeries, logs);

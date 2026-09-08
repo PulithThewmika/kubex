@@ -27,6 +27,34 @@ def test_find_deployment_returns_first_match() -> None:
     assert result == ("argocd", "argocd-server")
 
 
+def test_find_service_sync_excludes_matching_auxiliary_services() -> None:
+    """#840: loki-canary/loki-*-memberlist both contain 'loki' as a
+    substring but aren't query-capable — the exclude list must keep them
+    from being picked over (or instead of) the real Loki service."""
+    canary = MagicMock()
+    canary.metadata.name = "loki-canary"
+    canary.metadata.namespace = "monitoring"
+    real = MagicMock()
+    real.metadata.name = "loki"
+    real.metadata.namespace = "monitoring"
+    api = MagicMock()
+    api.list_service_for_all_namespaces.return_value = MagicMock(items=[canary, real])
+    with patch("cluster_agent.k8s._core_v1", return_value=api):
+        result = k8s._find_service_sync(("loki-gateway", "loki-stack", "loki"), ("canary", "memberlist"))
+    assert result == ("monitoring", "loki")
+
+
+def test_find_service_sync_returns_none_when_only_excluded_matches_exist() -> None:
+    canary = MagicMock()
+    canary.metadata.name = "loki-canary"
+    canary.metadata.namespace = "monitoring"
+    api = MagicMock()
+    api.list_service_for_all_namespaces.return_value = MagicMock(items=[canary])
+    with patch("cluster_agent.k8s._core_v1", return_value=api):
+        result = k8s._find_service_sync(("loki",), ("canary", "memberlist"))
+    assert result is None
+
+
 def test_get_configmap_returns_none_on_404() -> None:
     api = MagicMock()
     api.read_namespaced_config_map.side_effect = ApiException(status=404)

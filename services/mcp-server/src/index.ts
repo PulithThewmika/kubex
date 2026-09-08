@@ -110,13 +110,16 @@ function createMcpServer(orgId: string | null): McpServer {
   );
 
   // ── Tool: query_logs ───────────────────────────────────────────
-  // No org filter: query_logs never touches Postgres — it reads Loki by
-  // service name label only, and Loki has no org concept.
+  // Org-scoped (#840/H5, fixing a prior cross-tenant gap): Loki itself has
+  // no org concept, so query_logs resolves the requested service against
+  // Postgres with the caller's org filter first (same pattern as
+  // query_metrics.resolveService) before building any LogQL — a user in
+  // org A can no longer read org B's logs by naming org B's service.
   server.tool(
     "query_logs",
     "Query application logs from Loki by service name with optional keyword and log-level filters. Returns timestamped log lines, the LogQL query executed, and a summary with level breakdown.",
     queryLogsSchema,
-    wrapTool("query_logs", queryLogs),
+    wrapTool("query_logs", (input) => queryLogs(input, orgId)),
   );
 
   // ── Tool: get_dora_metrics ─────────────────────────────────────

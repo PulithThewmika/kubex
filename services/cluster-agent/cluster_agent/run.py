@@ -24,7 +24,7 @@ from typing import Awaitable, Callable
 
 import httpx
 
-from . import argocd, bootstrap as bootstrap_module, event_buffer, ingest_client, prometheus
+from . import argocd, bootstrap as bootstrap_module, event_buffer, ingest_client, loki, prometheus
 from .backoff import Backoff
 from .config import (
     AGENT_VERSION,
@@ -52,6 +52,14 @@ _state: dict = {
     "prometheus_status": None,
     "prometheus_namespace": None,
     "prometheus_service": None,
+    # loki_status is internal to this loop only (#840) — not reported in
+    # the heartbeat payload (clusters has no loki_status column; adding
+    # one is a separate schema change this issue doesn't need). A
+    # "logql"-kind query with Loki not discovered just gets skipped, same
+    # as a "range"/"instant" one when Prometheus isn't discovered.
+    "loki_status": None,
+    "loki_namespace": None,
+    "loki_service": None,
 }
 
 _CONNECTIVITY_ERRORS = (httpx.TransportError, httpx.TimeoutException)
@@ -81,9 +89,15 @@ async def _discover() -> None:
     _state["prometheus_namespace"] = prom_result["namespace"]
     _state["prometheus_service"] = prom_result["service_name"]
 
+    loki_result = await loki.discover()
+    _state["loki_status"] = loki_result["status"]
+    _state["loki_namespace"] = loki_result["namespace"]
+    _state["loki_service"] = loki_result["service_name"]
+
     logger.info(
-        "Discovery: argocd=%s (version=%s) prometheus=%s",
+        "Discovery: argocd=%s (version=%s) prometheus=%s loki=%s",
         _state["argocd_status"], _state["argocd_version"], _state["prometheus_status"],
+        _state["loki_status"],
     )
 
 
@@ -181,21 +195,42 @@ async def _query_relay_tick(cluster_id: str) -> None:
     queries = await ingest_client.list_queries(cluster_id)
     if not queries:
         return
-    if _state["prometheus_status"] != "found":
-        logger.warning("Skipping %d pending quer(y/ies): Prometheus not discovered", len(queries))
-        return
-    base_url = prometheus.in_cluster_url(_state["prometheus_namespace"], _state["prometheus_service"])
+
+    prom_base_url = None
+    if _state["prometheus_status"] == "found":
+        prom_base_url = prometheus.in_cluster_url(_state["prometheus_namespace"], _state["prometheus_service"])
+    loki_base_url = None
+    if _state["loki_status"] == "found":
+        loki_base_url = loki.in_cluster_url(_state["loki_namespace"], _state["loki_service"])
+
     for q in queries:
+        kind = q.get("kind", "instant")
         try:
-            if q.get("kind") == "range":
+            if kind == "logql":
+                if loki_base_url is None:
+                    logger.warning("Skipping logql query %s: Loki not discovered", q["id"])
+                    continue
+                p = q.get("params") or {}
+                result = await loki.query_range(
+                    loki_base_url, q["promql"],
+                    p.get("start", ""), p.get("end", ""),
+                    p.get("limit", 1000), p.get("direction", "forward"),
+                )
+            elif kind == "range":
+                if prom_base_url is None:
+                    logger.warning("Skipping %s query %s: Prometheus not discovered", kind, q["id"])
+                    continue
                 p = q.get("params") or {}
                 result = await prometheus.query_range(
-                    base_url, q["promql"], p["start"], p["end"], p["step"]
+                    prom_base_url, q["promql"], p.get("start", ""), p.get("end", ""), p.get("step", ""),
                 )
             else:
-                result = await prometheus.query(base_url, q["promql"])
+                if prom_base_url is None:
+                    logger.warning("Skipping %s query %s: Prometheus not discovered", kind, q["id"])
+                    continue
+                result = await prometheus.query(prom_base_url, q["promql"])
         except Exception:
-            logger.exception("Failed to execute PromQL for query %s", q["id"])
+            logger.exception("Failed to execute %s query %s", kind, q["id"])
             continue
         await ingest_client.submit_result(cluster_id, q["id"], result)
 
@@ -227,6 +262,7 @@ async def shutdown() -> None:
     _shutdown_event.set()
     await ingest_client.close_client()
     await prometheus.close_client()
+    await loki.close_client()
 
 
 async def main() -> None:
