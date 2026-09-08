@@ -79,14 +79,20 @@ async def reconcile_active_alerts(session: AsyncSession) -> int:
                 session=session, cluster_id=row.cluster_id,
             )
         except promql.MetricsUnreachableError as e:
-            # Skip this alert this cycle rather than crashing the whole
-            # reconciliation batch (#840) - a relay timeout for one
-            # remote cluster must not stop every other alert (including
-            # ones on the local/legacy path) from being reconciled.
+            # Don't crash the whole reconciliation batch over one alert's
+            # unreachable relay (#840) - other alerts (including
+            # local/legacy ones) still get processed this cycle. Reset the
+            # recovery counter rather than leaving it untouched, matching
+            # how a low_confidence cycle below is handled - "consecutive"
+            # healthy cycles must mean genuinely consecutive; leaving a gap
+            # cycle's counter alone would let e.g. [healthy, unreachable,
+            # healthy] resolve an alert with no real information about the
+            # cycle in between.
             logger.warning(
                 "Skipping reconciliation for alert #%d this cycle - metrics unreachable: %s",
                 alert_id, e,
             )
+            _recovery_counters[alert_id] = 0
             continue
 
         metrics = {

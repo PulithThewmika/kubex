@@ -23,6 +23,7 @@ import uuid
 from datetime import datetime
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import cluster_relay
 from .config import PROM_URL
@@ -105,12 +106,24 @@ async def query_prometheus(promql: str, time: datetime) -> float | None:
 
 
 async def _execute(
-    promql: str, timestamp: datetime, *, session=None, cluster_id: uuid.UUID | None = None,
+    promql: str, timestamp: datetime, *, session: AsyncSession | None = None, cluster_id: uuid.UUID | None = None,
 ) -> float | None:
     """Dispatch to the relay (remote customer cluster) or PROM_URL (local/
     legacy) depending on whether a cluster_id was passed. Raises
     MetricsUnreachableError instead of returning None on a relay timeout -
-    the caller must not silently fold "couldn't ask" into "no data"."""
+    the caller must not silently fold "couldn't ask" into "no data".
+
+    Every real caller (health_score.py, reconciliation.py) always has a
+    session in scope and passes it unconditionally — cluster_id alone
+    decides legacy vs. relay (None = legacy/local, set = a connected
+    remote cluster). So cluster_id set without a session is the only
+    combination that can never be a legitimate call (there is no way to
+    relay without a session) — raise loudly rather than silently falling
+    through to the direct-PROM_URL path, which would otherwise reproduce
+    the exact "queried the operator's own Prometheus instead of the
+    customer's relay" bug this module exists to eliminate."""
+    if cluster_id is not None and session is None:
+        raise ValueError("cluster_id was given without a session — cannot relay")
     if session is not None and cluster_id is not None:
         envelope = await cluster_relay.queue_and_wait(
             session, cluster_id, promql, "instant", {"time": timestamp.timestamp()},
@@ -121,7 +134,7 @@ async def _execute(
 
 async def query_error_rate(
     service: str, namespace: str, window: str, timestamp: datetime,
-    *, session=None, cluster_id: uuid.UUID | None = None,
+    *, session: AsyncSession | None = None, cluster_id: uuid.UUID | None = None,
 ) -> float | None:
     """Query HTTP error rate (5xx / total) for a service over a window."""
     svc, ns = _sanitize_label(service), _sanitize_label(namespace)
@@ -137,7 +150,7 @@ async def query_error_rate(
 
 async def query_latency_p99(
     service: str, namespace: str, window: str, timestamp: datetime,
-    *, session=None, cluster_id: uuid.UUID | None = None,
+    *, session: AsyncSession | None = None, cluster_id: uuid.UUID | None = None,
 ) -> float | None:
     """Query p99 latency in seconds for a service over a window."""
     svc, ns = _sanitize_label(service), _sanitize_label(namespace)
@@ -154,7 +167,7 @@ async def query_latency_p99(
 
 async def query_restarts(
     service: str, namespace: str, window: str, timestamp: datetime,
-    *, session=None, cluster_id: uuid.UUID | None = None,
+    *, session: AsyncSession | None = None, cluster_id: uuid.UUID | None = None,
 ) -> float | None:
     """Query container restart count increase over a window."""
     svc, ns = _sanitize_label(service), _sanitize_label(namespace)
@@ -167,7 +180,7 @@ async def query_restarts(
 
 async def query_request_rate(
     service: str, namespace: str, window: str, timestamp: datetime,
-    *, session=None, cluster_id: uuid.UUID | None = None,
+    *, session: AsyncSession | None = None, cluster_id: uuid.UUID | None = None,
 ) -> float | None:
     """Query request rate (rps) for guard-rail volume check."""
     svc, ns = _sanitize_label(service), _sanitize_label(namespace)
@@ -180,7 +193,7 @@ async def query_request_rate(
 
 async def query_cpu(
     service: str, namespace: str, window: str, timestamp: datetime,
-    *, session=None, cluster_id: uuid.UUID | None = None,
+    *, session: AsyncSession | None = None, cluster_id: uuid.UUID | None = None,
 ) -> float | None:
     """Query CPU usage for a service (stretch - safety score)."""
     svc, ns = _sanitize_label(service), _sanitize_label(namespace)
@@ -193,7 +206,7 @@ async def query_cpu(
 
 async def query_memory(
     service: str, namespace: str, window: str, timestamp: datetime,
-    *, session=None, cluster_id: uuid.UUID | None = None,
+    *, session: AsyncSession | None = None, cluster_id: uuid.UUID | None = None,
 ) -> float | None:
     """Query memory usage in bytes for a service (stretch - safety score)."""
     svc, ns = _sanitize_label(service), _sanitize_label(namespace)
