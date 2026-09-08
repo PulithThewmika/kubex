@@ -73,6 +73,10 @@ export default {
           from: { opacity: '0', transform: 'translateY(4px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
         },
+        'page-in': {
+          from: { opacity: '0', transform: 'translateY(8px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
         'toast-in': {
           from: { opacity: '0', transform: 'translateX(8px)' },
           to: { opacity: '1', transform: 'translateX(0)' },
@@ -80,6 +84,7 @@ export default {
       },
       animation: {
         'fade-in': 'fade-in 0.24s ease-out',
+        'page-in': 'page-in 0.32s cubic-bezier(0.22, 1, 0.36, 1)',
         'toast-in': 'toast-in 0.2s ease-out',
       },
     },
