@@ -41,7 +41,7 @@ export function ServiceCard({ service, index = 0 }: ServiceCardProps) {
 
       <div className="relative flex items-center justify-between gap-3 border-b-2 border-paper-line-soft bg-paper p-4">
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 text-accent/[0.05] halftone-lg" />
-        <span className="relative font-display text-3xl leading-none text-paper-line-soft transition-colors group-hover:text-accent/50">
+        <span className="relative font-display text-3xl leading-none text-accent">
           {String(index + 1).padStart(2, '0')}
         </span>
         <div className="relative flex items-center gap-2">
