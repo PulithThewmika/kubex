@@ -11,8 +11,9 @@ type IllustratedEmptyProps = {
   /**
    * 'center' (default) — the pair sits centred in the content area.
    * 'split' — pulled up under the header, picture pushed left, copy pushed right.
+   * 'showcase' — centred, dropped down the page, with a larger illustration.
    */
-  variant?: 'center' | 'split'
+  variant?: 'center' | 'split' | 'showcase'
 }
 
 const LAYOUT = {
@@ -25,6 +26,11 @@ const LAYOUT = {
     wrap: 'mx-auto -mt-6 flex max-w-4xl flex-col items-center gap-8 pb-10 pt-0 md:-mt-12 md:flex-row md:justify-center md:gap-24 md:pb-14',
     image: 'w-full max-w-xs shrink-0 select-none object-contain md:-ml-24 md:max-w-sm',
     table: 'grid w-full gap-px border-2 border-paper-line bg-paper-line md:ml-8 md:max-w-md',
+  },
+  showcase: {
+    wrap: 'mx-auto flex max-w-4xl flex-col items-center gap-10 pb-16 pt-12 md:flex-row md:justify-center md:gap-16 md:pb-20 md:pt-20',
+    image: 'w-full max-w-sm shrink-0 select-none object-contain md:max-w-md',
+    table: 'grid w-full gap-px border-2 border-paper-line bg-paper-line md:max-w-md',
   },
 } as const
 
