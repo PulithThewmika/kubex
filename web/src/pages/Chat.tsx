@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ChatWindow } from '../components/chat/ChatWindow'
+import { GeminiBadge } from '../components/chat/GeminiBadge'
 import { useChatSession } from '../hooks/useChatSession'
 
 const SUGGESTED_PROMPTS = [
@@ -33,21 +34,19 @@ export function Chat() {
 
       {messages.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-5 px-4 text-center">
-          <div className="flex h-12 w-12 items-center justify-center border-2 border-paper-line bg-paper-raised text-accent">
-            <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" aria-hidden="true">
-              <path
-                d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9A1.5 1.5 0 0 1 18.5 16H9l-4 4v-4H5.5A1.5 1.5 0 0 1 4 14.5v-9Z"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </div>
+          <svg viewBox="0 0 24 24" fill="none" className="h-20 w-20 text-accent" aria-hidden="true">
+            <path
+              d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9A1.5 1.5 0 0 1 18.5 16H9l-4 4v-4H5.5A1.5 1.5 0 0 1 4 14.5v-9Z"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinejoin="round"
+            />
+          </svg>
           <div>
-            <p className="font-heading text-2xl font-bold uppercase tracking-tight text-ink">
+            <p className="font-display text-4xl uppercase tracking-tight text-ink sm:text-5xl">
               Ask about your deployments
             </p>
-            <p className="mt-1.5 max-w-sm font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            <p className="mx-auto mt-1.5 max-w-sm font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
               Grounded in your real correlation, health, and metrics history.
             </p>
           </div>
@@ -69,7 +68,7 @@ export function Chat() {
       )}
 
       <div className="border-t-2 border-paper-line bg-paper">
-        <form onSubmit={handleSubmit} className="mx-auto flex max-w-3xl gap-2 p-4">
+        <form onSubmit={handleSubmit} className="mx-auto flex max-w-3xl items-center gap-2 p-4">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -87,6 +86,7 @@ export function Chat() {
               <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
+          <GeminiBadge />
         </form>
       </div>
     </div>
