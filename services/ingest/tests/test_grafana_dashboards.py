@@ -1,10 +1,10 @@
 """Guard: every SQL query in a customer-facing (embeddable) Grafana
-dashboard must filter on org_id, so a future panel can't silently
+dashboard must be org-scoped, so a future panel can't silently
 reintroduce the cross-tenant leak fixed in #833.
 
-The set here mirrors app.routers.grafana.EMBEDDABLE_DASHBOARD_UIDS. When
-#834 splits the operator/customer dashboard sets, point this at that
-folder instead.
+Scans deploy/grafana/dashboards/customer/ — the set the panel proxy's
+EMBEDDABLE_DASHBOARD_UIDS allows and that #834 split off from the
+operator-only platform-wide dashboards.
 """
 
 import json
@@ -12,12 +12,21 @@ from pathlib import Path
 
 import pytest
 
-_DASHBOARD_DIR = Path(__file__).resolve().parents[3] / "deploy" / "grafana" / "dashboards"
-CUSTOMER_FACING = ["deploy-timeline.json"]
+_CUSTOMER_DIR = (
+    Path(__file__).resolve().parents[3] / "deploy" / "grafana" / "dashboards" / "customer"
+)
+CUSTOMER_FACING = sorted(p.name for p in _CUSTOMER_DIR.glob("*.json"))
 
-# Tables that carry org_id (CLAUDE.md decision 9). A query touching any of
-# these must also constrain org_id.
-ORG_SCOPED_TABLES = ("services", "deployments", "alerts", "pipeline_events")
+# A DORA panel is org-scoped by calling the dora_*(p_org_id) function
+# rather than reading the same-named NULL-org view (CLAUDE.md decision 6).
+_DORA_NAMES = ("dora_deploy_frequency", "dora_lead_time", "dora_change_failure_rate", "dora_mttr")
+
+# Tables that carry org_id (CLAUDE.md decision 9).
+ORG_SCOPED_TABLES = ("services", "deployments", "alerts", "pipeline_events", "health_assessments")
+
+
+def _load(filename: str) -> dict:
+    return json.loads((_CUSTOMER_DIR / filename).read_text())
 
 
 def _sql_targets(dashboard: dict):
@@ -31,23 +40,32 @@ def _sql_targets(dashboard: dict):
             yield f"annotation {ann.get('name')!r}", sql
 
 
+def test_customer_set_is_non_empty():
+    assert CUSTOMER_FACING, "no customer-facing dashboards found"
+
+
 @pytest.mark.parametrize("filename", CUSTOMER_FACING)
 def test_customer_dashboard_sql_is_org_scoped(filename):
-    dashboard = json.loads((_DASHBOARD_DIR / filename).read_text())
+    dashboard = _load(filename)
     offenders = []
     for where, sql in _sql_targets(dashboard):
-        touches_org_table = any(t in sql for t in ORG_SCOPED_TABLES)
-        if touches_org_table and "org_id" not in sql:
-            offenders.append(where)
-    assert not offenders, f"{filename}: unscoped SQL in {offenders}"
+        if any(f"{name}(" in sql for name in _DORA_NAMES):
+            if "$org" not in sql:
+                offenders.append(f"{where} (DORA call without $org)")
+            continue
+        if any(name in sql for name in _DORA_NAMES):
+            offenders.append(f"{where} (reads a NULL-org dora_* view)")
+            continue
+        if any(t in sql for t in ORG_SCOPED_TABLES) and "org_id" not in sql:
+            offenders.append(f"{where} (no org_id filter)")
+    assert not offenders, f"{filename}: {offenders}"
 
 
 @pytest.mark.parametrize("filename", CUSTOMER_FACING)
 def test_customer_dashboard_has_hidden_org_var(filename):
-    dashboard = json.loads((_DASHBOARD_DIR / filename).read_text())
+    dashboard = _load(filename)
     org_var = next(
-        (v for v in dashboard.get("templating", {}).get("list", []) if v["name"] == "org"),
-        None,
+        (v for v in dashboard.get("templating", {}).get("list", []) if v["name"] == "org"), None
     )
     assert org_var is not None, f"{filename}: missing 'org' template variable"
     assert org_var.get("hide") == 2, f"{filename}: 'org' var must be hidden (hide=2)"
@@ -56,9 +74,8 @@ def test_customer_dashboard_has_hidden_org_var(filename):
 @pytest.mark.parametrize("filename", CUSTOMER_FACING)
 def test_customer_dashboard_sql_handles_multi_component_service(filename):
     # The proxy forwards a multi-component service as "a|b|c" (var-service).
-    # A SQL panel matching `s.name = '$service'` would then match nothing —
-    # it must split the alternation (string_to_array / ANY / regex).
-    dashboard = json.loads((_DASHBOARD_DIR / filename).read_text())
+    # A SQL panel matching `s.name = '$service'` would then match nothing.
+    dashboard = _load(filename)
     offenders = [
         where
         for where, sql in _sql_targets(dashboard)
@@ -69,5 +86,5 @@ def test_customer_dashboard_sql_handles_multi_component_service(filename):
 
 @pytest.mark.parametrize("filename", CUSTOMER_FACING)
 def test_customer_dashboard_no_demo_hardcodes(filename):
-    raw = (_DASHBOARD_DIR / filename).read_text()
+    raw = (_CUSTOMER_DIR / filename).read_text()
     assert "sample-app" not in raw, f"{filename}: hardcoded demo workload reference"
