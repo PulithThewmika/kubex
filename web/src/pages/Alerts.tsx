@@ -138,11 +138,15 @@ export function Alerts() {
         activeFilter === 'active' ? (
           <div
             role="status"
-            className="flex flex-col items-center gap-3 border-2 border-paper-line-soft bg-paper-raised px-4 py-8 text-center"
+            className="flex flex-col items-center gap-4 border-2 border-paper-line-soft bg-paper-raised px-4 py-10 text-center"
           >
-            <img src="/Noalerts.png" alt="" className="h-40 w-auto select-none" />
-            <h2 className="font-heading text-lg font-bold uppercase tracking-tight text-ink">All clear</h2>
-            <p className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            <img
+              src="/Noalerts.png"
+              alt=""
+              className="w-full max-w-xl select-none object-contain"
+            />
+            <h2 className="font-heading text-xl font-bold uppercase tracking-tight text-ink sm:text-2xl">All clear</h2>
+            <p className="max-w-md font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
               No active alerts. Every service is within its health thresholds.
             </p>
           </div>
