@@ -29,7 +29,7 @@ export function RadioCards({ legend, name, options, value, onChange, children }:
           <div key={opt.value}>
             <label
               className={`flex cursor-pointer gap-4 border-2 p-4 transition-colors ${
-                selected ? 'border-accent bg-accent/10' : 'border-border-strong hover:border-text'
+                selected ? 'border-accent bg-accent/10' : 'border-paper-line-soft hover:border-ink'
               }`}
             >
               <input
@@ -41,8 +41,8 @@ export function RadioCards({ legend, name, options, value, onChange, children }:
                 className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
               />
               <span className="flex flex-col gap-1">
-                <span className="font-display text-base uppercase leading-none text-text">{opt.label}</span>
-                <span className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
+                <span className="font-display text-base uppercase leading-none text-ink">{opt.label}</span>
+                <span className="font-body text-xs font-semibold uppercase tracking-wide text-ink-muted">
                   {opt.description}
                 </span>
               </span>

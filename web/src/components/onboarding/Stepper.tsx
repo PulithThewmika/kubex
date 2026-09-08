@@ -31,19 +31,19 @@ export function Stepper({ steps, current }: StepperProps) {
                     ? 'border-accent bg-accent text-background'
                     : active
                       ? 'border-accent text-accent'
-                      : 'border-border-strong text-text-muted'
+                      : 'border-paper-line-soft text-ink-muted'
                 }`}
               >
                 {done ? <CheckIcon /> : i + 1}
               </span>
               <span
-                className={`hidden font-body text-xs font-bold uppercase tracking-[0.15em] sm:inline ${active ? 'text-text' : 'text-text-muted'}`}
+                className={`hidden font-body text-xs font-bold uppercase tracking-[0.15em] sm:inline ${active ? 'text-ink' : 'text-ink-muted'}`}
               >
                 {label}
               </span>
             </div>
             {i < steps.length - 1 && (
-              <span className={`mx-3 h-0.5 flex-1 ${done ? 'bg-accent' : 'bg-border-strong'}`} aria-hidden="true" />
+              <span className={`mx-3 h-0.5 flex-1 ${done ? 'bg-accent' : 'bg-paper-line-soft'}`} aria-hidden="true" />
             )}
           </li>
         )
