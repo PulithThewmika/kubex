@@ -20,11 +20,11 @@ const NAV_LINKS = [
 function Nav({ cta }: { cta: Cta }) {
   return (
     <header className="sticky top-0 z-50 border-b-2 border-background bg-text text-background">
-      <div className="flex h-14 w-full items-center px-4 sm:h-16 sm:px-8 lg:px-12">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:h-16 sm:px-6">
         <a href="#top" className="font-display text-2xl uppercase leading-none tracking-wide text-background sm:text-3xl">
           Kube<span className="text-accent">X</span>
         </a>
-        <nav className="hidden flex-1 justify-center gap-9 md:flex">
+        <nav className="hidden gap-7 md:flex">
           {NAV_LINKS.map((l) => (
             <a
               key={l.label}
@@ -37,7 +37,7 @@ function Nav({ cta }: { cta: Cta }) {
         </nav>
         <a
           href={cta.href}
-          className="ml-auto border-2 border-background bg-accent px-3 py-1.5 font-display text-sm uppercase tracking-wide text-background transition-colors hover:bg-background hover:text-text sm:text-base"
+          className="border-2 border-background bg-accent px-3 py-1.5 font-display text-sm uppercase tracking-wide text-background transition-colors hover:bg-background hover:text-text sm:text-base"
         >
           {cta.label}
         </a>
@@ -53,19 +53,19 @@ function Hero({ cta }: { cta: Cta }) {
       className="relative flex min-h-[calc(100dvh-3.5rem)] flex-col overflow-hidden border-b-2 border-text bg-background sm:min-h-[calc(100dvh-4rem)]"
     >
       <div aria-hidden="true" className="absolute inset-0 text-accent/[0.08] halftone-lg" />
-      <div className="relative flex w-full flex-1 items-center px-6 pt-16 sm:px-10 sm:pt-20 lg:px-14">
-        <Reveal className="w-full lg:max-w-[46%]">
+      <div className="relative mx-auto flex w-full max-w-6xl flex-1 items-center px-4 pt-16 sm:px-6 sm:pt-20">
+        <Reveal className="w-full lg:max-w-[52%]">
           <h1 className="font-display text-6xl uppercase leading-[0.82] text-text sm:text-8xl lg:text-8xl">
             <span className="block">Know if your</span>
             <span className="block">last deploy</span>
             <span className="block">made it worse</span>
           </h1>
-          <p className="mt-8 max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
+          <p className="mt-10 max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
             KubeX correlates GitHub Actions, ArgoCD and Kubernetes runtime
             health into one deployment record — and scores every release
             automatically. No dashboards to babysit.
           </p>
-          <div className="mt-9 flex flex-wrap items-center gap-4">
+          <div className="mt-7 flex flex-wrap gap-3">
             <a
               href={cta.href}
               className="border-2 border-accent bg-accent px-5 py-2.5 font-display text-lg uppercase tracking-wide text-background transition-transform hover:-translate-y-1"
@@ -83,16 +83,15 @@ function Hero({ cta }: { cta: Cta }) {
           </div>
         </Reveal>
 
-        {/* Collage sits just right of the copy, base on the marquee. Sized to
-            clear the top of the hero so it's never cropped. Dropped on narrow
-            screens. */}
+        {/* Collage anchored to the bottom-right corner, its base meeting the
+            marquee bar. Decorative — dropped on narrow screens. */}
         <img
           src="/hero-image.png"
           alt="An analyst scanning the horizon through binoculars, deployment charts rising behind"
           width={1080}
           height={1147}
           draggable={false}
-          className="pointer-events-none absolute bottom-0 left-[50%] hidden w-[21rem] select-none lg:block xl:w-[27rem] 2xl:w-[30rem]"
+          className="pointer-events-none absolute bottom-0 right-2 hidden w-[34rem] select-none lg:block xl:right-4 xl:w-[42rem]"
         />
       </div>
 
