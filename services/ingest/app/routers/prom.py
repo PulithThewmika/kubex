@@ -206,5 +206,5 @@ async def _empty_list() -> JSONResponse:
 
 
 @router.get("/api/v1/label/{name}/values")
-async def _label_values(name: str) -> JSONResponse:  # noqa: ARG001
+async def _label_values(name: str) -> JSONResponse:
     return JSONResponse(content={"status": "success", "data": []})
