@@ -17,20 +17,19 @@ export function ConnectReposStep({ installations }: ConnectReposStepProps) {
   const connected = installations && installations.length > 0
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h2 className="font-heading text-xl font-semibold text-text">Connect your repositories</h2>
-        <p className="text-sm text-text-muted">
-          Install the KubeX GitHub App on the organization or repositories you deploy from. KubeX uses it to
-          watch GitHub Actions runs and provision webhooks automatically — no per-repo secrets to manage.
+        <h2 className="font-display text-3xl uppercase leading-none text-text sm:text-4xl">
+          Connect your repositories
+        </h2>
+        <p className="max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
+          Install the KubeX GitHub App on the organization or repositories you deploy from. KubeX watches
+          GitHub Actions runs and provisions webhooks automatically — no per-repo secrets to manage.
         </p>
       </div>
 
       {connected ? (
-        <div
-          role="status"
-          className="rounded-lg border border-healthy/30 bg-healthy/10 px-4 py-3 text-sm text-healthy"
-        >
+        <div role="status" className="border-2 border-healthy bg-healthy/10 px-4 py-3 font-body text-xs font-bold uppercase tracking-wide text-healthy">
           {installations.length === 1
             ? `Connected to ${installations[0].account_login}.`
             : `Connected to ${installations.length} accounts.`}{' '}
@@ -40,13 +39,13 @@ export function ConnectReposStep({ installations }: ConnectReposStepProps) {
 
       <a
         href={GITHUB_APP_INSTALL_URL}
-        className="flex w-fit items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px"
+        className="group inline-flex w-fit items-center gap-3 border-2 border-accent bg-accent px-5 py-3 font-display text-base uppercase tracking-wide text-background transition-transform duration-300 hover:-translate-y-1 active:translate-y-0 active:scale-[0.98] motion-reduce:transform-none"
       >
         <GitHubIcon />
         {connected ? 'Install on another account' : 'Install GitHub App'}
       </a>
 
-      <p className="text-xs text-text-muted">
+      <p className="font-body text-xs font-semibold uppercase tracking-wide text-text-muted">
         Opens GitHub in this tab. GitHub returns you to Settings when the install completes; re-open this
         guide from there to pick up where you left off.
       </p>
