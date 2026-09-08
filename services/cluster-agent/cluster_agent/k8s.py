@@ -122,6 +122,15 @@ async def find_prometheus() -> tuple[str, str] | None:
     )
 
 
+async def find_loki() -> tuple[str, str] | None:
+    """Discover a Loki Service (#840). Grafana's single-binary Helm chart
+    names it 'loki'; distributed-mode installs commonly expose
+    'loki-gateway'; the older loki-stack chart uses 'loki-stack'."""
+    return await asyncio.to_thread(
+        _find_service_sync, ("loki-gateway", "loki-stack", "loki")
+    )
+
+
 def _get_configmap_sync(namespace: str, name: str) -> client.V1ConfigMap | None:
     return _call(lambda: _core_v1().read_namespaced_config_map(name, namespace), not_found_ok=True)
 
