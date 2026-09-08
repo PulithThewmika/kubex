@@ -85,13 +85,15 @@ describe('App routing', () => {
     expect(screen.queryByRole('heading', { name: /how it works/i })).not.toBeInTheDocument()
   })
 
-  it('redirects the bare / to /app when authenticated', async () => {
+  it('shows the landing page at the bare / even when authenticated', async () => {
     stubRoutedFetch(AUTHENTICATED_ROUTES)
     window.history.pushState({}, '', '/')
 
     await renderApp()
 
-    expect(await screen.findByRole('heading', { name: 'Overview' })).toBeInTheDocument()
+    // Landing is the front door for everyone; the CTA points into the app.
+    expect(await screen.findByRole('heading', { name: /how it works/i })).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: /go to dashboard/i }).length).toBeGreaterThan(0)
   })
 
   it('renders ServiceDeepDive at /app/services/:name', async () => {

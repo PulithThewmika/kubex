@@ -13,7 +13,9 @@ export function DeployDetail() {
   if (!Number.isFinite(deployId)) {
     return (
       <div className="p-6">
-        <p className="text-sm text-failed">Invalid deployment ID.</p>
+        <div className="rounded-xl border border-failed/30 bg-failed/5 p-4 text-sm text-failed">
+          Invalid deployment ID.
+        </div>
       </div>
     )
   }
@@ -29,7 +31,9 @@ export function DeployDetail() {
   if (isError || !deployment) {
     return (
       <div className="p-6">
-        <p className="text-sm text-failed">Deployment not found.</p>
+        <div className="rounded-xl border border-failed/30 bg-failed/5 p-4 text-sm text-failed">
+          Deployment not found.
+        </div>
       </div>
     )
   }
@@ -115,7 +119,7 @@ function DeployMetadata({ deployment }: { deployment: DeploymentDetail }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="font-heading text-xl font-semibold text-text">
+        <h1 className="font-mono text-xl font-semibold text-text">
           {commitUrl ? (
             <a href={commitUrl} target="_blank" rel="noreferrer" className="hover:text-accent hover:underline">
               {shortSha}
@@ -124,7 +128,7 @@ function DeployMetadata({ deployment }: { deployment: DeploymentDetail }) {
             shortSha ?? deployment.status
           )}
         </h1>
-        <span className="rounded-full border border-border px-2 py-0.5 text-xs text-text-muted">
+        <span className="rounded-full border border-border-strong bg-surface px-2 py-0.5 text-xs font-medium text-text-muted">
           {deployment.status}
         </span>
       </div>
@@ -144,9 +148,9 @@ function DeployMetadata({ deployment }: { deployment: DeploymentDetail }) {
 
 function MetaField({ label, value }: { label: string; value: string | null }) {
   return (
-    <div className="rounded-lg border border-border bg-surface p-3">
-      <div className="text-xs text-text-muted">{label}</div>
-      <div className="text-text">{value ?? '—'}</div>
+    <div className="rounded-lg border border-border bg-surface p-3 shadow-card">
+      <div className="text-xs uppercase tracking-wide text-text-faint">{label}</div>
+      <div className="mt-0.5 truncate text-text">{value ?? '—'}</div>
     </div>
   )
 }

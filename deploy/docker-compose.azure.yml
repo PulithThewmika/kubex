@@ -1,0 +1,31 @@
+services:
+  ingest:
+    # No host port publish — Caddy reaches this over the docker network
+    # by service name (ingest:8000). Publishing a loopback port on this
+    # VM's Docker (29.1.3 / Ubuntu 24.04 nftables backend) triggers a
+    # reproducible race: iptables/nft rule programming for the published
+    # port collides with the container's embedded DNS resolver coming up,
+    # so the app's first DB lookup fails every time. Dropping the publish
+    # sidesteps it entirely — for ad-hoc access from the VM use `docker
+    # exec kubex-ingest` or the container's own IP (`docker inspect`),
+    # never a public bind.
+    volumes:
+      - ../secrets:/app/secrets:ro
+    # Caddy is the only caller (private docker network) — trust its
+    # X-Forwarded-* headers so request.url_for() builds the public
+    # https:// OAuth redirect_uri instead of the internal bridge address.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
+
+  grafana: {}
+
+  caddy:
+    image: caddy:2
+    container_name: kubex-caddy
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+
+volumes:
+  caddy_data:

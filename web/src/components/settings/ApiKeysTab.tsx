@@ -53,7 +53,7 @@ function RevokeDialog({ apiKey, onClose }: { apiKey: ApiKey; onClose: () => void
             type="button"
             disabled={revokeMutation.isPending}
             onClick={() => revokeMutation.mutate(apiKey.id, { onSuccess: onClose })}
-            className="w-fit rounded-md bg-failed px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90 disabled:opacity-50"
+            className="w-fit rounded-md bg-failed px-4 py-2 text-sm font-semibold text-white transition-colors hover:brightness-110 active:translate-y-px disabled:opacity-50"
           >
             {revokeMutation.isPending ? 'Revoking…' : 'Revoke key'}
           </button>
@@ -83,7 +83,7 @@ export function ApiKeysTab() {
         <button
           type="button"
           onClick={() => setShowCreate(true)}
-          className="rounded-md bg-text px-3 py-1.5 text-xs font-medium text-background transition-colors hover:opacity-90"
+          className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px"
         >
           Create API key
         </button>

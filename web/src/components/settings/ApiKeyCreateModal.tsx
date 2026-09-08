@@ -31,7 +31,7 @@ export function ApiKeyCreateModal({ onClose }: ApiKeyCreateModalProps) {
           <button
             type="button"
             onClick={onClose}
-            className="w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90"
+            className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px"
           >
             Done
           </button>
@@ -53,7 +53,7 @@ export function ApiKeyCreateModal({ onClose }: ApiKeyCreateModalProps) {
               onChange={(e) => setName(e.target.value)}
               placeholder="CI pipeline"
               autoFocus
-              className="rounded-md border border-border bg-background px-3 py-2 text-sm text-text"
+              className="rounded-md border border-border-strong bg-background px-3 py-2 text-sm text-text focus:border-accent focus:outline-none"
             />
           </label>
           {createMutation.isError && (
@@ -62,7 +62,7 @@ export function ApiKeyCreateModal({ onClose }: ApiKeyCreateModalProps) {
           <button
             type="submit"
             disabled={name.trim().length === 0 || createMutation.isPending}
-            className="w-fit rounded-md bg-text px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90 disabled:opacity-50"
+            className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-accent-hover active:translate-y-px disabled:opacity-50"
           >
             {createMutation.isPending ? 'Creating…' : 'Create key'}
           </button>
