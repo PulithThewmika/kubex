@@ -33,21 +33,31 @@ export function OrgSwitcher({ onSwitched }: { onSwitched: () => void }) {
 
   return (
     <div className="border-b border-border py-1">
-      <p className="px-3 pb-1 pt-1 text-xs font-medium uppercase text-text-muted">Switch organization</p>
-      {memberships.map((m) => (
-        <button
-          key={m.org_id}
-          type="button"
-          role="menuitem"
-          disabled={switching}
-          onClick={() => handleSwitch(m.org_id)}
-          className={`block w-full px-3 py-2 text-left text-sm hover:bg-background disabled:opacity-50 ${
-            m.org_id === user?.org_id ? 'font-medium text-accent' : 'text-text'
-          }`}
-        >
-          {m.org_name}
-        </button>
-      ))}
+      <p className="px-3 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-text-faint">
+        Switch organization
+      </p>
+      {memberships.map((m) => {
+        const active = m.org_id === user?.org_id
+        return (
+          <button
+            key={m.org_id}
+            type="button"
+            role="menuitem"
+            disabled={switching}
+            onClick={() => handleSwitch(m.org_id)}
+            className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-surface disabled:opacity-50 ${
+              active ? 'font-medium text-accent' : 'text-text-muted hover:text-text'
+            }`}
+          >
+            <span className="truncate">{m.org_name}</span>
+            {active && (
+              <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4 shrink-0" aria-hidden="true">
+                <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </button>
+        )
+      })}
     </div>
   )
 }
