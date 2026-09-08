@@ -52,47 +52,46 @@ function Hero({ cta }: { cta: Cta }) {
       className="relative flex min-h-[calc(100dvh-3.5rem)] flex-col overflow-hidden border-b-2 border-text bg-background sm:min-h-[calc(100dvh-4rem)]"
     >
       <div aria-hidden="true" className="absolute inset-0 text-accent/[0.08] halftone-lg" />
-      <div className="relative mx-auto flex w-full max-w-6xl flex-1 items-center px-4 py-16 sm:px-6 sm:py-20">
-        <div className="grid w-full items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
-          <Reveal>
-            <h1 className="font-display text-6xl uppercase leading-[0.82] text-text sm:text-8xl lg:text-8xl">
-              <span className="block">Know if your</span>
-              <span className="block">last deploy</span>
-              <span className="block">made it worse</span>
-            </h1>
-            <p className="mt-10 max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
-              KubeX correlates GitHub Actions, ArgoCD and Kubernetes runtime
-              health into one deployment record — and scores every release
-              automatically. No dashboards to babysit.
-            </p>
-            <div className="mt-7 flex flex-wrap gap-3">
-              <a
-                href={cta.href}
-                className="border-2 border-accent bg-accent px-5 py-2.5 font-display text-lg uppercase tracking-wide text-background transition-transform hover:-translate-y-1"
-              >
-                {cta.label} →
-              </a>
-              <a
-                href={SOURCE_HREF}
-                target="_blank"
-                rel="noreferrer"
-                className="border-2 border-text px-5 py-2.5 font-display text-lg uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent"
-              >
-                Source
-              </a>
-            </div>
-          </Reveal>
-          <Reveal delayMs={120} className="flex justify-center lg:justify-end">
-            <img
-              src="/hero-image.png"
-              alt="An analyst scanning the horizon through binoculars, deployment charts rising behind"
-              width={1080}
-              height={1147}
-              className="h-auto w-full max-w-sm select-none lg:max-w-md xl:max-w-lg"
-              draggable={false}
-            />
-          </Reveal>
-        </div>
+      <div className="relative mx-auto flex w-full max-w-6xl flex-1 items-center px-4 pt-16 sm:px-6 sm:pt-20">
+        <Reveal className="w-full lg:max-w-[52%]">
+          <h1 className="font-display text-6xl uppercase leading-[0.82] text-text sm:text-8xl lg:text-8xl">
+            <span className="block">Know if your</span>
+            <span className="block">last deploy</span>
+            <span className="block">made it worse</span>
+          </h1>
+          <p className="mt-10 max-w-md font-body text-sm font-semibold uppercase leading-relaxed tracking-wide text-text-muted">
+            KubeX correlates GitHub Actions, ArgoCD and Kubernetes runtime
+            health into one deployment record — and scores every release
+            automatically. No dashboards to babysit.
+          </p>
+          <div className="mt-7 flex flex-wrap gap-3">
+            <a
+              href={cta.href}
+              className="border-2 border-accent bg-accent px-5 py-2.5 font-display text-lg uppercase tracking-wide text-background transition-transform hover:-translate-y-1"
+            >
+              {cta.label} →
+            </a>
+            <a
+              href={SOURCE_HREF}
+              target="_blank"
+              rel="noreferrer"
+              className="border-2 border-text px-5 py-2.5 font-display text-lg uppercase tracking-wide text-text transition-colors hover:border-accent hover:text-accent"
+            >
+              Source
+            </a>
+          </div>
+        </Reveal>
+
+        {/* Collage anchored to the bottom-right corner, its base meeting the
+            marquee bar. Decorative — dropped on narrow screens. */}
+        <img
+          src="/hero-image.png"
+          alt="An analyst scanning the horizon through binoculars, deployment charts rising behind"
+          width={1080}
+          height={1147}
+          draggable={false}
+          className="pointer-events-none absolute bottom-0 right-2 hidden w-[34rem] select-none lg:block xl:right-4 xl:w-[42rem]"
+        />
       </div>
 
       <Ticker />
