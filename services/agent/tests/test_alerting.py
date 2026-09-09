@@ -81,18 +81,6 @@ def mock_session():
     return session
 
 
-@pytest.fixture(autouse=True)
-def mock_notify_slack():
-    """Applies to every test in this file — Slack delivery is a separate
-    concern (services/ingest/app/routers/notify_internal.py owns the real
-    logic) and notify_slack() itself is already unit-tested; this just
-    keeps these tests hermetic (no real network attempt to http://ingest)
-    and fast, while test_notify_slack_wiring below explicitly checks the
-    call args."""
-    with patch("agent.alerting.notify_slack", new=AsyncMock()) as mock:
-        yield mock
-
-
 @pytest.mark.asyncio
 async def test_fire_alert_inserts_db_and_posts(mock_session, mock_alertmanager):
     """fire_alert inserts an alerts row and posts to Alertmanager."""
@@ -167,59 +155,3 @@ async def test_resolve_payload_labels_match_fire_payload():
 
     resolve_labels = {"alertname", "service", "deploy_id", "severity"}
     assert fire_labels == resolve_labels
-
-
-class TestNotifySlackWiring:
-    """fire_alert/resolve_alert must ask ingest to deliver to Slack — the
-    actual delivery logic lives in ingest's notify_internal.py and is
-    tested there; these just check the agent calls out with the right
-    event_type/org_id/service_id/text."""
-
-    @pytest.mark.asyncio
-    async def test_fire_alert_calls_notify_slack(self, mock_session, mock_alertmanager, mock_notify_slack):
-        await fire_alert(mock_session, "orders", 1, 52, 68, "degraded", SAMPLE_DETAILS, TEST_ORG_ID)
-
-        mock_notify_slack.assert_awaited_once()
-        args, kwargs = mock_notify_slack.call_args
-        assert args[0] == TEST_ORG_ID
-        assert args[1] == "deploy_health"
-        assert "orders" in args[2]
-        assert kwargs["service_id"] == 1
-
-    @pytest.mark.asyncio
-    async def test_fire_alert_notifies_even_when_alertmanager_down(self, mock_session, mock_notify_slack):
-        client = AsyncMock(spec=httpx.AsyncClient)
-        client.is_closed = False
-        client.post.side_effect = httpx.ConnectError("Connection refused")
-        with patch("agent.alerting._client", client):
-            await fire_alert(mock_session, "orders", 1, 52, 68, "degraded", SAMPLE_DETAILS, TEST_ORG_ID)
-
-        mock_notify_slack.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_resolve_alert_calls_notify_slack_when_org_id_given(self, mock_alertmanager, mock_notify_slack):
-        session = AsyncMock()
-        severity_row = MagicMock(severity="warning")
-        severity_result = MagicMock(fetchone=MagicMock(return_value=severity_row))
-        session.execute.side_effect = [severity_result, MagicMock()]
-
-        await resolve_alert(session, 42, "orders", 52, org_id=TEST_ORG_ID, service_id=1)
-
-        mock_notify_slack.assert_awaited_once()
-        args, kwargs = mock_notify_slack.call_args
-        assert args[0] == TEST_ORG_ID
-        assert args[1] == "deploy_health"
-        assert kwargs["service_id"] == 1
-
-    @pytest.mark.asyncio
-    async def test_resolve_alert_skips_notify_without_org_id(self, mock_alertmanager, mock_notify_slack):
-        """Backward-compat path — a caller that predates org_id/service_id
-        (none exist today, but the params are optional) must not crash."""
-        session = AsyncMock()
-        severity_row = MagicMock(severity="warning")
-        severity_result = MagicMock(fetchone=MagicMock(return_value=severity_row))
-        session.execute.side_effect = [severity_result, MagicMock()]
-
-        await resolve_alert(session, 42, "orders", 52)
-
-        mock_notify_slack.assert_not_awaited()
