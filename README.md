@@ -47,14 +47,14 @@ Two novel pieces:
 
 ## Architecture at a glance
 
-```
-GitHub Actions ──webhook──▶ ┌─────────────────┐
-ArgoCD Notifications ──────▶ │  Ingest (FastAPI)│──▶ Supabase Postgres ◀── Detection Agent ──▶ Prometheus
-                             └─────────────────┘         ▲                     │
-                                                         │                     ▼
-        MCP Server ◀─────────────────────────────────────┤               Alertmanager ──▶ Slack
-        React Shell ◀── REST API ─────────────────────────┤
-        Grafana ─────────────────────────────────────────┘
+```text
+GitHub Actions ──webhook──▶ ┌──────────────────┐
+ArgoCD Notifications ──────▶ │  Ingest (FastAPI) │──▶ Supabase Postgres ◀── Detection Agent ◀── Prometheus
+                            └──────────────────┘          ▲                     │
+                                                          │                     ▼
+        MCP Server ◀──────────────────────────────────────┤               Alertmanager ──▶ Slack
+        React Shell ◀── REST API ──────────────────────────┤
+        Grafana ──────────────────────────────────────────┘
 ```
 
 - **Kind cluster** — sample app, Prometheus stack, Loki, ArgoCD, Alertmanager.
@@ -67,7 +67,7 @@ the Wiki for the full picture.
 
 ## Repository layout
 
-```
+```text
 deploy/     Kind config, docker-compose, Helm values, Grafana/ArgoCD/Alertmanager config
 services/
   ingest/     FastAPI — webhooks, REST API, auth, chat proxy, correlation engine
@@ -86,11 +86,15 @@ Prerequisites: Docker (Compose v2), Kind, kubectl, Helm, a Supabase project.
 
 ```bash
 cp .env.example .env        # fill in Supabase + GitHub + Slack values
-make cluster-up             # Kind cluster: sample app, Prometheus, ArgoCD, ...
+make cluster-up             # create the Kind cluster
 make migrate                # apply SQL migrations to Supabase
 make up                     # ingest, agent, mcp-server, grafana
 make forwards               # bridge in-cluster Prometheus/Loki/Alertmanager
 ```
+
+Deploying the in-cluster pieces (Prometheus stack, Loki, ArgoCD, Alertmanager,
+and the sample app via ArgoCD) is a separate step — see the
+[Wiki](https://github.com/PulithThewmika/kubex/wiki) setup guide.
 
 Local ports: Grafana `3000`, ingest `8000`, React shell `5173`,
 Prometheus `9090`, ArgoCD `8443`.
