@@ -1,6 +1,7 @@
 name: Cluster Agent Image
 
 on:
+  workflow_dispatch:
   push:
     branches: [main, dev]
     paths:
@@ -38,7 +39,7 @@ jobs:
   # Only this job publishes, so only this job gets ghcr.io write access.
   publish:
     needs: build
-    if: github.event_name == 'push'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
