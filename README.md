@@ -1,54 +1,116 @@
 # KubeX
-Deployment-aware observability platform — correlates GitHub Actions, ArgoCD, and Kubernetes health per deployment, scores every release autonomously, and exposes the full surface through an MCP interface.
 
-## Development
+**Deployment-aware observability for Kubernetes.** KubeX correlates your CI
+(GitHub Actions), CD (ArgoCD), and runtime health (Kubernetes + Prometheus)
+into one record per deployment, then autonomously answers the question every
+release raises: *did this deployment make things worse?*
 
-All common workflow commands are wrapped in the top-level `Makefile`. Run `make help` to see the full list.
+It also computes DORA metrics per team, fires deployment-scoped alerts, and
+exposes the whole surface through an MCP server so you can investigate
+incidents in natural language from Claude or ChatGPT.
 
-### Cluster (Kind)
+> 📖 **Full documentation lives in the [Wiki](https://github.com/PulithThewmika/kubex/wiki).**
+> Architecture deep-dives, the correlation engine, scoring formulas, the
+> multi-tenant model, API/MCP reference, and deployment guides are all there.
+> This README is just the map.
 
-| Target | What it does |
+---
+
+## Why it exists
+
+Most observability tools tell you *something* is wrong. They rarely tell you
+*which deployment* caused it. KubeX links every CI run and every ArgoCD sync
+into a single deployment record — even when the image-tag bump commit means
+the SHAs don't match — and scores the release's impact on error rate,
+latency, and pod restarts against a pre-deploy baseline.
+
+Two novel pieces:
+
+- **Correlation engine** — joins GitHub and ArgoCD events into one deployment,
+  handles out-of-order events, and auto-registers unknown services.
+- **Health scoring agent** — a scheduled batch job that grades each release
+  0–100 (`healthy` / `degraded` / `failed`) from real metrics, with an
+  explainable breakdown.
+
+## Features
+
+| | |
 |---|---|
-| `make cluster-up` | Create the Kind cluster from `deploy/kind-config.yaml` |
-| `make cluster-down` | Delete the Kind cluster |
-| `make cluster-status` | Show cluster info and node list |
+| **Per-deployment correlation** | CI + CD + runtime health as one timeline |
+| **Autonomous health scoring** | Every release graded against its own baseline |
+| **Pre-deploy safety score** | Rule-based risk estimate before you ship |
+| **DORA metrics** | Deploy frequency, lead time, change-failure rate, MTTR — per team |
+| **Deployment-scoped alerting** | Alerts routed to Slack, tied to the release that caused them |
+| **MCP server** | Natural-language incident investigation from Claude / ChatGPT |
+| **Grafana dashboards** | Operator (platform-wide) and customer (org-scoped) sets |
+| **Multi-tenant SaaS** | GitHub OAuth login, org isolation, GitHub App onboarding |
 
-### Database (Supabase)
+## Architecture at a glance
 
-The platform database is a managed Supabase Postgres instance, not a container — see `.env.example`'s Supabase section for what to fill in and where each value comes from in the Supabase dashboard. `DATABASE_URL` must be the **session pooler** connection string (Settings → Database → Connection string → "Session pooler" tab), not "Direct connection" or "Transaction pooler".
+```
+GitHub Actions ──webhook──▶ ┌─────────────────┐
+ArgoCD Notifications ──────▶ │  Ingest (FastAPI)│──▶ Supabase Postgres ◀── Detection Agent ──▶ Prometheus
+                             └─────────────────┘         ▲                     │
+                                                         │                     ▼
+        MCP Server ◀─────────────────────────────────────┤               Alertmanager ──▶ Slack
+        React Shell ◀── REST API ─────────────────────────┤
+        Grafana ─────────────────────────────────────────┘
+```
 
-Offline/no-Supabase dev is still possible via an opt-in local Postgres container — see `make up-local-db` below.
+- **Kind cluster** — sample app, Prometheus stack, Loki, ArgoCD, Alertmanager.
+- **docker-compose** — ingest service, detection agent, MCP server, Grafana.
+- **Supabase Postgres** — the integration contract; every producer writes it,
+  every consumer reads it.
 
-### Central Platform (docker-compose)
+See the [Architecture](https://github.com/PulithThewmika/kubex/wiki) pages in
+the Wiki for the full picture.
 
-| Target | What it does |
-|---|---|
-| `make up` | Start the compose stack (ingest, agent, mcp-server, grafana) — connects to Supabase via `DATABASE_URL` |
-| `make up-local-db` | Same, plus the opt-in local Postgres container (`--profile local-db`) for offline dev |
-| `make down` | Stop the compose stack |
-| `make logs` | Tail docker-compose logs |
-| `make db-shell` | Open `psql` into `DATABASE_URL` (Supabase by default) |
-| `make db-shell-local` | Open `psql` into the local-db profile container instead |
-| `make migrate` | Run SQL migrations against `DATABASE_URL` (Supabase by default) |
-| `make migrate-local` | Run SQL migrations against the local-db profile container instead |
+## Repository layout
 
-### Cluster Port-Forwards
+```
+deploy/     Kind config, docker-compose, Helm values, Grafana/ArgoCD/Alertmanager config
+services/
+  ingest/     FastAPI — webhooks, REST API, auth, chat proxy, correlation engine
+  agent/      Detection agent — health scoring, DORA reads, alerting, blast radius
+  mcp-server/ MCP server (TypeScript) — deployment/metrics/logs tools
+web/        React shell (Vite)
+scripts/    End-to-end smoke test
+```
 
-Prometheus, Loki, and Alertmanager run in-cluster but are consumed by services outside the cluster (Grafana, ingest, detection agent). Port-forwards bridge them to the host.
+The sample application (frontend → orders → payments) lives in its own repo:
+[deploylens-sample-app](https://github.com/PulithThewmika/deploylens-sample-app).
 
-| Target | What it does |
-|---|---|
-| `make forwards` | Start background port-forwards (Prometheus 9090, Loki 3100, Alertmanager 9093). PIDs tracked in `.pids/` |
-| `make forwards-stop` | Kill tracked port-forward processes |
-| `make argocd-forward` | Port-forward ArgoCD UI to `localhost:8443` (foreground) |
+## Quick start
 
-### GitHub Webhook Tunnel
+Prerequisites: Docker (Compose v2), Kind, kubectl, Helm, a Supabase project.
 
-The ingest service runs locally but needs to receive `workflow_run` events from GitHub. An ngrok tunnel exposes it.
+```bash
+cp .env.example .env        # fill in Supabase + GitHub + Slack values
+make cluster-up             # Kind cluster: sample app, Prometheus, ArgoCD, ...
+make migrate                # apply SQL migrations to Supabase
+make up                     # ingest, agent, mcp-server, grafana
+make forwards               # bridge in-cluster Prometheus/Loki/Alertmanager
+```
 
-| Target | What it does |
-|---|---|
-| `make tunnel` | Start ngrok on port 8000 (foreground) |
-| `make webhook-update` | Read the active ngrok URL and patch the GitHub repo webhook to point at it |
+Local ports: Grafana `3000`, ingest `8000`, React shell `5173`,
+Prometheus `9090`, ArgoCD `8443`.
 
-Typical session flow: `make tunnel` in one terminal, then `make webhook-update` in another once ngrok is up.
+Run `make help` for the full list of workflow targets. Detailed setup —
+Supabase connection strings, GitHub App registration, ngrok webhook tunnel —
+is in the [Wiki](https://github.com/PulithThewmika/kubex/wiki).
+
+## Tech stack
+
+Python · FastAPI · SQLAlchemy 2.x · asyncpg · PostgreSQL (Supabase) ·
+Prometheus · Loki · ArgoCD · Grafana · TypeScript (MCP) · React + Vite ·
+MCP · Docker · Kind
+
+## Status
+
+Solo academic project (12-week timeline). M1–M3 complete (foundation,
+scoring, DORA, alerts, MCP, shell). M4 in progress — the SaaS transition
+(GitHub App onboarding, cluster agent, tiered integration, frontend upgrade).
+
+## License
+
+[MIT](LICENSE)
