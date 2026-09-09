@@ -47,15 +47,7 @@ Two novel pieces:
 
 ## Architecture at a glance
 
-```text
-GitHub Actions ──webhook──▶ ┌──────────────────┐
-ArgoCD Notifications ──────▶ │  Ingest (FastAPI) │──▶ Supabase Postgres ◀── Detection Agent ◀── Prometheus
-                            └──────────────────┘          ▲                     │
-                                                          │                     ▼
-        MCP Server ◀──────────────────────────────────────┤               Alertmanager ──▶ Slack
-        React Shell ◀── REST API ──────────────────────────┤
-        Grafana ──────────────────────────────────────────┘
-```
+![KubeX architecture](https://github.com/user-attachments/assets/8121a0e9-8b8a-406a-a67a-a3117cd6415c)
 
 - **Kind cluster** — sample app, Prometheus stack, Loki, ArgoCD, Alertmanager.
 - **docker-compose** — ingest service, detection agent, MCP server, Grafana.
