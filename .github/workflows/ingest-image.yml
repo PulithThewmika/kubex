@@ -26,6 +26,7 @@ jobs:
   # Runs on every PR and push — builds the image without pushing, so a
   # broken Dockerfile fails CI before merge.
   build:
+    name: Ingest build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +39,7 @@ jobs:
 
   # Only this job publishes, so only this job gets ghcr.io write access.
   publish:
+    name: Ingest publish
     needs: build
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
