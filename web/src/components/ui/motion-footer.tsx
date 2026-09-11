@@ -127,8 +127,8 @@ const FooterMarquee = () => (
 type Cta = { href: string; label: string }
 
 const SECONDARY_LINKS = [
-  { label: 'Privacy', href: '#' },
-  { label: 'Terms', href: '#' },
+  { label: 'Privacy', href: '/privacy' },
+  { label: 'Terms', href: '/terms' },
   { label: 'Contact', href: '#' },
 ]
 
