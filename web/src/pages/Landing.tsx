@@ -18,7 +18,7 @@ if (typeof window !== 'undefined') {
 const HERO_LINES = ['Know if your', 'last deploy', 'made it worse']
 
 const GITHUB_HREF = '/login?redirect=%2Fapp'
-const SOURCE_HREF = 'https://github.com/PulithThewmika/kubex'
+const DOCS_HREF = 'https://github.com/PulithThewmika/kubex/wiki'
 
 type Cta = { href: string; label: string }
 
@@ -206,12 +206,12 @@ function Hero({ cta }: { cta: Cta }) {
               </span>
             </a>
             <a
-              href={SOURCE_HREF}
+              href={DOCS_HREF}
               target="_blank"
               rel="noreferrer"
               className="border-2 border-text px-5 py-2.5 font-display text-lg uppercase tracking-wide text-text transition-all duration-300 hover:border-accent hover:text-accent active:scale-[0.98] motion-reduce:transform-none"
             >
-              Source
+              Documentation
             </a>
           </div>
         </div>
