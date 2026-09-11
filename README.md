@@ -1,5 +1,9 @@
 # KubeX
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/2ade9dc2-b228-4c8a-818b-c8d6a67392cc" alt="KubeX logo" width="160">
+</p>
+
 **Deployment-aware observability for Kubernetes.** KubeX correlates your CI
 (GitHub Actions), CD (ArgoCD), and runtime health (Kubernetes + Prometheus)
 into one record per deployment, then autonomously answers the question every
