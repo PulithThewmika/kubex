@@ -1,7 +1,5 @@
-// Real brand marks (official logos, single-path fill icons) for the
-// integrations grid. Loki and Alertmanager have no distinct public brand
-// mark of their own (they ship under the Grafana/Prometheus umbrella), so
-// MaxIntegrations.tsx falls back to a generic lucide-react icon for those two.
+// Real brand marks (official logos, currentColor fill icons) for the
+// integrations grid.
 type BrandIconProps = {
   className?: string
   // Accepted (and ignored) so brand icons drop into the same call site as
@@ -11,18 +9,26 @@ type BrandIconProps = {
 }
 
 function brandIcon(title: string, path: string) {
+  return brandIconMulti(title, '0 0 24 24', [path])
+}
+
+// Loki's mark is several thin bars, not one path -- reuse this for any
+// multi-path or non-square (e.g. Loki's 48x56) brand mark.
+function brandIconMulti(title: string, viewBox: string, paths: string[]) {
   function BrandIcon({ className, ...rest }: BrandIconProps) {
     return (
       <svg
         role="img"
-        viewBox="0 0 24 24"
+        viewBox={viewBox}
         xmlns="http://www.w3.org/2000/svg"
         className={className}
         fill="currentColor"
         aria-hidden={rest['aria-hidden'] ?? true}
       >
         <title>{title}</title>
-        <path d={path} />
+        {paths.map((d) => (
+          <path key={d} d={d} />
+        ))}
       </svg>
     )
   }
@@ -57,4 +63,29 @@ export const GrafanaLogo = brandIcon(
 export const SlackLogo = brandIcon(
   'Slack',
   'M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z',
+)
+
+// Grafana's own Loki mark (fetched from grafana.com/static/img/logos/logo-loki.svg),
+// flattened from its brand gradient to currentColor so it matches the
+// monochrome, hover-recolored style of the rest of this grid.
+export const LokiLogo = brandIconMulti('Loki', '0 0 48 56', [
+  'M12.0478 54.9248L11.3838 50.4663L6.92529 51.1304L7.68418 55.5889L12.0478 54.9248Z',
+  'M46.957 42.4032L46.1981 38.0396L26.7515 41.0751L27.3206 45.4388L46.957 42.4032Z',
+  'M20.395 46.5772L24.8535 45.8183L24.1895 41.4546L19.731 42.1186L20.395 46.5772Z',
+  'M19.0674 53.7865L18.3085 49.4229L13.9448 50.0869L14.514 54.5454L19.0674 53.7865Z',
+  'M5.88135 44.2055L6.54539 48.6641L11.0039 48L10.3399 43.5415L5.88135 44.2055Z',
+  'M27.6997 47.9051L28.4586 52.4585L48.0001 49.4229L47.3361 44.9644L27.6997 47.9051Z',
+  'M21.5333 53.407L25.8969 52.8378L25.2329 48.2844L20.7744 49.0433L21.5333 53.407Z',
+  'M12.8062 43.1621L13.565 47.6205L17.9287 46.9566L17.2646 42.498L12.8062 43.1621Z',
+  'M7.39921 41.4546L1.99207 5.97632L0 6.26089L5.50197 41.7392L7.39921 41.4546Z',
+  'M9.96032 41.0751L4.07888 2.94067L2.18164 3.32014L8.06308 41.3597L9.96032 41.0751Z',
+  'M14.3245 40.4111L8.15847 0L6.26123 0.379412L12.4272 40.6008L14.3245 40.4111Z',
+  'M16.8852 40.0315L11.1935 3.2251L9.39111 3.50967L15.0828 40.2212L16.8852 40.0315Z',
+  'M21.2491 39.2728L16.2215 6.64038L14.3242 6.92495L19.3519 39.6523L21.2491 39.2728Z',
+  'M23.8104 38.8935L18.593 5.02783L16.6958 5.31241L22.0081 39.1781L23.8104 38.8935Z',
+])
+
+export const GeminiLogo = brandIcon(
+  'Google Gemini',
+  'M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81',
 )

@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import { ScrollText, BellRing } from 'lucide-react'
 import {
   GitHubActionsLogo,
   ArgoLogo,
@@ -7,6 +6,8 @@ import {
   PrometheusLogo,
   GrafanaLogo,
   SlackLogo,
+  LokiLogo,
+  GeminiLogo,
 } from '../icons/brand-logos'
 import { Reveal } from './Reveal'
 import { Ticker } from './Ticker'
@@ -25,10 +26,8 @@ const INTEGRATIONS: Integration[] = [
   { name: 'Prometheus', role: 'Error rate and latency deltas — the raw signal behind every health score.', tag: 'METRICS', Icon: PrometheusLogo },
   { name: 'Grafana', role: 'Per-deployment panels and DORA dashboards, embedded straight into the shell.', tag: 'DASHBOARDS', Icon: GrafanaLogo },
   { name: 'Slack', role: 'Degraded and failed deploys page your team the moment scoring completes.', tag: 'ALERTS', Icon: SlackLogo },
-  // No standalone public brand mark for these two (shipped under the
-  // Grafana/Prometheus umbrella) — keep the generic lucide-react icon.
-  { name: 'Loki', role: 'Logs from the blast radius, time-boxed to the deployment window.', tag: 'LOGS', Icon: ScrollText },
-  { name: 'Alertmanager', role: 'Dedupe, route and silence — inbound alerts folded into the deploy record.', tag: 'ROUTING', Icon: BellRing },
+  { name: 'Loki', role: 'Logs from the blast radius, time-boxed to the deployment window.', tag: 'LOGS', Icon: LokiLogo },
+  { name: 'Gemini', role: 'Ask the in-app chat about any deployment — it reads your live data via MCP.', tag: 'AI', Icon: GeminiLogo },
 ]
 
 export function MaxIntegrations() {
