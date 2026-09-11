@@ -31,6 +31,11 @@ export default async function handler(req: Request): Promise<Response> {
     body: hasBody ? req.body : undefined,
     // @ts-expect-error required by undici/edge fetch when streaming a body
     duplex: hasBody ? 'half' : undefined,
+    // Without this, fetch silently follows a 302 (e.g. /auth/github ->
+    // GitHub's OAuth authorize page) itself and hands back GitHub's own
+    // response as if it came from our origin -- breaking the OAuth
+    // redirect entirely. 'manual' relays the raw 3xx + Location instead.
+    redirect: 'manual',
   })
 
   return new Response(upstreamRes.body, {
