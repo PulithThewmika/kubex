@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { CodeBlock } from '../CodeBlock'
 
-// Override via VITE_MCP_URL if the deploy target isn't the demo VM.
-const MCP_URL = import.meta.env.VITE_MCP_URL ?? 'https://kubex-demo-pt.southeastasia.cloudapp.azure.com/mcp'
+// /mcp is proxied to the backend by vercel.json, so this stays same-origin
+// instead of hardcoding the backend host. Override via VITE_MCP_URL for
+// setups where that rewrite doesn't apply (e.g. local dev against a remote backend).
+const MCP_URL = import.meta.env.VITE_MCP_URL ?? `${window.location.origin}/mcp`
 
 type Client = 'claude' | 'chatgpt'
 
