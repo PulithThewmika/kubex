@@ -1,10 +1,11 @@
 import * as React from 'react'
 import { useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { ArrowRight, ArrowUp, LogIn } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { headerOffset, smoothScrollTo } from '@/lib/smooth-scroll'
+import { smoothScrollTo } from '@/lib/smooth-scroll'
 
 if (typeof window !== 'undefined') {
   gsap.registerPlugin(ScrollTrigger)
@@ -29,6 +30,8 @@ const STYLES = `
 export type MagneticButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
   React.AnchorHTMLAttributes<HTMLAnchorElement> & {
     as?: React.ElementType
+    // For as={Link} (react-router) instead of a plain <a>.
+    to?: string
   }
 
 const MagneticButton = React.forwardRef<HTMLElement, MagneticButtonProps>(
@@ -127,9 +130,9 @@ const FooterMarquee = () => (
 type Cta = { href: string; label: string }
 
 const SECONDARY_LINKS = [
-  { label: 'Privacy', href: '#' },
-  { label: 'Terms', href: '#' },
-  { label: 'Contact', href: '#' },
+  { label: 'Privacy', href: '/privacy', external: false },
+  { label: 'Terms', href: '/terms', external: false },
+  { label: 'Contact', href: 'https://www.pulith.me/', external: true },
 ]
 
 export function CinematicFooter({ cta }: { cta: Cta }) {
@@ -164,11 +167,6 @@ export function CinematicFooter({ cta }: { cta: Cta }) {
   }, [])
 
   const scrollToTop = () => smoothScrollTo(0)
-  const scrollToHow = (e: React.MouseEvent<HTMLElement>) => {
-    e.preventDefault()
-    smoothScrollTo('#how', headerOffset())
-    history.replaceState(null, '', '#how')
-  }
 
   return (
     <>
@@ -210,26 +208,40 @@ export function CinematicFooter({ cta }: { cta: Cta }) {
                 </MagneticButton>
                 <MagneticButton
                   as="a"
-                  href="#how"
-                  onClick={scrollToHow}
+                  href="https://github.com/PulithThewmika/kubex/wiki"
+                  target="_blank"
+                  rel="noreferrer"
                   className="group flex items-center gap-3 border-2 border-background px-8 py-4 font-display text-xl uppercase tracking-wide text-background transition-colors hover:bg-background hover:text-text md:text-2xl"
                 >
-                  How it works
+                  View documentation
                   <ArrowRight className="h-6 w-6 transition-transform duration-300 group-hover:translate-x-1 motion-reduce:transform-none" />
                 </MagneticButton>
               </div>
 
               <div className="mt-2 flex w-full flex-wrap justify-center gap-3 md:gap-4">
-                {SECONDARY_LINKS.map((l) => (
-                  <MagneticButton
-                    key={l.label}
-                    as="a"
-                    href={l.href}
-                    className="border-2 border-background px-6 py-3 font-body text-sm font-bold uppercase tracking-widest text-background transition-colors hover:bg-accent hover:text-background md:text-base"
-                  >
-                    {l.label}
-                  </MagneticButton>
-                ))}
+                {SECONDARY_LINKS.map((l) =>
+                  l.external ? (
+                    <MagneticButton
+                      key={l.label}
+                      as="a"
+                      href={l.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="border-2 border-background px-6 py-3 font-body text-sm font-bold uppercase tracking-widest text-background transition-colors hover:bg-accent hover:text-background md:text-base"
+                    >
+                      {l.label}
+                    </MagneticButton>
+                  ) : (
+                    <MagneticButton
+                      key={l.label}
+                      as={Link}
+                      to={l.href}
+                      className="border-2 border-background px-6 py-3 font-body text-sm font-bold uppercase tracking-widest text-background transition-colors hover:bg-accent hover:text-background md:text-base"
+                    >
+                      {l.label}
+                    </MagneticButton>
+                  ),
+                )}
               </div>
             </div>
           </div>
