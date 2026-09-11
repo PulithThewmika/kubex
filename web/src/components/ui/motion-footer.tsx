@@ -5,7 +5,7 @@ import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { ArrowRight, ArrowUp, LogIn } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { headerOffset, smoothScrollTo } from '@/lib/smooth-scroll'
+import { smoothScrollTo } from '@/lib/smooth-scroll'
 
 if (typeof window !== 'undefined') {
   gsap.registerPlugin(ScrollTrigger)
@@ -167,11 +167,6 @@ export function CinematicFooter({ cta }: { cta: Cta }) {
   }, [])
 
   const scrollToTop = () => smoothScrollTo(0)
-  const scrollToHow = (e: React.MouseEvent<HTMLElement>) => {
-    e.preventDefault()
-    smoothScrollTo('#how', headerOffset())
-    history.replaceState(null, '', '#how')
-  }
 
   return (
     <>
@@ -213,11 +208,12 @@ export function CinematicFooter({ cta }: { cta: Cta }) {
                 </MagneticButton>
                 <MagneticButton
                   as="a"
-                  href="#how"
-                  onClick={scrollToHow}
+                  href="https://github.com/PulithThewmika/kubex/wiki"
+                  target="_blank"
+                  rel="noreferrer"
                   className="group flex items-center gap-3 border-2 border-background px-8 py-4 font-display text-xl uppercase tracking-wide text-background transition-colors hover:bg-background hover:text-text md:text-2xl"
                 >
-                  How it works
+                  View documentation
                   <ArrowRight className="h-6 w-6 transition-transform duration-300 group-hover:translate-x-1 motion-reduce:transform-none" />
                 </MagneticButton>
               </div>
