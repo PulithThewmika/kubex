@@ -1,14 +1,14 @@
+import type { ReactNode } from 'react'
 import {
-  Workflow,
-  GitBranch,
-  Hexagon,
-  Flame,
-  BarChart3,
-  Hash,
-  ScrollText,
-  BellRing,
-  type LucideIcon,
-} from 'lucide-react'
+  GitHubActionsLogo,
+  ArgoLogo,
+  KubernetesLogo,
+  PrometheusLogo,
+  GrafanaLogo,
+  SlackLogo,
+  LokiLogo,
+  GeminiLogo,
+} from '../icons/brand-logos'
 import { Reveal } from './Reveal'
 import { Ticker } from './Ticker'
 
@@ -16,18 +16,18 @@ type Integration = {
   name: string
   role: string
   tag: string
-  Icon: LucideIcon
+  Icon: (props: { className?: string; strokeWidth?: number; 'aria-hidden'?: boolean | 'true' | 'false' }) => ReactNode
 }
 
 const INTEGRATIONS: Integration[] = [
-  { name: 'GitHub Actions', role: 'Every workflow run, ingested via the GitHub App — no secrets to copy.', tag: 'CI', Icon: Workflow },
-  { name: 'ArgoCD', role: 'Sync and rollout events, correlated back to the commit that triggered them.', tag: 'CD', Icon: GitBranch },
-  { name: 'Kubernetes', role: 'Pod health, restarts and readiness from a lightweight in-cluster agent.', tag: 'RUNTIME', Icon: Hexagon },
-  { name: 'Prometheus', role: 'Error rate and latency deltas — the raw signal behind every health score.', tag: 'METRICS', Icon: Flame },
-  { name: 'Grafana', role: 'Per-deployment panels and DORA dashboards, embedded straight into the shell.', tag: 'DASHBOARDS', Icon: BarChart3 },
-  { name: 'Slack', role: 'Degraded and failed deploys page your team the moment scoring completes.', tag: 'ALERTS', Icon: Hash },
-  { name: 'Loki', role: 'Logs from the blast radius, time-boxed to the deployment window.', tag: 'LOGS', Icon: ScrollText },
-  { name: 'Alertmanager', role: 'Dedupe, route and silence — inbound alerts folded into the deploy record.', tag: 'ROUTING', Icon: BellRing },
+  { name: 'GitHub Actions', role: 'Every workflow run, ingested via the GitHub App — no secrets to copy.', tag: 'CI', Icon: GitHubActionsLogo },
+  { name: 'ArgoCD', role: 'Sync and rollout events, correlated back to the commit that triggered them.', tag: 'CD', Icon: ArgoLogo },
+  { name: 'Kubernetes', role: 'Pod health, restarts and readiness from a lightweight in-cluster agent.', tag: 'RUNTIME', Icon: KubernetesLogo },
+  { name: 'Prometheus', role: 'Error rate and latency deltas — the raw signal behind every health score.', tag: 'METRICS', Icon: PrometheusLogo },
+  { name: 'Grafana', role: 'Per-deployment panels and DORA dashboards, embedded straight into the shell.', tag: 'DASHBOARDS', Icon: GrafanaLogo },
+  { name: 'Slack', role: 'Degraded and failed deploys page your team the moment scoring completes.', tag: 'ALERTS', Icon: SlackLogo },
+  { name: 'Loki', role: 'Logs from the blast radius, time-boxed to the deployment window.', tag: 'LOGS', Icon: LokiLogo },
+  { name: 'Gemini', role: 'Ask the in-app chat about any deployment — it reads your live data via MCP.', tag: 'AI', Icon: GeminiLogo },
 ]
 
 export function MaxIntegrations() {
@@ -56,7 +56,7 @@ export function MaxIntegrations() {
               <article className="group flex h-full flex-col justify-between gap-8 bg-background p-6 transition-colors hover:bg-accent">
                 <div className="flex items-start justify-between">
                   <it.Icon
-                    className="h-10 w-10 text-accent transition-colors group-hover:text-background"
+                    className="h-14 w-14 text-accent transition-colors group-hover:text-background"
                     strokeWidth={1.75}
                     aria-hidden="true"
                   />

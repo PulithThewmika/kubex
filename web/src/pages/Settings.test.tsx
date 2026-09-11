@@ -113,7 +113,7 @@ describe('Settings page', () => {
     renderSettings('/app/settings?tab=api-keys')
 
     expect(await screen.findByText(/connect claude or chatgpt/i)).toBeInTheDocument()
-    expect(screen.getByText(/kubex-demo-pt\.southeastasia\.cloudapp\.azure\.com\/mcp/)).toBeInTheDocument()
+    expect(screen.getByText(new RegExp(`${window.location.origin}/mcp`.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'ChatGPT' }))
     expect(screen.getByText(/requires plus, team, or enterprise/i)).toBeInTheDocument()
