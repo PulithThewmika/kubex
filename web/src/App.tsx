@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect } from 'react'
-import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Route, Routes, useLocation, useNavigationType } from 'react-router-dom'
 import { AuthErrorState } from './components/auth/AuthErrorState'
 import { RequireAuth } from './components/auth/RequireAuth'
 import { AppLayout } from './components/layout/AppLayout'
@@ -19,6 +19,8 @@ import { Chat } from './pages/Chat'
 import { Alerts } from './pages/Alerts'
 import { Services } from './pages/Services'
 import { Settings } from './pages/Settings'
+import { Privacy } from './pages/Privacy'
+import { Terms } from './pages/Terms'
 import { NotFound } from './pages/NotFound'
 
 const queryClient = new QueryClient()
@@ -30,20 +32,61 @@ function RoutedErrorBoundary({ children }: { children: ReactNode }) {
   return <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
 }
 
-// Scroll back to the top on every navigation — without this, deep-linking
-// from a scrolled list into a detail page lands you mid-page.
+// Module-level (survives across route changes, resets on a full page
+// reload) — scroll position of each history entry, keyed by its
+// react-router location.key, so a POP navigation can restore it. Native
+// browser scroll restoration is unreliable here because the landing page's
+// height keeps changing after mount (GSAP ScrollTrigger, lazy content), so
+// the browser often restores against a too-short document and clamps to 0.
+const scrollPositions = new Map<string, number>()
+
+// Scroll back to the top on a new (PUSH) navigation — without this,
+// deep-linking from a scrolled list into a detail page lands you mid-page.
+// On a POP (browser/programmatic back), restore the scroll position the
+// page we're returning to had when we left it, instead of jumping to the
+// top or leaving it at 0.
 function ScrollToTop() {
-  const { pathname } = useLocation()
+  const location = useLocation()
+  const navigationType = useNavigationType()
+
+  // Runs on every location change; the cleanup fires right before the
+  // *next* change, capturing the scroll position of the page being left
+  // under the key it still had at that point.
   useEffect(() => {
-    // jsdom has no real scroll; guard so tests don't trip on "Not implemented".
-    if (typeof window.scrollTo === 'function') {
-      try {
-        window.scrollTo(0, 0)
-      } catch {
-        /* no-op */
+    return () => {
+      if (typeof window.scrollY === 'number') {
+        scrollPositions.set(location.key, window.scrollY)
       }
     }
-  }, [pathname])
+  }, [location.key])
+
+  useEffect(() => {
+    // jsdom has no real scroll; guard so tests don't trip on "Not implemented".
+    if (typeof window.scrollTo !== 'function') return
+
+    if (navigationType === 'POP') {
+      const saved = scrollPositions.get(location.key)
+      if (saved !== undefined) {
+        // Defer a frame so the new route's content (and any GSAP layout)
+        // has mounted before we scroll, or the restore can clamp to 0.
+        requestAnimationFrame(() => {
+          try {
+            window.scrollTo(0, saved)
+          } catch {
+            /* no-op */
+          }
+        })
+        return
+      }
+    }
+
+    try {
+      window.scrollTo(0, 0)
+    } catch {
+      /* no-op */
+    }
+  }, [location.pathname, location.key, navigationType])
+
   return null
 }
 
@@ -68,6 +111,8 @@ function App() {
               <Routes>
                 <Route path="/" element={<RootRoute />} />
                 <Route path="/login" element={<Login />} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/terms" element={<Terms />} />
                 <Route
                   path="/app"
                   element={
