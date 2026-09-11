@@ -56,7 +56,7 @@ export function MaxIntegrations() {
               <article className="group flex h-full flex-col justify-between gap-8 bg-background p-6 transition-colors hover:bg-accent">
                 <div className="flex items-start justify-between">
                   <it.Icon
-                    className="h-10 w-10 text-accent transition-colors group-hover:text-background"
+                    className="h-14 w-14 text-accent transition-colors group-hover:text-background"
                     strokeWidth={1.75}
                     aria-hidden="true"
                   />
