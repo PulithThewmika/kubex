@@ -20,6 +20,10 @@ incidents in natural language from Claude or ChatGPT.
 
 ---
 
+## Demo
+
+https://github.com/user-attachments/assets/c130fc35-31f4-4221-a727-eb04b031f3fe
+
 ## Why it exists
 
 Most observability tools tell you *something* is wrong. They rarely tell you
