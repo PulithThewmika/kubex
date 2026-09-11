@@ -1,14 +1,13 @@
+import type { ReactNode } from 'react'
+import { ScrollText, BellRing } from 'lucide-react'
 import {
-  Workflow,
-  GitBranch,
-  Hexagon,
-  Flame,
-  BarChart3,
-  Hash,
-  ScrollText,
-  BellRing,
-  type LucideIcon,
-} from 'lucide-react'
+  GitHubActionsLogo,
+  ArgoLogo,
+  KubernetesLogo,
+  PrometheusLogo,
+  GrafanaLogo,
+  SlackLogo,
+} from '../icons/brand-logos'
 import { Reveal } from './Reveal'
 import { Ticker } from './Ticker'
 
@@ -16,16 +15,18 @@ type Integration = {
   name: string
   role: string
   tag: string
-  Icon: LucideIcon
+  Icon: (props: { className?: string; strokeWidth?: number; 'aria-hidden'?: boolean | 'true' | 'false' }) => ReactNode
 }
 
 const INTEGRATIONS: Integration[] = [
-  { name: 'GitHub Actions', role: 'Every workflow run, ingested via the GitHub App — no secrets to copy.', tag: 'CI', Icon: Workflow },
-  { name: 'ArgoCD', role: 'Sync and rollout events, correlated back to the commit that triggered them.', tag: 'CD', Icon: GitBranch },
-  { name: 'Kubernetes', role: 'Pod health, restarts and readiness from a lightweight in-cluster agent.', tag: 'RUNTIME', Icon: Hexagon },
-  { name: 'Prometheus', role: 'Error rate and latency deltas — the raw signal behind every health score.', tag: 'METRICS', Icon: Flame },
-  { name: 'Grafana', role: 'Per-deployment panels and DORA dashboards, embedded straight into the shell.', tag: 'DASHBOARDS', Icon: BarChart3 },
-  { name: 'Slack', role: 'Degraded and failed deploys page your team the moment scoring completes.', tag: 'ALERTS', Icon: Hash },
+  { name: 'GitHub Actions', role: 'Every workflow run, ingested via the GitHub App — no secrets to copy.', tag: 'CI', Icon: GitHubActionsLogo },
+  { name: 'ArgoCD', role: 'Sync and rollout events, correlated back to the commit that triggered them.', tag: 'CD', Icon: ArgoLogo },
+  { name: 'Kubernetes', role: 'Pod health, restarts and readiness from a lightweight in-cluster agent.', tag: 'RUNTIME', Icon: KubernetesLogo },
+  { name: 'Prometheus', role: 'Error rate and latency deltas — the raw signal behind every health score.', tag: 'METRICS', Icon: PrometheusLogo },
+  { name: 'Grafana', role: 'Per-deployment panels and DORA dashboards, embedded straight into the shell.', tag: 'DASHBOARDS', Icon: GrafanaLogo },
+  { name: 'Slack', role: 'Degraded and failed deploys page your team the moment scoring completes.', tag: 'ALERTS', Icon: SlackLogo },
+  // No standalone public brand mark for these two (shipped under the
+  // Grafana/Prometheus umbrella) — keep the generic lucide-react icon.
   { name: 'Loki', role: 'Logs from the blast radius, time-boxed to the deployment window.', tag: 'LOGS', Icon: ScrollText },
   { name: 'Alertmanager', role: 'Dedupe, route and silence — inbound alerts folded into the deploy record.', tag: 'ROUTING', Icon: BellRing },
 ]
