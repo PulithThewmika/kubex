@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { ArrowRight, ArrowUp, LogIn } from 'lucide-react'
@@ -29,6 +30,8 @@ const STYLES = `
 export type MagneticButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
   React.AnchorHTMLAttributes<HTMLAnchorElement> & {
     as?: React.ElementType
+    // For as={Link} (react-router) instead of a plain <a>.
+    to?: string
   }
 
 const MagneticButton = React.forwardRef<HTMLElement, MagneticButtonProps>(
@@ -127,9 +130,9 @@ const FooterMarquee = () => (
 type Cta = { href: string; label: string }
 
 const SECONDARY_LINKS = [
-  { label: 'Privacy', href: '/privacy' },
-  { label: 'Terms', href: '/terms' },
-  { label: 'Contact', href: '#' },
+  { label: 'Privacy', href: '/privacy', external: false },
+  { label: 'Terms', href: '/terms', external: false },
+  { label: 'Contact', href: 'https://www.pulith.me/', external: true },
 ]
 
 export function CinematicFooter({ cta }: { cta: Cta }) {
@@ -220,16 +223,29 @@ export function CinematicFooter({ cta }: { cta: Cta }) {
               </div>
 
               <div className="mt-2 flex w-full flex-wrap justify-center gap-3 md:gap-4">
-                {SECONDARY_LINKS.map((l) => (
-                  <MagneticButton
-                    key={l.label}
-                    as="a"
-                    href={l.href}
-                    className="border-2 border-background px-6 py-3 font-body text-sm font-bold uppercase tracking-widest text-background transition-colors hover:bg-accent hover:text-background md:text-base"
-                  >
-                    {l.label}
-                  </MagneticButton>
-                ))}
+                {SECONDARY_LINKS.map((l) =>
+                  l.external ? (
+                    <MagneticButton
+                      key={l.label}
+                      as="a"
+                      href={l.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="border-2 border-background px-6 py-3 font-body text-sm font-bold uppercase tracking-widest text-background transition-colors hover:bg-accent hover:text-background md:text-base"
+                    >
+                      {l.label}
+                    </MagneticButton>
+                  ) : (
+                    <MagneticButton
+                      key={l.label}
+                      as={Link}
+                      to={l.href}
+                      className="border-2 border-background px-6 py-3 font-body text-sm font-bold uppercase tracking-widest text-background transition-colors hover:bg-accent hover:text-background md:text-base"
+                    >
+                      {l.label}
+                    </MagneticButton>
+                  ),
+                )}
               </div>
             </div>
           </div>
