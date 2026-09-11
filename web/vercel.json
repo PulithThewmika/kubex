@@ -1,10 +1,10 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://kubex-demo-pt.southeastasia.cloudapp.azure.com/api/:path*" },
-    { "source": "/auth/:path*", "destination": "https://kubex-demo-pt.southeastasia.cloudapp.azure.com/auth/:path*" },
-    { "source": "/install/:path*", "destination": "https://kubex-demo-pt.southeastasia.cloudapp.azure.com/install/:path*" },
-    { "source": "/integrations/:path*", "destination": "https://kubex-demo-pt.southeastasia.cloudapp.azure.com/integrations/:path*" },
-    { "source": "/mcp", "destination": "https://kubex-demo-pt.southeastasia.cloudapp.azure.com/mcp" },
+    { "source": "/api/:path*", "destination": "/api/proxy?p=/api/:path*" },
+    { "source": "/auth/:path*", "destination": "/api/proxy?p=/auth/:path*" },
+    { "source": "/install/:path*", "destination": "/api/proxy?p=/install/:path*" },
+    { "source": "/integrations/:path*", "destination": "/api/proxy?p=/integrations/:path*" },
+    { "source": "/mcp", "destination": "/api/proxy?p=/mcp" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
