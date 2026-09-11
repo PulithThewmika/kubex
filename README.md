@@ -1,5 +1,9 @@
 # KubeX
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/2ade9dc2-b228-4c8a-818b-c8d6a67392cc" alt="KubeX logo" width="160">
+</p>
+
 **Deployment-aware observability for Kubernetes.** KubeX correlates your CI
 (GitHub Actions), CD (ArgoCD), and runtime health (Kubernetes + Prometheus)
 into one record per deployment, then autonomously answers the question every
@@ -15,6 +19,10 @@ incidents in natural language from Claude or ChatGPT.
 > This README is just the map.
 
 ---
+
+## Demo
+
+https://github.com/user-attachments/assets/c130fc35-31f4-4221-a727-eb04b031f3fe
 
 ## Why it exists
 
