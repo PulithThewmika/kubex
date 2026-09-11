@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { CodeBlock } from '../CodeBlock'
 
-const MCP_URL = 'https://kubex-demo-pt.southeastasia.cloudapp.azure.com/mcp'
+// Override via VITE_MCP_URL if the deploy target isn't the demo VM.
+const MCP_URL = import.meta.env.VITE_MCP_URL ?? 'https://kubex-demo-pt.southeastasia.cloudapp.azure.com/mcp'
 
 type Client = 'claude' | 'chatgpt'
 
